@@ -1,0 +1,388 @@
+name: Release
+
+# Cuts a production server release with nothing on an operator machine
+# (docs/runbooks/release.md). Run it from the Actions tab or
+# `gh workflow run release.yml --ref main`:
+#
+#   plan      next server-YYYY.MM.DD.N (UTC), the commit (main HEAD or `sha`),
+#             merge-queue drain, migration contract check.
+#   tag       tag the commit, run Deploy's release build on the tag, open the
+#             release as a PRE-RELEASE (Deploy refuses to ship a pre-release).
+#   prepare   per Fly app, build the financial image from that build, then
+#             retain receipt, retained-store sidecar and capability output on
+#             the release and in the locked R2 bucket, each read back.
+#   record    release-images.json and backend-dist.tar.gz, retained the same way.
+#   verify    a fresh runner with read-only GitHub permissions and read-only
+#             R2 and registry tokens re-derives every identity (replaces the
+#             human digest check). Deploy admits a preparation only when THIS
+#             job succeeded in the run that made it.
+#   publish   mark the release final and dispatch Deploy on the tag, which runs
+#             staging, the real-provider smoke, then production.
+#
+# Tags and releases written with GITHUB_TOKEN trigger no workflow, so the
+# build and the deploy are explicit dispatches of deploy.yml on the tag.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit on main to release. Empty means main HEAD after the merge queue drains.
+        type: string
+        default: ''
+      hotfix:
+        description: Skip waiting for the merge queue to drain. Every other step, including the staging smoke, still runs.
+        type: boolean
+        default: false
+      force:
+        description: Cut a release even if main has not moved since the latest server-* release.
+        type: boolean
+        default: false
+      dry_run:
+        description: Plan and check provisioning only. Tags, builds, prepares and deploys nothing.
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  RELEASE_EVIDENCE_BUCKET: coralswarm-release-evidence
+
+jobs:
+  plan:
+    name: Plan the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      sha: ${{ steps.plan.outputs.sha }}
+      latest: ${{ steps.plan.outputs.latest }}
+    steps:
+      - name: Refuse anything but main
+        if: github.ref != 'refs/heads/main' && !inputs.dry_run
+        run: |
+          echo "::error::Release must be dispatched on main (got $GITHUB_REF). Only a dry run may use another ref."
+          exit 1
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Release-path tests
+        run: |
+          python3 scripts/test_release_plan.py
+          python3 scripts/test_release_evidence.py
+          python3 scripts/test_deploy_financial_backend.py
+      - name: Wait for the merge queue on main to drain
+        if: ${{ !inputs.hotfix }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          NAME: ${{ github.event.repository.name }}
+        run: |
+          # Batching, not a safety gate: an unreadable queue warns and continues.
+          for _ in $(seq 1 120); do
+            # shellcheck disable=SC2016 # GraphQL variables, not shell
+            # gh api prints an error body on stdout, so test its exit status, not its output.
+            depth="$(gh api graphql -f query='query($o:String!,$r:String!){repository(owner:$o,name:$r){mergeQueue(branch:"main"){entries(first:1){totalCount}}}}' \
+              -f o="$OWNER" -f r="$NAME" --jq '(.data.repository.mergeQueue.entries.totalCount // 0)' 2>/dev/null)" || depth=unknown
+            if [ "$depth" = 0 ]; then exit 0; fi
+            if [ "$depth" = unknown ]; then echo "::warning::could not read the merge queue; releasing main as it is"; exit 0; fi
+            echo "merge queue has $depth entries; waiting"
+            sleep 30
+          done
+          echo "::error::merge queue still not empty after 60 minutes; re-run with hotfix to skip the wait"
+          exit 1
+      - name: Choose the tag and commit
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN_SHA: ${{ inputs.sha }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          # The checkout keeps no credentials, so the refresh after the queue wait authenticates itself.
+          git -c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            fetch --quiet origin main
+          # Final releases only: a tag whose Release run failed is burned, not released.
+          gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1000 \
+            --json tagName --jq '.[].tagName' > "$RUNNER_TEMP/released"
+          python3 scripts/release_plan.py --sha "$PIN_SHA" --force "$FORCE" --released "$RUNNER_TEMP/released"
+      - name: Releases only add schema
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          tree="$(mktemp -d)"
+          git archive "$SHA" backend/migrations_control backend/migrations_tenant | tar -x -C "$tree"
+          SERVER_TAGS="$(grep '^server-' "$RUNNER_TEMP/released"; echo "$TAG")" bash scripts/check_migration_contract.sh \
+            --control-dir "$tree/backend/migrations_control" --tenant-dir "$tree/backend/migrations_tenant"
+      - name: Summarize the plan
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ steps.plan.outputs.sha }}
+          LATEST: ${{ steps.plan.outputs.latest }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          HOTFIX: ${{ inputs.hotfix }}
+        run: |
+          {
+            echo "## Release plan: $TAG"
+            echo "- commit: \`$SHA\` ($(git log -1 --format=%s "$SHA"))"
+            echo "- previous release: ${LATEST:-none}; hotfix: $HOTFIX; dry run: $DRY_RUN"
+            if [ -n "$LATEST" ]; then echo; echo '```'; git log --oneline "$LATEST..$SHA" | head -40; echo '```'; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Fails with the provisioning steps when a store or verifier secret is absent,
+  # before anything is tagged or built. The `release` environment admits only
+  # main, so a dry run on a branch skips this check.
+  provisioning:
+    name: Check release provisioning
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: release
+    permissions: {}
+    steps:
+      - name: Require the release secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN != '' }}
+          RELEASE_EVIDENCE_R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID != '' }}
+          RELEASE_EVIDENCE_R2_WRITE_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_WRITE_ACCESS_KEY_ID != '' }}
+          RELEASE_EVIDENCE_R2_WRITE_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_WRITE_SECRET_ACCESS_KEY != '' }}
+          RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID != '' }}
+          RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY != '' }}
+          FLY_REGISTRY_READ_TOKEN: ${{ secrets.FLY_REGISTRY_READ_TOKEN != '' }}
+        run: |
+          missing=""
+          for name in FLY_API_TOKEN RELEASE_EVIDENCE_R2_ACCOUNT_ID RELEASE_EVIDENCE_R2_WRITE_ACCESS_KEY_ID \
+              RELEASE_EVIDENCE_R2_WRITE_SECRET_ACCESS_KEY RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID \
+              RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY FLY_REGISTRY_READ_TOKEN; do
+            [ "${!name}" = true ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing secrets (the 'release' environment or the repository):$missing. Run the one-time provisioning in docs/runbooks/release.md (One-time provisioning)."
+            exit 1
+          fi
+          echo "release environment provisioned"
+
+  tag:
+    name: Tag and build
+    needs: [plan, provisioning]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      actions: write
+    outputs:
+      build_run_id: ${{ steps.build.outputs.run_id }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      LATEST: ${{ needs.plan.outputs.latest }}
+    steps:
+      - name: Tag the release commit
+        run: |
+          # A missing tag is a 404 whose error body gh api prints on stdout.
+          existing="$(gh api "repos/$REPO/git/ref/tags/$TAG" --jq .object.sha 2>/dev/null)" || existing=""
+          if [ -z "$existing" ]; then
+            gh api "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" >/dev/null
+          elif [ "$existing" != "$SHA" ]; then
+            echo "::error::tag $TAG already points at $existing, not $SHA"; exit 1
+          fi
+      - name: Run Deploy's release build on the tag
+        id: build
+        run: |
+          started="$(date -u -d "-60 seconds" +%Y-%m-%dT%H:%M:%SZ)"  # tolerate runner/API clock skew
+          gh workflow run deploy.yml --repo "$REPO" --ref "$TAG" -f target=release-build
+          run_id=""
+          for _ in $(seq 1 40); do
+            run_id="$(gh run list --repo "$REPO" --workflow deploy.yml --event workflow_dispatch --commit "$SHA" --limit 10 \
+              --json databaseId,createdAt,headBranch --jq "[.[] | select(.createdAt >= \"$started\" and .headBranch == \"$TAG\")] | first | .databaseId // empty")"
+            [ -z "$run_id" ] || break
+            sleep 15
+          done
+          [ -n "$run_id" ] || { echo "::error::the release build run for $TAG did not appear"; exit 1; }
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "release build: $GITHUB_SERVER_URL/$REPO/actions/runs/$run_id" >> "$GITHUB_STEP_SUMMARY"
+          gh run watch "$run_id" --repo "$REPO" --interval 30 --exit-status >/dev/null \
+            || { echo "::error::the release build failed. Nothing was prepared; fix forward and run Release again."; exit 1; }
+      - name: Open the release as a pre-release
+        run: |
+          state="$(gh release view "$TAG" --repo "$REPO" --json isPrerelease --jq .isPrerelease 2>/dev/null || echo absent)"
+          case "$state" in
+            absent)
+              notes=(--generate-notes)
+              [ -z "$LATEST" ] || notes+=(--notes-start-tag "$LATEST")
+              gh release create "$TAG" --repo "$REPO" --verify-tag --prerelease --title "$TAG" "${notes[@]}" ;;
+            true) echo "reusing pre-release $TAG" ;;
+            *) echo "::error::$TAG is already a final release; cut the next one"; exit 1 ;;
+          esac
+
+  prepare:
+    name: Prepare backend image
+    needs: [plan, tag]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: write
+      actions: read
+    strategy:
+      # One app failing must not cancel the other mid-store and strand write-once evidence.
+      fail-fast: false
+      matrix:
+        config: [fly.toml, fly.staging.toml]
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      # Pinned to a commit SHA: this job holds FLY_API_TOKEN (see deploy.yml).
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      - name: Download the release build
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-release-${{ needs.plan.outputs.sha }}
+          run-id: ${{ needs.tag.outputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Build, admit and describe the financial image
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          CONFIG: ${{ matrix.config }}
+        run: >-
+          python3 scripts/deploy_financial_backend.py prepare --config "$CONFIG"
+          --generation "${TAG#server-}" --store-dir "$RUNNER_TEMP/store"
+      - name: Retain the evidence on the release and in R2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFIG: ${{ matrix.config }}
+          R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_WRITE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_WRITE_SECRET_ACCESS_KEY }}
+        run: |
+          app="$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["app"])' "$CONFIG")"
+          mkdir "$RUNNER_TEMP/evidence"
+          for name in financial-image.json retained-store.json capability.json; do
+            cp "$RUNNER_TEMP/store/$name" "$RUNNER_TEMP/evidence/$app.$name"
+          done
+          python3 scripts/release_evidence.py store --tag "$TAG" "$RUNNER_TEMP"/evidence/*
+
+  record:
+    name: Record the release
+    needs: [plan, tag, prepare]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      SHA: ${{ needs.plan.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - name: Download the release build
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-release-${{ needs.plan.outputs.sha }}
+          run-id: ${{ needs.tag.outputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Write release-images.json and backend-dist.tar.gz
+        env:
+          BUILD_RUN_ID: ${{ needs.tag.outputs.build_run_id }}
+          HOTFIX: ${{ inputs.hotfix }}
+        run: |
+          out="$RUNNER_TEMP/record"
+          mkdir -p "$out/evidence"
+          # The serving binary and both migrators: the merge-queue N-1 compat job boots this release from it.
+          # Byte-reproducible, so a re-run after a partial store writes the same tarball.
+          tar -C dist --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - coralswarm-backend migrate_control migrate_tenants \
+            | gzip -n > "$out/backend-dist.tar.gz"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.json' --dir "$out/evidence"
+          python3 scripts/release_evidence.py record --tag "$TAG" --sha "$SHA" --build-run-id "$BUILD_RUN_ID" \
+            --prepare-run-id "$GITHUB_RUN_ID" --hotfix "$HOTFIX" --dist "$out/backend-dist.tar.gz" \
+            --evidence-root "$out/evidence" --out "$out/release-images.json"
+          cat "$out/release-images.json"
+      - name: Retain the record on the release and in R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_WRITE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_WRITE_SECRET_ACCESS_KEY }}
+        run: >-
+          python3 scripts/release_evidence.py store --tag "$TAG"
+          "$RUNNER_TEMP/record/release-images.json" "$RUNNER_TEMP/record/backend-dist.tar.gz"
+
+  # The independent check. A fresh runner, read-only GitHub permissions, and
+  # read-only R2 and registry tokens: it can confirm what the jobs above wrote
+  # but cannot write anything itself. Its job name is the admission gate that
+  # scripts/deploy_financial_backend.py checks (STORE_GATES); rename both together.
+  verify:
+    name: Verify prepared release independently
+    needs: [plan, record]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - name: Re-derive every recorded identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          SHA: ${{ needs.plan.outputs.sha }}
+          R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY }}
+          FLY_REGISTRY_READ_TOKEN: ${{ secrets.FLY_REGISTRY_READ_TOKEN }}
+        run: python3 scripts/release_evidence.py verify --tag "$TAG" --sha "$SHA"
+
+  publish:
+    name: Publish and deploy
+    needs: [plan, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      SHA: ${{ needs.plan.outputs.sha }}
+    steps:
+      - name: Mark the release final
+        run: gh release edit "$TAG" --repo "$REPO" --prerelease=false --latest
+      - name: Dispatch Deploy on the release
+        run: |
+          started="$(date -u -d "-60 seconds" +%Y-%m-%dT%H:%M:%SZ)"  # tolerate runner/API clock skew
+          gh workflow run deploy.yml --repo "$REPO" --ref "$TAG" -f target=release
+          for _ in $(seq 1 40); do
+            run_id="$(gh run list --repo "$REPO" --workflow deploy.yml --event workflow_dispatch --commit "$SHA" --limit 10 \
+              --json databaseId,createdAt,headBranch --jq "[.[] | select(.createdAt >= \"$started\" and .headBranch == \"$TAG\")] | first | .databaseId // empty")"
+            if [ -n "$run_id" ]; then
+              echo "deploy: $GITHUB_SERVER_URL/$REPO/actions/runs/$run_id" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::the Deploy run for $TAG did not appear. Dispatch it: gh workflow run deploy.yml --ref $TAG -f target=release"
+          exit 1

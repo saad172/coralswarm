@@ -1,0 +1,12 @@
+{
+  "id": "cs_test_TEST0000000001",
+  "object": "checkout.session",
+  "mode": "subscription",
+  "status": "open",
+  "customer": "cus_TEST0000000001",
+  "client_reference_id": "00000000-0000-0000-0000-000000000001",
+  "url": "https://checkout.stripe.com/c/pay/cs_test_TEST0000000001",
+  "success_url": "https://app.coralswarm.example/billing?checkout=success",
+  "cancel_url": "https://app.coralswarm.example/billing?checkout=cancelled",
+  "livemode": false
+}

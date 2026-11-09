@@ -1,0 +1,67 @@
+-- Migration: 0159_credit_ledger_attributed_user_id
+-- Description: Billing Phase 2a (per-member attribution, stacked on Phase 1's
+--   `llm_usage.attributed_user_id`, migration `0157`/`0057`) — add a STORED
+--   attribution column to `credit_ledger` recording which member a debit's
+--   underlying `llm_usage` spend was FOR, so a per-member drawdown/enforcement
+--   view becomes computable. `credit_ledger` has `account_id` (the whole
+--   account's ledger) but nothing narrower, and Phase 1 deliberately stopped
+--   at `llm_usage` — see that migration's own header, "resolving an owner
+--   here is a separate decision, deferred out of this PR" — this migration is
+--   that separate decision, one layer up.
+--
+--   ── CONTROL-ONLY, no tenant twin — unlike Phase 1's `llm_usage` column ──
+--   `llm_usage` is a SHARED table (present in both `migrations_control` and
+--   `migrations_tenant`, `0157`/`0057` paired byte-for-byte), because it is
+--   written from BOTH planes: the consumer plane's control DB and every org's
+--   own tenant DB. `credit_ledger` is different in kind, not degree:
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster already lists
+--   `credit_ledger credit_balances plans grants enforcement_events` (added
+--   whole-cloth by `0150`'s own header, "control-only PR") — the ledger is
+--   written ONLY by `workers::billing_derivation`, which runs the read phase
+--   against a tenant's content pool but ALWAYS writes to `control`
+--   (`write_account_ledger(control: &PgPool, ...)`, that module's own doc,
+--   "Shape" section). There is no tenant-tree `credit_ledger` table for this
+--   column to have a twin in, and adding one would be inventing a table this
+--   codebase's own architecture already decided not to have. Confirmed by
+--   inspection before writing this file, not assumed: `grep -rn credit_ledger
+--   backend/migrations_tenant/` returns nothing.
+--
+--   Nullable, no default, no FK — same posture `0157`'s header already states
+--   for `llm_usage.attributed_user_id`, for the identical reason: this is an
+--   append-only accounting log, and plenty of debits genuinely have no member
+--   to attribute (every debit whose underlying `llm_usage` rows are
+--   pre-Phase-1, or whose worker call site has no member in scope at all —
+--   `workers::billing_derivation`'s own updated module doc section documents
+--   which of the three axes can end up here and why). Left NULL and
+--   unbackfilled for every pre-epoch row — a later phase's per-seat
+--   enforcement counts and treats NULL the same way Phase 1's own
+--   `llm_usage.attributed_user_id` NULL is treated: "unattributed", never
+--   folded into a member's total.
+--
+--   `ADD COLUMN ... UUID` with no default is a fast, metadata-only operation
+--   in Postgres 11+ (no full-table rewrite) — `credit_ledger` is a low-write
+--   table today (derivation runs on a ~5 min tick, one row per completed
+--   job/query/journal-period, nothing like `llm_usage`'s write volume), but
+--   `SET LOCAL lock_timeout = '3s'` is kept anyway, matching every other
+--   ALTER in this billing train (`0157`, `0141`) rather than special-casing
+--   this one table as "safe enough to skip it".
+--
+--   The supporting index is deliberately NOT in this file — see
+--   `0160_credit_ledger_attributed_user_id_index_concurrently.sql`. Same
+--   established precedent as every other index added to a table already
+--   holding rows (0142-0147, 0152, 0158): `CREATE INDEX CONCURRENTLY` in its
+--   own `-- no-transaction`, single-statement file, never bundled with the
+--   column-add — `credit_ledger` is empty in every environment that matters
+--   today (pre-revenue, `0150`'s own header), so this is precedent-following
+--   discipline rather than a live concern, but the split costs nothing and
+--   keeps every ALTER in this tree shaped the same way.
+--
+-- Depends on: 0150_credit_ledger.sql (creates credit_ledger), 0157_llm_usage_
+--   attributed_user_id.sql (the column this one carries through from —
+--   `workers::billing_derivation` is the only writer of both).
+-- Down:
+--   ALTER TABLE credit_ledger DROP COLUMN IF EXISTS attributed_user_id;
+
+SET LOCAL lock_timeout = '3s';
+
+ALTER TABLE credit_ledger ADD COLUMN IF NOT EXISTS attributed_user_id UUID;

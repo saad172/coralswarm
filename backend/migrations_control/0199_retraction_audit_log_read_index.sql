@@ -1,0 +1,45 @@
+-- Migration: 0199_retraction_audit_log_read_index
+-- Description: D6 UI fix pass (independent review of PR #729, finding 7,
+--   HIGH — docs/plans/capture/02-b2-retract-fixes.md). `routes::retractions`'
+--   two read queries sort `retraction_audit_log` rows within a group
+--   (`ORDER BY retraction_id, retracted_at ASC`) and, as of this same PR,
+--   window-partition them the same way (`ROW_NUMBER() OVER (PARTITION BY
+--   retraction_id ORDER BY retracted_at ASC)`, `services::retraction_audit::
+--   rows_for_retraction_ids`'s per-group row cap, finding 6). Migration
+--   0196's own `idx_retraction_audit_log_retraction_id` index is
+--   `(retraction_id)` ALONE — it satisfies the `retraction_id = ANY($1)`
+--   lookup but not the ordering or the window function, both of which fall
+--   back to an in-memory sort per query. Widening it to a covering
+--   `(retraction_id, retracted_at)` index lets Postgres serve the lookup,
+--   the ORDER BY, and the window function's PARTITION/ORDER clause from the
+--   index directly.
+--
+--   ── What this does NOT close ──
+--   Finding 7's harder half — `services::retraction_audit::
+--   list_retraction_ids_page`'s `GROUP BY retraction_id ORDER BY
+--   MIN(retracted_at) DESC` still has no index that serves a GROUP BY
+--   aggregate directly; Postgres still visits every row for the account
+--   before it can rank groups. Finding 5 (same PR) adds the missing
+--   `WHERE account_id = $1` predicate to that query, which — combined with
+--   the existing `idx_retraction_audit_log_account (account_id,
+--   retracted_at DESC)` index (0196) — bounds the scan to ONE account's rows
+--   instead of the whole table, a material reduction on a shared,
+--   never-pruned, append-only table. Closing the remaining O(account's rows)
+--   cost needs either a materialized per-group timestamp (a new table,
+--   maintained at write time inside `services::retraction_audit::record`'s
+--   already-reviewed, transactionally load-bearing hard-bar write path) or a
+--   keyset cursor (a client-visible pagination contract change to
+--   `GET /v1/retractions`) — both are real, separately-reviewable changes
+--   this migration deliberately does not fold in. Recorded as deferred, not
+--   silently dropped.
+--
+-- Depends on: 0196_retraction_audit_log (the table and the index this
+--   widens).
+-- Down:
+--   DROP INDEX IF EXISTS idx_retraction_audit_log_retraction_id_retracted_at;
+--   CREATE INDEX IF NOT EXISTS idx_retraction_audit_log_retraction_id
+--       ON retraction_audit_log (retraction_id);
+
+DROP INDEX IF EXISTS idx_retraction_audit_log_retraction_id;
+CREATE INDEX IF NOT EXISTS idx_retraction_audit_log_retraction_id_retracted_at
+    ON retraction_audit_log (retraction_id, retracted_at);

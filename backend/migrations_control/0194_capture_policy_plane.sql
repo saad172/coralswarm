@@ -1,0 +1,180 @@
+-- Migration: 0194_capture_policy_plane
+-- Description: the two control-plane tables behind the capture policy plane
+--   (`.scratch/desktop-capture/issues/19-build-capture-policy-plane.md`,
+--   specified by ticket 18's D6). Charting decision 12 requires capture
+--   policy to SYNC — "policy syncs by default; doing nothing still fills the
+--   ocean" — and, before this migration, nothing owned the mechanism:
+--   `web/app/(app)/settings/organization/policy/page.tsx` says in its own
+--   comment that org-wide policy has no backend at all, and its five entries
+--   are a hardcoded const array.
+--
+--   Two tables, deliberately not one, because they answer two different
+--   questions with two different lifetimes:
+--
+--     capture_policies          — WHAT is excluded from capture. User- or
+--                                 org-authored, delivered to the client.
+--     org_capture_attestations  — WHETHER an org admin has acknowledged the
+--                                 B4 monitoring notice. Our record of THEIR
+--                                 act; never delivered as a row, only as the
+--                                 derived boolean it gates (D1/D8).
+--
+--   ── Why the CONTROL plane, and why CI must enforce it ──
+--   `backend/src/tenancy/extractor.rs:53-67` states that `Tenant` resolves
+--   CONTENT-plane handles only, and that a control-table read routed at a
+--   tenant pool is a runtime `relation does not exist`, not a compile error.
+--   That cuts both ways here and the second direction is the load-bearing
+--   one: anything living in a tenant DB is only reachable AFTER the tenancy
+--   gate has already admitted the request, so an attestation gate CANNOT
+--   live there — it has to be answerable before a tenant pool is resolved.
+--   Ticket 16 required exactly this ("B4's gate has to be readable before a
+--   tenant DB is reached"); D6 confirmed it by mechanism. BOTH tables are
+--   therefore added to the control-only list in
+--   `scripts/check_schema_parity.sh` in this same PR (the paired-migration
+--   discipline that list's own header describes).
+--
+--   The template is `0178_org_connector_flags`: per-org / per-account,
+--   control-plane, TTL-cached with lazy eviction and invalidate-on-write
+--   (`backend/src/connector_flags.rs`), resolved pre-tenant. The template to
+--   study and then deliberately DIVERGE from is `0188_microsoft_admin_consents`,
+--   whose header says it is "not an enforcement gate" — this one is.
+--
+--   ── Why not extend `account_prefs` (D6, rejected) ──
+--   `account_prefs` is a single opaque JSONB blob behind `GET/PUT /v1/prefs`.
+--   Three defects, all inherited at once: (1) `PUT /v1/prefs`
+--   (`backend/src/routes/prefs.rs:46-76`) has NO role check, so on an org
+--   account any member can overwrite org-wide settings — a live defect
+--   surfaced by ticket 18 and filed for its own PR; (2) it whole-blob
+--   overwrites with no ETag (`:62-63`), so concurrent writers clobber; and
+--   (3) it has no version column, and adding one would version `llm_mode`
+--   and `egress_policy` too — the cross-contamination D1 rejected when it
+--   split policy delivery into two independently-versioned parts.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- capture_policies
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+--   `account_id` — `UUID PRIMARY KEY REFERENCES accounts(id) ON DELETE
+--   CASCADE`. One policy row per account, and `account_id` ALREADY carries
+--   the personal/org duality D2's precedence rule needs:
+--   `0029_account_prefs.sql:2-7` defines a personal account's row as the
+--   user's own prefs and an ORG account's row as org-wide defaults. So D2's
+--     effective_deny = org_deny ∪ personal_deny
+--   is one query over two account ids, not a new concept and not a second
+--   table. Unlike `org_connector_flags` (keyed on a bare Clerk org id, no
+--   FK, because Clerk owns that id's lifecycle) this table is keyed on a
+--   CoralSwarm account, which we own — so a real FK with a real cascade is
+--   both possible and correct: an account's deletion must take its capture
+--   policy with it.
+--
+--   `version` — `INT NOT NULL DEFAULT 1`, monotonically incremented by the
+--   writer. D1's first independent counter. It exists so a client can tell
+--   "I already have this" from "this changed", and it must NEVER move for a
+--   reason belonging to the other payload part: a vendor rename in our
+--   remote-desktop allowlist must not bump the version of a document an org
+--   admin legally attested to.
+--
+--   `captured` — `JSONB NOT NULL DEFAULT '{}'`. The open half of the policy
+--   (what classes of activity capture at all). JSONB rather than columns
+--   because this is the half expected to grow, and it is delivered verbatim
+--   to the client rather than being queried by shape.
+--
+--   `deny_list` — `TEXT[] NOT NULL DEFAULT '{}'`. BUNDLE IDS, never display
+--   names. `desktop/native/roster.m:123-128` records the bug this convention
+--   exists to prevent: display-name matching silently dropped Edge, and the
+--   failure was invisible because a name that no longer matches looks exactly
+--   like an app that was not running. Ticket 15's R6 measured the same decay
+--   mode independently. A `TEXT[]` (not JSONB) because D2's union is a set
+--   operation the database should be able to express directly.
+--
+--   `updated_at` — bumped by the writer's `ON CONFLICT ... DO UPDATE`;
+--   `created_at` is not (mirrors `connector_installs.created_at`'s
+--   "first install timestamp" precedent).
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- org_capture_attestations
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+--   `clerk_org_id` — `TEXT PRIMARY KEY`, non-empty (`CHECK`), no FK: the
+--   same bare-text convention this repo already uses for a Clerk org id on
+--   `accounts` / `org_membership_tombstones` / `org_revocations` /
+--   `member_ocean_desired_state` / `connector_installs` / `org_connector_flags`
+--   (migrations 0027/0081/0082/0090/0092/0121/0178). Clerk owns that id's
+--   lifecycle, so a local FK would be a false promise of referential
+--   integrity Clerk itself does not offer. Keyed on the Clerk org id rather
+--   than `account_id` for the same reason `org_connector_flags` is: the gate
+--   is checked against `tenant.org_context()?.org_id`, which is a Clerk org
+--   id, at a point in the request where the account may not be resolved yet.
+--
+--   `attesting_user_id` — `UUID NOT NULL REFERENCES users(id) ON DELETE
+--   RESTRICT`. RESTRICT, not CASCADE, and not SET NULL: this row is the
+--   record of a named person's legal act. Deleting the user must not
+--   silently convert an attestation into an anonymous one, and it must not
+--   silently un-gate an org's capture either. `escrow_recovery_log` makes the
+--   same choice for the same reason.
+--
+--   `notice_version` — `INT NOT NULL`. D4's re-gate axis, and the reason
+--   this column exists at all rather than a bare `attested_at`: ticket 16
+--   requires that "a notice attested against one set of decisions is not an
+--   attestation of a later one." The mechanism is already in this repo and
+--   needs no migration, no backfill and no delete —
+--   `0112_conflict_dismissal.sql:94-118` puts `prompt_version = $N` INSIDE
+--   the gate predicate, so bumping the version makes every stale row simply
+--   stop matching. Rows are never deleted; they remain as the audit trail of
+--   what an earlier notice version was attested to, which is precisely what
+--   a legal record is for. `node_promotions.from_version`
+--   (`0026_ocean_model.sql:52`) is the complementary half of the same idiom.
+--
+--   Only a BROADENING notice bump invalidates existing attestations (D4). A
+--   narrowing bump notifies but does not gate — an attestation to "we
+--   capture X" still honestly covers "we now capture less than X", and a
+--   gate that fires on non-events is a gate people learn to dismiss without
+--   reading, which costs exactly the thing B4 is buying. That rule lives in
+--   the CALLER (which version number it passes into the predicate), not in
+--   this schema; the schema only has to make the version comparable.
+--
+--   `attested_at` — when. With `attesting_user_id` and `notice_version` this
+--   is the whole record: who, when, to which version.
+--
+--   ── One row per org, replaced on re-attestation ──
+--   `clerk_org_id` is the PK, so re-attesting overwrites. The prior
+--   attestation is not retained here: what gates capture is the CURRENT
+--   attestation, and a history table for a row that changes on the order of
+--   once per notice revision would be an audit surface nobody reads. If a
+--   history is ever wanted it belongs in `activity_events`, which is the
+--   repo's existing home for "who did what, when".
+--
+--   ── No RLS on either table, deliberately ──
+--   Same class as `org_connector_flags` (0178), `connector_installs` (0121)
+--   and `accounts.billing_enforcement_enabled` (0164): neither table holds
+--   secrets or account-scoped CONTENT — one holds "which apps are excluded
+--   for account X", the other "did org Y acknowledge notice version N" — and
+--   both are read at a point in the request (the pre-tenant gate) where
+--   `SET LOCAL app.account_id` may not be available at all. Adding RLS would
+--   need the identical `SECURITY DEFINER` bootstrap carve-out 0084/0086/0121
+--   already document at length, for no additional safety. Authorization for
+--   both is enforced in the route layer: the org writes are `is_admin`-gated
+--   (`backend/src/routes/org_invites.rs:94,138`'s guard, NOT the
+--   `/internal/admin/` tree — D9 explains why an attestation made by
+--   CoralSwarm attests to nothing), and the personal write is scoped to the
+--   caller's own `account_id` from `Extension<UserContext>`.
+--
+-- Depends on: 0001_init (accounts, users).
+-- Down:
+--   DROP TABLE IF EXISTS org_capture_attestations;
+--   DROP TABLE IF EXISTS capture_policies;
+
+CREATE TABLE IF NOT EXISTS capture_policies (
+    account_id UUID        PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    version    INT         NOT NULL DEFAULT 1 CHECK (version >= 1),
+    captured   JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    deny_list  TEXT[]      NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS org_capture_attestations (
+    clerk_org_id      TEXT        PRIMARY KEY CHECK (clerk_org_id <> ''),
+    attesting_user_id UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    notice_version    INT         NOT NULL CHECK (notice_version >= 1),
+    attested_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);

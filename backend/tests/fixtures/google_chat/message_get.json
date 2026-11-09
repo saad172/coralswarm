@@ -1,0 +1,12 @@
+{
+  "name": "spaces/AAAAAAAAAAA/messages/msg-0002",
+  "sender": {
+    "name": "users/1002",
+    "displayName": "Bob Chen",
+    "type": "HUMAN"
+  },
+  "createTime": "2026-08-01T09:05:00Z",
+  "lastUpdateTime": "2026-08-01T09:07:32Z",
+  "text": "@Alice Ng ack, I'll watch the dashboards and the logs",
+  "formattedText": "<users/1001> ack, I'll watch the dashboards and the logs"
+}

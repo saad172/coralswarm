@@ -1,0 +1,122 @@
+{
+  "toolkit": "linear",
+  "label": "Linear",
+  "version": "20260924_00",
+  "scopes": { "required": ["read"] },
+  "read_tools": ["LINEAR_RUN_QUERY_OR_MUTATION"],
+  "namespace": {
+    "kind": "workspace",
+    "source": {
+      "lookup": {
+        "call": {
+          "tool": "LINEAR_RUN_QUERY_OR_MUTATION",
+          "args": { "query_or_mutation": "query CoralSwarmWorkspace { organization { id } }" }
+        },
+        "id": ["/data/organization/id", "/organization/id"]
+      }
+    }
+  },
+  "streams": [
+    {
+      "kind": "issue",
+      "change": "filter",
+      "call": {
+        "tool": "LINEAR_RUN_QUERY_OR_MUTATION",
+        "args": {
+          "query_or_mutation": "query CoralSwarmIssuesChanged($since: DateTimeOrDuration!, $first: Int!, $after: String) { issues(filter: { updatedAt: { gte: $since } }, orderBy: updatedAt, first: $first, after: $after, includeArchived: true) { nodes { id identifier title description createdAt updatedAt state { name } creator { id name } project { id name } } pageInfo { hasNextPage endCursor } } }",
+          "variables": { "since": "{{since}}", "first": "{{page_size}}", "after": "{{cursor}}" }
+        }
+      },
+      "items": "/data/issues/nodes",
+      "paging": { "has_more": "/data/issues/pageInfo/hasNextPage", "next": "/data/issues/pageInfo/endCursor" },
+      "fields": {
+        "id": "/id",
+        "updated_at": ["/updatedAt", "/createdAt"],
+        "container": { "kind": "project", "id": "/project/id", "name": "/project/name" },
+        "title": "/title",
+        "body": "/description",
+        "state": "/state/name",
+        "reference": "/identifier",
+        "author": { "object": "/creator", "id": "/id", "name": "/name" }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "{reference}: {title}",
+          "{title}"
+        ]
+      }
+    },
+    {
+      "kind": "comment",
+      "change": "filter",
+      "call": {
+        "tool": "LINEAR_RUN_QUERY_OR_MUTATION",
+        "args": {
+          "query_or_mutation": "query CoralSwarmCommentsChanged($since: DateTimeOrDuration!, $first: Int!, $after: String) { comments(filter: { updatedAt: { gte: $since }, issue: { null: false } }, orderBy: updatedAt, first: $first, after: $after, includeArchived: true) { nodes { id body createdAt updatedAt user { id name } issue { id title identifier project { id name } } } pageInfo { hasNextPage endCursor } } }",
+          "variables": { "since": "{{since}}", "first": "{{page_size}}", "after": "{{cursor}}" }
+        }
+      },
+      "items": "/data/comments/nodes",
+      "paging": { "has_more": "/data/comments/pageInfo/hasNextPage", "next": "/data/comments/pageInfo/endCursor" },
+      "fields": {
+        "id": "/id",
+        "updated_at": ["/updatedAt", "/createdAt"],
+        "parent": "/issue/id",
+        "container": { "kind": "project", "id": "/issue/project/id", "name": "/issue/project/name" },
+        "body": "/body",
+        "author": { "object": "/user", "id": "/id", "name": "/name" }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Comment on {parent_reference}: {parent_title}",
+          "Comment on {parent_title}",
+          "Comment: {excerpt}"
+        ],
+        "parent_title": "/issue/title",
+        "parent_reference": "/issue/identifier"
+      }
+    },
+    {
+      "kind": "project",
+      "change": "filter",
+      "render": "snapshot",
+      "call": {
+        "tool": "LINEAR_RUN_QUERY_OR_MUTATION",
+        "args": {
+          "query_or_mutation": "query CoralSwarmProjectsChanged($since: DateTimeOrDuration!, $first: Int!, $after: String) { projects(filter: { updatedAt: { gte: $since } }, orderBy: updatedAt, first: $first, after: $after, includeArchived: true) { nodes { id name description updatedAt } pageInfo { hasNextPage endCursor } } }",
+          "variables": { "since": "{{since}}", "first": "{{page_size}}", "after": "{{cursor}}" }
+        }
+      },
+      "items": "/data/projects/nodes",
+      "paging": { "has_more": "/data/projects/pageInfo/hasNextPage", "next": "/data/projects/pageInfo/endCursor" },
+      "fields": {
+        "id": "/id",
+        "updated_at": "/updatedAt",
+        "container": { "kind": "project", "id": "/id", "name": "/name" },
+        "title": "/name",
+        "body": "/description"
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Project: {title}"
+        ]
+      }
+    }
+  ],
+  "limits": {
+    "coverage": "every issue, comment and project the connected account can read, workspace-wide, changed after you connect",
+    "history": "nothing from before you connect is imported",
+    "description_history": "each captured change keeps the previous version as evidence",
+    "state_history": "states observed at each change; transitions between polls are not reconstructed",
+    "archives": "archived issues, comments and projects are included when they change",
+    "documents": "Linear documents and project updates are not captured"
+  },
+  "references": [
+    "https://docs.composio.dev/toolkits/linear.md",
+    "https://github.com/linear/linear/blob/master/packages/sdk/src/schema.graphql",
+    "https://linear.app/developers/filtering"
+  ]
+}

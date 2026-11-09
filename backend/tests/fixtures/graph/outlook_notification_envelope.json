@@ -1,0 +1,17 @@
+{
+  "value": [
+    {
+      "subscriptionId": "7f9c2b3e-51b2-4a11-9c3e-1a2b3c4d5e6f",
+      "clientState": "8f14e45fceea167a5a36dedd4bea2543b0c1f8d7e2a9b6c4d3e1f0a9b8c7d6e",
+      "changeType": "created",
+      "resource": "me/mailFolders('inbox')/messages",
+      "resourceData": {
+        "@odata.type": "#Microsoft.Graph.Message",
+        "@odata.id": "Users/00112233-4455-6677-8899-aabbccddeeff/Messages/AAMkAGI2TG93AAA=",
+        "id": "AAMkAGI2TG93AAA="
+      },
+      "subscriptionExpirationDateTime": "2026-02-05T09:00:00Z",
+      "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47"
+    }
+  ]
+}

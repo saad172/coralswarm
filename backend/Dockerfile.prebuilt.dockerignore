@@ -1,0 +1,28 @@
+# BuildKit picks this up automatically for `backend/Dockerfile.prebuilt`
+# builds instead of the root `.dockerignore` — naming convention is
+# `<path-to-dockerfile>.dockerignore`, i.e. this file must live at the SAME
+# relative path as the Dockerfile it governs, not at the context root with
+# just the Dockerfile's basename (verified empirically 2026-09-04: a
+# root-level `Dockerfile.prebuilt.dockerignore` was silently ignored for
+# `-f backend/Dockerfile.prebuilt`; this path was not — see
+# https://docs.docker.com/build/building/context/#filename).
+#
+# The root `.dockerignore` allow-lists most of the monorepo's Cargo workspace
+# members so `cargo build` can parse the workspace; `Dockerfile.prebuilt` runs
+# no `cargo build` at all (see its header comment), so none of that is
+# needed — this is a deny-all-then-allow-list instead, which keeps the
+# remote-builder upload to exactly what the two `COPY` instructions read: the
+# `dist/` artifact staged by the `build-backend-release` CI job, and
+# `backend/release.sh`.
+#
+# Also verified empirically (BuildKit via `docker build`, 2026-09-04): an
+# unignored nested file (`!backend/release.sh`) surfaces correctly WITHOUT
+# also unignoring its parent directory — unlike git's traversal-pruning
+# behavior, BuildKit's dockerignore matcher re-evaluates each path directly
+# against the pattern list. Do not add a bare `!backend` line here: that would
+# re-include the ENTIRE `backend/` tree (Cargo sources, migrations, tests,
+# ...), which is exactly the bloat this file exists to avoid.
+*
+!dist
+!dist/**
+!backend/release.sh

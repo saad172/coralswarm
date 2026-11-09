@@ -1,0 +1,17 @@
+{
+  "name": "@coralswarm/outlook-addin",
+  "version": "1.1.0",
+  "private": true,
+  "description": "CoralSwarm Outlook add-in manifest and icons. The panes themselves are Next.js routes in web/app/outlook, served at https://app.coralswarm.example/outlook.",
+  "scripts": {
+    "validate": "office-addin-manifest validate manifest.local.xml",
+    "build:manifest:local": "node scripts/build-manifest.js https://localhost:3000/outlook",
+    "build:manifest:prod": "node scripts/build-manifest.js https://app.coralswarm.example/outlook",
+    "sideload": "office-addin-debugging start manifest.local.xml desktop",
+    "test": "node scripts/test-manifest.js"
+  },
+  "devDependencies": {
+    "office-addin-debugging": "^6",
+    "office-addin-manifest": "^1"
+  }
+}

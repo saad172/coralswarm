@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Conversational Ask — layout studies · CoralSwarm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#FBF7F2; --bg-2:#F2EBE0; --bg-3:#E8DCC8;
+  --ink:#1A1410; --ink-2:#4A3F36; --ink-3:#8A7B6E; --line:#D9CCB8;
+  --brand:#F77764; --brand-2:#D14A38; --brand-3:#FFB89D; --accent:#2A9D8F;
+  --hue-coral:#F77764; --hue-pink:#EB7290; --hue-amber:#F4B860; --hue-teal:#2A9D8F; --hue-plum:#7C5295;
+  --ok:#3F8A5B; --warn:#D89A3A; --bad:#C24A3A;
+  --display:"Instrument Serif","Times New Roman",serif;
+  --sans:"Geist",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-1:4px;--r-2:8px;--r-3:12px;--r-4:16px;--r-5:24px;--r-full:999px;
+  --shadow-1:0 1px 0 rgba(26,20,16,.04),0 1px 2px rgba(26,20,16,.06);
+  --shadow-2:0 4px 16px -4px rgba(26,20,16,.10),0 2px 4px rgba(26,20,16,.04);
+  --shadow-3:0 24px 48px -16px rgba(26,20,16,.18),0 8px 16px -8px rgba(26,20,16,.10);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);font-size:16px;line-height:1.55;color:var(--ink);background:var(--bg-3);-webkit-font-smoothing:antialiased;font-feature-settings:"ss01","cv11"}
+::selection{background:var(--brand);color:var(--bg)}
+.lbl{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+.mono{font-family:var(--mono)}
+.reef-bg{background-image:radial-gradient(circle at 1px 1px,var(--line) 1px,transparent 0);background-size:24px 24px}
+
+/* ── studio chrome ───────────────────────────────────────── */
+.studio-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+  padding:14px 22px;background:var(--bg);border-bottom:1px solid var(--line);box-shadow:var(--shadow-1)}
+.studio-top h1{font-family:var(--display);font-weight:400;font-size:22px;margin:0;letter-spacing:-.3px}
+.studio-top h1 em{font-style:italic;color:var(--brand)}
+.studio-sub{font-size:12.5px;color:var(--ink-2);max-width:520px}
+.tabs{display:flex;gap:6px;margin-left:auto}
+.tab{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:7px 13px;border:1px solid var(--line);border-radius:var(--r-full);background:var(--bg);
+  color:var(--ink-2);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--ink-3)}
+.tab.on{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:var(--shadow-1)}
+.stage{padding:26px;display:flex;justify-content:center}
+.variant{display:none;width:100%;max-width:1180px}
+.variant.on{display:block}
+.vhead{display:flex;align-items:baseline;gap:12px;margin:0 4px 12px}
+.vhead h2{font-family:var(--display);font-weight:400;font-style:italic;font-size:24px;margin:0}
+.vhead p{font-size:13px;color:var(--ink-2);margin:0}
+.tradeoffs{display:flex;gap:16px;flex-wrap:wrap;margin:0 4px 16px}
+.to{flex:1;min-width:220px;border:1px solid var(--line);border-radius:var(--r-2);background:var(--bg);padding:10px 13px}
+.to .lbl{display:block;margin-bottom:4px}
+.to.pro .lbl{color:var(--ok)} .to.con .lbl{color:var(--bad)}
+.to ul{margin:0;padding-left:16px;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+
+/* ── app frame ───────────────────────────────────────────── */
+.app{display:flex;height:760px;border:1px solid var(--line);border-radius:var(--r-4);overflow:hidden;
+  background:var(--bg);box-shadow:var(--shadow-2)}
+
+/* far-left existing icon rail */
+.rail{width:56px;flex:0 0 56px;background:var(--bg-2);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0}
+.mark{width:26px;height:26px;border-radius:var(--r-full);
+  background:radial-gradient(circle at 50% 38%,var(--brand) 0 22%,transparent 23%),
+            radial-gradient(circle at 28% 70%,var(--hue-amber) 0 14%,transparent 15%),
+            radial-gradient(circle at 72% 70%,var(--hue-teal) 0 14%,transparent 15%);
+  background-color:var(--ink);margin-bottom:10px}
+.rico{width:34px;height:34px;border-radius:var(--r-2);display:flex;align-items:center;justify-content:center;
+  color:var(--ink-3);font-family:var(--mono);font-size:15px;cursor:pointer}
+.rico.on{background:var(--brand-3);color:var(--brand-2)}
+.rico:hover{background:var(--bg-3);color:var(--ink-2)}
+
+/* conversation sidebar */
+.side{width:264px;flex:0 0 264px;border-right:1px solid var(--line);background:var(--bg);
+  display:flex;flex-direction:column}
+.side-top{padding:14px 14px 10px}
+.newbtn{display:flex;align-items:center;justify-content:space-between;width:100%;
+  font-family:var(--sans);font-weight:500;font-size:13.5px;color:#fff;background:var(--brand);
+  border:none;border-radius:var(--r-2);padding:9px 13px;cursor:pointer;box-shadow:var(--shadow-1)}
+.newbtn:hover{background:var(--brand-2)}
+.newbtn .k{font-family:var(--mono);font-size:11px;opacity:.85}
+.search{margin-top:10px;position:relative}
+.search input{width:100%;font-family:var(--sans);font-size:13px;padding:7px 11px 7px 30px;
+  background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-2);color:var(--ink)}
+.search input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 22%,transparent)}
+.search .ic{position:absolute;left:10px;top:7px;color:var(--ink-3);font-family:var(--mono);font-size:13px}
+.convs{flex:1;overflow:auto;padding:6px 8px 14px}
+.sec{padding:12px 8px 5px;display:flex;align-items:center;gap:6px}
+.conv{display:block;width:100%;text-align:left;border:1px solid transparent;border-radius:var(--r-2);
+  padding:8px 10px;cursor:pointer;background:transparent;margin-bottom:1px;position:relative}
+.conv:hover{background:var(--bg-2)}
+.conv.on{background:var(--bg-2);border-color:var(--line)}
+.conv.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--brand)}
+.conv .t{font-family:var(--sans);font-size:13.5px;color:var(--ink);line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.conv .m{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:3px;display:flex;gap:7px;align-items:center}
+.dot{width:6px;height:6px;border-radius:var(--r-full);display:inline-block}
+.shared-tag{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--hue-teal);border:1px solid color-mix(in srgb,var(--hue-teal) 45%,transparent);
+  border-radius:var(--r-full);padding:1px 6px}
+
+/* main thread column */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:13px 22px;border-bottom:1px solid var(--line);background:var(--bg)}
+.topbar .ttl{font-family:var(--display);font-style:italic;font-weight:400;font-size:19px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ocean-pill{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink-2);
+  background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-full);padding:4px 11px;display:inline-flex;gap:7px;align-items:center}
+.tactions{display:flex;gap:7px}
+.tbtn{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink-2);background:var(--bg);
+  border:1px solid var(--line);border-radius:var(--r-2);padding:6px 11px;cursor:pointer}
+.tbtn:hover{border-color:var(--ink-3)}
+.tbtn.share{color:var(--hue-teal);border-color:color-mix(in srgb,var(--hue-teal) 40%,transparent)}
+
+.thread{flex:1;overflow:auto;padding:26px 0}
+.turns{max-width:720px;margin:0 auto;padding:0 26px;display:flex;flex-direction:column;gap:26px}
+
+.q-turn{display:flex;gap:13px;align-items:flex-start}
+.q-turn .who{flex:0 0 30px;width:30px;height:30px;border-radius:var(--r-full);
+  background:color-mix(in srgb,var(--hue-pink) 22%,var(--bg));border:1px solid color-mix(in srgb,var(--hue-pink) 40%,transparent);
+  display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.q-turn .qbody{padding-top:2px}
+.q-turn .qtext{font-family:var(--display);font-style:italic;font-weight:400;font-size:22px;line-height:1.3;color:var(--ink)}
+
+.a-turn{display:flex;gap:13px;align-items:flex-start}
+.a-turn .who{flex:0 0 30px;width:30px;height:30px;border-radius:var(--r-2);background:var(--ink);
+  display:flex;align-items:center;justify-content:center}
+.a-turn .who .m2{width:15px;height:15px;border-radius:var(--r-full);
+  background:radial-gradient(circle at 50% 40%,var(--brand) 0 26%,transparent 27%),
+            radial-gradient(circle at 30% 72%,var(--hue-amber) 0 16%,transparent 17%),
+            radial-gradient(circle at 72% 72%,var(--hue-teal) 0 16%,transparent 17%)}
+.a-turn .abody{min-width:0;flex:1}
+.credit{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.badge{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  border-radius:var(--r-full);padding:3px 9px}
+.badge.syn{background:var(--brand);color:#fff}
+.badge.ret{background:color-mix(in srgb,var(--hue-teal) 16%,transparent);color:var(--hue-teal);border:1px solid color-mix(in srgb,var(--hue-teal) 40%,transparent)}
+.timing{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.answer{font-size:15.5px;line-height:1.65;color:var(--ink)}
+.cite{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin:0 2px;
+  border-radius:4px;background:var(--brand-3);color:var(--brand-2);font-family:var(--mono);font-size:10px;font-weight:600;vertical-align:1px;cursor:pointer;transition:all .15s}
+.cite:hover,.cite.hot{background:var(--brand);color:#fff}
+.cursor{display:inline-block;width:8px;height:17px;background:var(--brand);margin-left:2px;vertical-align:-3px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+
+.srcs{margin-top:14px}
+.srcs .lbl{margin-bottom:9px}
+.src{display:grid;grid-template-columns:24px 1fr auto;gap:11px;align-items:start;
+  border:1px solid var(--line);border-left:3px solid var(--hue-amber);border-radius:0 var(--r-2) var(--r-2) 0;
+  background:var(--bg);padding:9px 12px;margin-bottom:7px;cursor:pointer;transition:all .15s}
+.src:hover{background:var(--bg-2)}
+.src.teal{border-left-color:var(--hue-teal)} .src.coral{border-left-color:var(--hue-coral)} .src.plum{border-left-color:var(--hue-plum)}
+.src .n{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--brand-2);background:var(--brand-3);border-radius:4px;height:18px;min-width:18px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.src .body .quote{font-family:var(--display);font-style:italic;font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+.src .body .title{font-size:13px;font-weight:500;color:var(--ink)}
+.src .body .prov{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink-3);margin-top:3px}
+.src .open{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+
+/* composer */
+.composer{border-top:1px solid var(--line);background:var(--bg);padding:14px 26px 18px}
+.composer .wrap{max-width:720px;margin:0 auto;display:flex;align-items:flex-end;gap:11px;
+  border:1px solid var(--line);background:var(--bg-2);border-radius:var(--r-4);padding:12px 14px;transition:all .15s}
+.composer .wrap:focus-within{border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 22%,transparent)}
+.composer textarea{flex:1;border:none;background:transparent;resize:none;outline:none;
+  font-family:var(--display);font-style:italic;font-size:18px;line-height:1.3;color:var(--ink);height:26px}
+.composer textarea::placeholder{color:var(--ink-3)}
+.send{flex:0 0 auto;width:34px;height:34px;border-radius:var(--r-2);background:var(--brand);color:#fff;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:var(--shadow-1)}
+.send:hover{background:var(--brand-2)}
+.composer .hint{max-width:720px;margin:7px auto 0;font-family:var(--mono);font-size:10px;color:var(--ink-3);text-align:center}
+
+/* empty / hero state (variant B) */
+.hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 26px;gap:0}
+.hero .bigmark{width:54px;height:54px;border-radius:var(--r-full);margin-bottom:18px;
+  background:radial-gradient(circle at 50% 38%,var(--brand) 0 20%,transparent 21%),
+            radial-gradient(circle at 26% 70%,var(--hue-amber) 0 12%,transparent 13%),
+            radial-gradient(circle at 74% 70%,var(--hue-teal) 0 12%,transparent 13%),
+            radial-gradient(circle at 38% 30%,var(--hue-pink) 0 8%,transparent 9%),
+            radial-gradient(circle at 64% 30%,var(--hue-plum) 0 8%,transparent 9%);
+  background-color:var(--ink)}
+.hero h2{font-family:var(--display);font-weight:400;font-size:36px;line-height:1.1;margin:0;letter-spacing:-.5px}
+.hero h2 em{font-style:italic;color:var(--brand)}
+.hero p{font-size:14px;color:var(--ink-2);max-width:430px;margin:8px 0 26px}
+.hero .compose-hero{width:100%;max-width:600px}
+.hero .compose-hero .wrap{margin:0}
+.sugs{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:20px}
+.sug{font-family:var(--mono);font-size:12px;letter-spacing:.02em;color:var(--ink-2);background:var(--bg);
+  border:1px solid var(--line);border-radius:var(--r-full);padding:6px 13px;cursor:pointer}
+.sug:hover{border-color:var(--brand);color:var(--brand-2)}
+
+/* right provenance rail (variant C) */
+.split{flex:1;display:flex;min-height:0}
+.split .thread{flex:1;border-right:1px solid var(--line)}
+.split .turns{max-width:600px}
+.rail-r{width:300px;flex:0 0 300px;background:var(--bg-2);overflow:auto;padding:18px 16px}
+.rail-r .lbl{margin-bottom:12px}
+.rail-card{border:1px solid var(--line);border-left:3px solid var(--hue-amber);border-radius:0 var(--r-2) var(--r-2) 0;
+  background:var(--bg);padding:10px 12px;margin-bottom:9px}
+.rail-card.teal{border-left-color:var(--hue-teal)} .rail-card.coral{border-left-color:var(--hue-coral)}
+.rail-card .rn{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--brand-2)}
+.rail-card .rq{font-family:var(--display);font-style:italic;font-size:13px;line-height:1.45;color:var(--ink-2);margin-top:3px}
+.rail-card .rp{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:6px}
+.note{font-size:11px;color:var(--ink-3);text-align:center;padding:10px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="studio-top">
+  <h1>Conversational <em>Ask</em> — layout studies</h1>
+  <span class="studio-sub">Three ways to seat the persisted-conversation model on CoralSwarm. Same data, same tokens — switch to compare. Note where this is mockup-only (no real retrieval).</span>
+  <div class="tabs">
+    <button class="tab on" data-v="a">A · Classic sidebar</button>
+    <button class="tab" data-v="b">B · Focus / hero</button>
+    <button class="tab" data-v="c">C · Provenance rail</button>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ════════ VARIANT A ════════ -->
+  <section class="variant on" id="va">
+    <div class="vhead"><h2>A · Classic sidebar</h2><p>ChatGPT/Claude shape — conversation list left, thread center, composer pinned. Shown mid-stream.</p></div>
+    <div class="tradeoffs">
+      <div class="to pro"><span class="lbl">strengths</span><ul><li>Instantly familiar; zero learning curve</li><li>Sidebar always shows New chat + search + pinned + shared</li><li>Most screen for the thread</li></ul></div>
+      <div class="to con"><span class="lbl">tensions</span><ul><li>Two left columns (icon rail + convo list) can feel heavy</li><li>Citations live inline only — less provenance prominence</li></ul></div>
+    </div>
+    <div class="app">
+      <nav class="rail">
+        <div class="mark"></div>
+        <div class="rico">⌕</div><div class="rico on">✦</div><div class="rico">❖</div><div class="rico">⚓</div><div class="rico">⚙</div>
+      </nav>
+      <aside class="side">
+        <div class="side-top">
+          <button class="newbtn">＋ New chat <span class="k">⌘N</span></button>
+          <div class="search"><span class="ic">⌕</span><input placeholder="Search conversations" /></div>
+        </div>
+        <div class="convs">
+          <div class="sec"><span class="lbl">Pinned</span></div>
+          <button class="conv on"><div class="t">Auth decision rationale</div><div class="m"><span class="dot" style="background:var(--hue-coral)"></span>now · 4 turns</div></button>
+          <div class="sec"><span class="lbl">Recent</span></div>
+          <button class="conv"><div class="t">Embedding speedup approach</div><div class="m"><span class="dot" style="background:var(--hue-teal)"></span>2h</div></button>
+          <button class="conv"><div class="t">Henderson reef summary</div><div class="m"><span class="dot" style="background:var(--hue-plum)"></span>yesterday</div></button>
+          <button class="conv"><div class="t">Who owns the billing migration</div><div class="m"><span class="dot" style="background:var(--hue-pink)"></span>Tue</div></button>
+          <div class="sec"><span class="lbl">Shared with you</span></div>
+          <button class="conv"><div class="t">Q3 roadmap — open questions</div><div class="m"><span class="shared-tag">from Mara</span></div></button>
+        </div>
+      </aside>
+      <div class="main">
+        <div class="topbar">
+          <div class="ttl">Auth decision rationale</div>
+          <div class="tactions">
+            <span class="ocean-pill"><span class="dot" style="background:var(--hue-teal)"></span>Henderson ocean</span>
+            <button class="tbtn share">⇲ share</button>
+            <button class="tbtn">rename</button>
+            <button class="tbtn">⋯</button>
+          </div>
+        </div>
+        <div class="thread">
+          <div class="turns">
+            <div class="q-turn"><div class="who">SM</div><div class="qbody"><div class="qtext">What did we decide about auth, and why?</div></div></div>
+            <div class="a-turn">
+              <div class="who"><div class="m2"></div></div>
+              <div class="abody">
+                <div class="credit"><span class="badge syn">synthesized</span><span class="timing">embed 41ms · retrieve 88ms · synthesize 1.20s</span></div>
+                <div class="answer">The team chose <strong style="font-weight:600">Clerk</strong> for auth, verifying its JWTs on the Rust backend<span class="cite">1</span>. The deciding factors were org-native multi-tenancy and a hosted key ceremony, which avoided building session rotation in-house<span class="cite">2</span>. JWT-only was considered but rejected as too much custom surface<span class="cite">3</span>.</div>
+                <div class="srcs">
+                  <div class="lbl">cited corals · 3</div>
+                  <div class="src coral"><div class="n">1</div><div class="body"><div class="title">ADR-0007 · auth provider</div><div class="prov">decision · Jun 8</div></div><div class="open">↗ open</div></div>
+                  <div class="src teal"><div class="n">2</div><div class="body"><div class="quote">“org-native tenancy is the whole reason we’re not rolling our own”</div><div class="prov">meeting · Jun 7</div></div><div class="open">↗ open</div></div>
+                  <div class="src"><div class="n">3</div><div class="body"><div class="quote">“pure JWT means we own rotation + revocation forever”</div><div class="prov">slack · Jun 6</div></div><div class="open">↗ open</div></div>
+                </div>
+              </div>
+            </div>
+            <div class="q-turn"><div class="who">SM</div><div class="qbody"><div class="qtext">Why not just Auth0 then?</div></div></div>
+            <div class="a-turn">
+              <div class="who"><div class="m2"></div></div>
+              <div class="abody">
+                <div class="credit"><span class="badge syn">synthesized</span><span class="timing mono pulse">streaming…</span></div>
+                <div class="answer">Auth0 came up in the same thread, but it was set aside on cost at the org tier and weaker first-class Organizations support at the time<span class="cite">1</span>. Clerk’s React + backend SDKs also matched the existing stack more closely<span class="cursor"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="wrap">
+            <textarea placeholder="Ask a follow-up…"></textarea>
+            <button class="send">↑</button>
+          </div>
+          <div class="hint">↵ send · ⇧↵ newline · answers grounded in the Henderson ocean</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ VARIANT B ════════ -->
+  <section class="variant" id="vb">
+    <div class="vhead"><h2>B · Focus / hero</h2><p>Sidebar collapses to a rail; new chats open on a centered hero that yields to the thread on first send. Most “product”, least chrome.</p></div>
+    <div class="tradeoffs">
+      <div class="to pro"><span class="lbl">strengths</span><ul><li>Calm, centered empty state — keeps “Ask your ocean” as the protagonist</li><li>Sidebar tucks away; one focused column</li><li>Best on small/desktop windows</li></ul></div>
+      <div class="to con"><span class="lbl">tensions</span><ul><li>Conversation list is one click away (collapsed)</li><li>Switching between chats is slightly less glanceable</li></ul></div>
+    </div>
+    <div class="app">
+      <nav class="rail">
+        <div class="mark"></div>
+        <div class="rico">⌕</div><div class="rico on">✦</div><div class="rico">❖</div><div class="rico">⚓</div><div class="rico">⚙</div>
+      </nav>
+      <!-- collapsed conversation rail -->
+      <aside class="side" style="width:60px;flex-basis:60px;align-items:center">
+        <div class="side-top" style="padding:14px 0;width:100%;display:flex;flex-direction:column;align-items:center;gap:10px">
+          <button class="send" title="New chat" style="width:36px;height:36px">＋</button>
+          <div class="rico">⌕</div>
+          <div class="rico on" title="Auth decision rationale" style="background:var(--hue-coral);color:#fff">A</div>
+          <div class="rico" style="color:var(--hue-teal)">E</div>
+          <div class="rico" style="color:var(--hue-plum)">H</div>
+          <div class="rico" style="color:var(--hue-pink)">B</div>
+          <div class="lbl" style="writing-mode:vertical-rl;margin-top:8px">expand ›</div>
+        </div>
+      </aside>
+      <div class="main">
+        <div class="topbar">
+          <div class="ttl" style="color:var(--ink-3);font-size:13px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase">New chat</div>
+          <span class="ocean-pill"><span class="dot" style="background:var(--hue-teal)"></span>Henderson ocean ▾</span>
+        </div>
+        <div class="hero">
+          <div class="bigmark"></div>
+          <h2>Ask your <em>ocean</em></h2>
+          <p>A back-and-forth over every coral and reef in your ocean — answered with citations down to the source.</p>
+          <div class="compose-hero">
+            <div class="composer" style="border:none;padding:0">
+              <div class="wrap">
+                <textarea placeholder="Ask anything…"></textarea>
+                <button class="send">↑</button>
+              </div>
+            </div>
+          </div>
+          <div class="sugs">
+            <button class="sug">What did we decide about auth?</button>
+            <button class="sug">How did we speed up embeddings?</button>
+            <button class="sug">Summarize the Henderson reef</button>
+            <button class="sug">Recent decisions this week</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">↑ empty state · once you send, the hero slides up and becomes the thread + bottom composer from variant A.</div>
+  </section>
+
+  <!-- ════════ VARIANT C ════════ -->
+  <section class="variant" id="vc">
+    <div class="vhead"><h2>C · Provenance rail</h2><p>Classic sidebar + a persistent right rail that collects every cited coral as you scroll. Leans into CoralSwarm’s “nothing is anonymous”.</p></div>
+    <div class="tradeoffs">
+      <div class="to pro"><span class="lbl">strengths</span><ul><li>Provenance is always visible, not buried under each turn</li><li>Differentiates from generic chat UIs — feels like CoralSwarm</li><li>Citations accumulate across the whole conversation</li></ul></div>
+      <div class="to con"><span class="lbl">tensions</span><ul><li>Three columns — needs width; collapses awkwardly on narrow screens</li><li>Inline [n] chips + rail can double-show sources</li></ul></div>
+    </div>
+    <div class="app">
+      <nav class="rail">
+        <div class="mark"></div>
+        <div class="rico">⌕</div><div class="rico on">✦</div><div class="rico">❖</div><div class="rico">⚓</div><div class="rico">⚙</div>
+      </nav>
+      <aside class="side">
+        <div class="side-top">
+          <button class="newbtn">＋ New chat <span class="k">⌘N</span></button>
+          <div class="search"><span class="ic">⌕</span><input placeholder="Search conversations" /></div>
+        </div>
+        <div class="convs">
+          <div class="sec"><span class="lbl">Recent</span></div>
+          <button class="conv on"><div class="t">Auth decision rationale</div><div class="m"><span class="dot" style="background:var(--hue-coral)"></span>now</div></button>
+          <button class="conv"><div class="t">Embedding speedup approach</div><div class="m"><span class="dot" style="background:var(--hue-teal)"></span>2h</div></button>
+          <button class="conv"><div class="t">Henderson reef summary</div><div class="m"><span class="dot" style="background:var(--hue-plum)"></span>yesterday</div></button>
+        </div>
+      </aside>
+      <div class="main">
+        <div class="topbar">
+          <div class="ttl">Auth decision rationale</div>
+          <div class="tactions">
+            <span class="ocean-pill"><span class="dot" style="background:var(--hue-teal)"></span>Henderson</span>
+            <button class="tbtn share">⇲ share</button>
+          </div>
+        </div>
+        <div class="split">
+          <div class="thread">
+            <div class="turns">
+              <div class="q-turn"><div class="who">SM</div><div class="qbody"><div class="qtext">What did we decide about auth, and why?</div></div></div>
+              <div class="a-turn">
+                <div class="who"><div class="m2"></div></div>
+                <div class="abody">
+                  <div class="credit"><span class="badge syn">synthesized</span><span class="timing">1.20s</span></div>
+                  <div class="answer">The team chose <strong style="font-weight:600">Clerk</strong>, verifying its JWTs on the backend<span class="cite hot">1</span>. The drivers were org-native multi-tenancy and a hosted key ceremony<span class="cite">2</span>; pure JWT was rejected as too much custom surface<span class="cite">3</span>.</div>
+                </div>
+              </div>
+              <div class="q-turn"><div class="who">SM</div><div class="qbody"><div class="qtext">Did anyone push back?</div></div></div>
+              <div class="a-turn">
+                <div class="who"><div class="m2"></div></div>
+                <div class="abody">
+                  <div class="credit"><span class="badge syn">synthesized</span><span class="timing">0.94s</span></div>
+                  <div class="answer">Yes — there was concern about vendor lock-in raised in Slack<span class="cite">4</span>, answered by noting JWT verification stays standard and portable.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <aside class="rail-r">
+            <div class="lbl">cited this conversation · 4</div>
+            <div class="rail-card coral"><div class="rn">1 · ADR-0007</div><div class="rq">auth provider decision</div><div class="rp">decision · Jun 8 · ↗ open</div></div>
+            <div class="rail-card teal"><div class="rn">2</div><div class="rq">“org-native tenancy is the whole reason”</div><div class="rp">meeting · Jun 7 · ↗ open</div></div>
+            <div class="rail-card"><div class="rn">3</div><div class="rq">“pure JWT means we own rotation forever”</div><div class="rp">slack · Jun 6 · ↗ open</div></div>
+            <div class="rail-card"><div class="rn">4</div><div class="rq">“are we worried about lock-in?”</div><div class="rp">slack · Jun 6 · ↗ open</div></div>
+          </aside>
+        </div>
+        <div class="composer">
+          <div class="wrap"><textarea placeholder="Ask a follow-up…"></textarea><button class="send">↑</button></div>
+          <div class="hint">↵ send · ⇧↵ newline · cited corals collect in the rail →</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  const tabs=[...document.querySelectorAll('.tab')];
+  const vmap={a:'va',b:'vb',c:'vc'};
+  tabs.forEach(t=>t.addEventListener('click',()=>{
+    tabs.forEach(x=>x.classList.remove('on'));t.classList.add('on');
+    document.querySelectorAll('.variant').forEach(v=>v.classList.remove('on'));
+    document.getElementById(vmap[t.dataset.v]).classList.add('on');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }));
+</script>
+</body>
+</html>

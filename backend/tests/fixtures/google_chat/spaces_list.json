@@ -1,0 +1,55 @@
+{
+  "spaces": [
+    {
+      "name": "spaces/AAAAAAAAAAA",
+      "spaceType": "SPACE",
+      "displayName": "eng-platform",
+      "spaceThreadingState": "THREADED_MESSAGES",
+      "historyState": "HISTORY_ON",
+      "singleUserBotDm": false,
+      "membershipCount": { "joinedDirectHumanUserCount": 4, "joinedGroupCount": 1 },
+      "adminInstalled": true
+    },
+    {
+      "name": "spaces/BBBBBBBBBBB",
+      "spaceType": "SPACE",
+      "displayName": "incident-war-room",
+      "spaceThreadingState": "GROUPED_MESSAGES",
+      "historyState": "HISTORY_OFF",
+      "singleUserBotDm": false,
+      "membershipCount": { "joinedDirectHumanUserCount": 6, "joinedGroupCount": 1 },
+      "adminInstalled": true
+    },
+    {
+      "name": "spaces/CCCCCCCCCCC",
+      "spaceType": "GROUP_CHAT",
+      "displayName": "",
+      "spaceThreadingState": "GROUPED_MESSAGES",
+      "historyState": "HISTORY_ON",
+      "singleUserBotDm": false,
+      "membershipCount": { "joinedDirectHumanUserCount": 3, "joinedGroupCount": 0 },
+      "adminInstalled": false
+    },
+    {
+      "name": "spaces/DDDDDDDDDDD",
+      "spaceType": "DIRECT_MESSAGE",
+      "displayName": "",
+      "spaceThreadingState": "GROUPED_MESSAGES",
+      "historyState": "HISTORY_ON",
+      "singleUserBotDm": false,
+      "membershipCount": { "joinedDirectHumanUserCount": 2, "joinedGroupCount": 0 },
+      "adminInstalled": false
+    },
+    {
+      "name": "spaces/EEEEEEEEEEE",
+      "spaceType": "DIRECT_MESSAGE",
+      "displayName": "",
+      "spaceThreadingState": "GROUPED_MESSAGES",
+      "historyState": "HISTORY_ON",
+      "singleUserBotDm": true,
+      "membershipCount": { "joinedDirectHumanUserCount": 1, "joinedGroupCount": 0 },
+      "adminInstalled": false
+    }
+  ],
+  "nextPageToken": "example_11"
+}

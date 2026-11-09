@@ -1,0 +1,169 @@
+name: Control-plane backup
+
+# Nightly logical backup of the CONTROL-PLANE database (Fly Postgres app
+# `coralswarm-db`, database `coralswarm_backend` — routing rows, accounts,
+# sessions, membership). This is the self-identified gap in
+# docs/plans/org-tenancy-implementation-plan.md: losing the control plane takes
+# every org offline even though their own data survives, because nothing would
+# know how to route to it.
+#
+# Tenant databases have their own nightly job — see backup-tenants.yml. (That
+# plan item originally justified this one by saying tenant DBs were already
+# covered by provider PITR; measured 2026-08-24 that window was 6 hours, so
+# they were not. Issue #689. Raised to 7 days on 2026-10-21, COR-92.)
+#
+# See scripts/backup_control_plane.sh for what the backup itself does, and
+# docs/runbooks/control-plane-restore.md for the restore side (RPO/RTO,
+# manual provisioning steps, and the drill this was validated against).
+#
+# CONNECTIVITY: `coralswarm-db` has no public endpoint — it is reachable only
+# over Fly's private 6PN network. This workflow opens a `flyctl proxy` tunnel
+# (using FLY_API_TOKEN, the same repo secret deploy.yml already uses) and
+# rewrites the backup DSN's host:port to the local tunnel before invoking the
+# script. The script itself never manages connectivity — see its header.
+#
+# FAILS LOUDLY ON MISSING CONFIG. This is a from-scratch capability with no
+# existing secrets wired — see docs/runbooks/control-plane-restore.md's
+# "Activating this workflow" section for the exact `gh secret set` commands.
+# Until those secrets are set, this job hard-fails (not skips) on every
+# scheduled run, so a missing secret shows up as a red check the founder
+# will see, rather than a silently-never-ran backup.
+
+on:
+  schedule:
+    # 09:00 UTC ≈ 03:00-04:00 US Central, off-peak for both regions this repo
+    # cares about (iad primary region, Central-time founder).
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: dump + verify + encrypt locally, skip upload/pruning"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: control-plane-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup control-plane database
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Fail loudly and early — BEFORE opening any tunnel or touching the
+      # database — if required configuration is missing. A silently-skipped
+      # nightly backup is exactly the failure mode this workflow exists to
+      # prevent, so this is a hard `exit 1` with `::error::` annotations, not
+      # an `if:` condition that would report the job as skipped/neutral.
+      - name: Verify required secrets are configured
+        env:
+          HAVE_FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN != '' }}
+          HAVE_BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL != '' }}
+          HAVE_BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY != '' }}
+          HAVE_BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT != '' }}
+          HAVE_BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET != '' }}
+          HAVE_BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID != '' }}
+          HAVE_BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY != '' }}
+        run: |
+          missing=0
+          check() {
+            if [ "$1" != "true" ]; then
+              echo "::error::Required repository secret $2 is not set. See docs/runbooks/control-plane-restore.md's 'Activating this workflow' section for how to provision and set it." >&2
+              missing=1
+            fi
+          }
+          check "$HAVE_FLY_API_TOKEN" FLY_API_TOKEN
+          check "$HAVE_BACKUP_DATABASE_URL" BACKUP_DATABASE_URL
+          check "$HAVE_BACKUP_ENCRYPTION_KEY" BACKUP_ENCRYPTION_KEY
+          check "$HAVE_BACKUP_S3_ENDPOINT" BACKUP_S3_ENDPOINT
+          check "$HAVE_BACKUP_S3_BUCKET" BACKUP_S3_BUCKET
+          check "$HAVE_BACKUP_S3_ACCESS_KEY_ID" BACKUP_S3_ACCESS_KEY_ID
+          check "$HAVE_BACKUP_S3_SECRET_ACCESS_KEY" BACKUP_S3_SECRET_ACCESS_KEY
+          if [ "$missing" -eq 1 ]; then
+            echo "::error::Aborting: one or more required secrets are missing. This is a hard failure, not a skip — no backup ran." >&2
+            exit 1
+          fi
+
+      # The Postgres client version must be >= the server's (17.x in prod;
+      # verified via pg_dump against a live proxy tunnel while building this
+      # workflow — Homebrew's local default is v16 and mismatches it the same
+      # way ubuntu-latest's default apt package does). Add the PGDG apt repo
+      # rather than relying on whatever ships in the runner's base image.
+      - name: Install postgresql-client-17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      # Pinned to a commit SHA, not @master — same rationale as deploy.yml:
+      # this job runs with FLY_API_TOKEN, and that action tracks an
+      # actively-mutable branch with zero version stability.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+
+      # coralswarm-db has no public endpoint — only Fly's private 6PN network
+      # reaches it. Tunnel it to a local port for the duration of this job.
+      - name: Open flyctl proxy to coralswarm-db
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl proxy 15432:5432 -a coralswarm-db > proxy.log 2>&1 &
+          echo $! > proxy.pid
+          # Poll for the tunnel instead of a fixed sleep — it's typically up
+          # within a few seconds but this shouldn't be a flaky fixed delay.
+          for _ in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/15432) 2>/dev/null; then
+              exec 3>&-
+              echo "proxy is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::flyctl proxy to coralswarm-db did not come up within 30s" >&2
+          cat proxy.log >&2 || true
+          exit 1
+
+      - name: Run backup
+        env:
+          # Ubuntu's /usr/bin/pg_dump is a pg_wrapper that resolved to the
+          # preinstalled v16 client even with postgresql-client-17 installed
+          # (server is 17.x -> "server version mismatch"). Point the script's
+          # override at 17's real bindir.
+          PG_BIN_DIR: /usr/lib/postgresql/17/bin
+          BACKUP_DATABASE_URL_RAW: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: |
+          # Rewrite the DSN's host:port to the local tunnel. The secret holds
+          # coralswarm-db's real (Fly-internal, e.g. *.flycast) host — never
+          # printed here, only substituted.
+          BACKUP_DATABASE_URL="$(printf '%s' "$BACKUP_DATABASE_URL_RAW" | sed -E 's#@[^@/]+(:[0-9]+)?/#@127.0.0.1:15432/#')"
+          export BACKUP_DATABASE_URL
+          args=()
+          if [ "${DRY_RUN_INPUT:-false}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          bash scripts/backup_control_plane.sh "${args[@]}"
+
+      - name: Close flyctl proxy
+        if: always()
+        run: |
+          if [ -f proxy.pid ]; then
+            kill "$(cat proxy.pid)" 2>/dev/null || true
+          fi

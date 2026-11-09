@@ -1,0 +1,58 @@
+{
+  "spaceEvents": [
+    {
+      "name": "spaces/AAAAAAAAAAA/spaceEvents/event-created-0001",
+      "eventTime": "2026-08-01T09:05:00Z",
+      "eventType": "google.workspace.chat.message.v1.created",
+      "messageCreatedEventData": {
+        "message": {
+          "name": "spaces/AAAAAAAAAAA/messages/msg-0002",
+          "sender": { "name": "users/1002", "displayName": "Bob Chen", "type": "HUMAN" },
+          "createTime": "2026-08-01T09:05:00Z",
+          "text": "ack, I'll watch the dashboards",
+          "formattedText": "ack, I'll watch the dashboards"
+        }
+      }
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/spaceEvents/event-deleted-0001",
+      "eventTime": "2026-08-01T09:20:00Z",
+      "eventType": "google.workspace.chat.message.v1.deleted",
+      "messageDeletedEventData": {
+        "message": {
+          "name": "spaces/AAAAAAAAAAA/messages/msg-0000-typo",
+          "createTime": "2026-08-01T09:18:00Z",
+          "deletionMetadata": { "deletionType": "CREATOR" }
+        }
+      }
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/spaceEvents/event-batch-0001",
+      "eventTime": "2026-08-01T09:25:00Z",
+      "eventType": "google.workspace.chat.message.v1.batchCreated",
+      "messageBatchCreatedEventData": {
+        "messages": [
+          {
+            "message": {
+              "name": "spaces/AAAAAAAAAAA/messages/msg-0006",
+              "sender": { "name": "users/1003", "displayName": "Dana Osei", "type": "HUMAN" },
+              "createTime": "2026-08-01T09:24:00Z",
+              "text": "one",
+              "formattedText": "one"
+            }
+          },
+          {
+            "message": {
+              "name": "spaces/AAAAAAAAAAA/messages/msg-0007",
+              "sender": { "name": "users/1004", "displayName": "Priya Raman", "type": "HUMAN" },
+              "createTime": "2026-08-01T09:25:00Z",
+              "text": "two",
+              "formattedText": "two"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "nextPageToken": ""
+}

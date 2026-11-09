@@ -1,0 +1,36 @@
+-- Migration: 0085_jobs_account_id
+-- Description: org-tenancy Phase W.1 — carry the owning `account_id` on every
+--              queued job so a worker can open its per-job
+--              `tenancy::scope::begin_account_scoped` transaction WITHOUT a
+--              bootstrap DB round-trip. `jobs` itself stays deliberately
+--              OUTSIDE the RLS roster (0083 flags it "not covered": dequeue's
+--              `FOR UPDATE SKIP LOCKED` claim must see every account's rows),
+--              but 14 of the 17 workers run queries against RLS-covered
+--              tables while PROCESSING a job — post-OPS-4 each of those needs
+--              a scoping account_id, and every enqueue site already knows it.
+--
+--              NULLABLE on purpose:
+--                * rows already in flight when this deploys predate the
+--                  column — `jobs::queue::dequeue` backfills those via the
+--                  0084 SECURITY DEFINER resolvers (`resolve_graph_account_id`
+--                  / `resolve_atoms_account_id`) and hard-fails the job with
+--                  a greppable "job missing account_id (pre-W.1 row)" error
+--                  only when resolution is impossible;
+--                * a few kinds are legitimately account-less by design — the
+--                  operator-inserted unscoped sweeps (`SlackNameBackfill`
+--                  with graph_id null, `ContentTsvRegconfigRepair`,
+--                  `ReembedOutdatedChunks`) span every account and cannot
+--                  carry a single scoping id.
+--
+--              NO foreign key to `accounts(id)`: `jobs` is a shared
+--              tenant-tree table (paired migration
+--              `migrations_tenant/0004_jobs_account_id.sql`) while `accounts`
+--              is control-plane-only — an FK here could not even exist on an
+--              org-tenant database, and `check_schema_parity.sh` would flag
+--              the asymmetry. No index either: no query path filters jobs by
+--              account_id (dequeue stays kind/status/run_after-driven).
+--
+-- Down:
+--   ALTER TABLE jobs DROP COLUMN IF EXISTS account_id;
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS account_id UUID;

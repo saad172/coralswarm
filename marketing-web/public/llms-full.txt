@@ -1,0 +1,132 @@
+# CoralSwarm
+
+> Organizational memory — automated. For humans and AI.
+
+CoralSwarm captures what your team already produces, turns it into topics
+you confirm, and answers questions — with citations — for people and agents
+alike.
+
+## How it works — three moves
+
+Connect once. It captures, splits and groups — you confirm.
+
+### 01 · connect
+
+It starts with what you already have. Meetings, chat, email, code, agents.
+They connect once and the swarm takes it from there — you never file
+anything, and nothing is ingested that you didn't connect.
+
+### 02 · corals
+
+One source becomes six corals. A meeting doesn't file as one note.
+Extraction splits it into atoms — decisions, people, threads, references —
+each keeping its provenance to the second. Everything proposed this way is
+for your review — you confirm. Nothing arrives on its own.
+
+### 03 · reefs
+
+Corals group into reefs. Related corals pull together into topics — you
+confirm what forms. The reef and the logo are the same object.
+
+## Ask + cite
+
+Every answer cites its source. Ask in plain language. The answer stands on
+the corals it cites — and when two sources disagree, it says so instead of
+quietly picking one.
+
+And it stays in its ocean:
+
+- **Private first.** Every capture lands in your ocean and stays there.
+- **You promote.** The team ocean gets exactly what you moved — nothing else.
+- **Then the org.** Same gesture, same guarantee: nothing moves on its own.
+
+## Agents · MCP
+
+Agents forget. The reef doesn't. An agent's context dies with its session.
+Plug it into the reef over MCP and every session opens already knowing what
+your team knows. Same answer, same citations — whoever's asking.
+
+- **Persistent context** — sessions end; the reef doesn't. No re-priming, no context docs pasted into prompts.
+- **Team context, not chat history** — it answers from what the team knows: decisions, threads, references, not one user's transcripts.
+- **Cited and scoped** — every answer carries citations; a token scoped to one ocean bounds what the agent can see.
+
+## Pricing — one meter: the answer
+
+14-day free trial at launch. Capture, ingestion and review are never
+metered. One thing is counted: a query — asked by you in the app or pulled
+by an agent over MCP.
+
+### Personal Pro — $25/month
+
+1,500 queries/month. Your own private ocean, every connector, MCP access
+for your agents. Top-ups when you run dry, and a ceiling you set yourself.
+
+### Personal Max — $100/month
+
+7,000 queries/month. Everything in Pro at agent volume — for people whose
+agents ask more than they do. Same trial, top-ups and self-set ceiling.
+
+### Enterprise — talk to sales
+
+Per seat, quota set with you. Team and org oceans on top of everyone's
+private one — promote flows, review queue, scoped MCP tokens, admin limits.
+
+## Private by construction (security)
+
+- Nothing leaves your ocean until you promote it.
+- Your keys never touch our servers — we can't read it, or recover it.
+- On Enterprise, each tenant runs on its own private database, not a
+  shared one.
+
+## FAQ
+
+### What is CoralSwarm?
+
+CoralSwarm captures the work your team is already doing — meetings, chat,
+email, coding sessions — and turns it into organizational memory,
+automatically. It splits what comes in into atoms, groups them into topics
+you confirm, and answers questions with citations, for people and AI agents
+alike.
+
+### How is CoralSwarm different from Notion or Obsidian?
+
+Notion and Obsidian are places you write things down — the knowledge only
+exists if someone takes the time to file it there. CoralSwarm connects to
+what your team already uses and captures automatically, so nothing depends
+on someone remembering to write a doc, and nothing is ingested that you
+didn't connect.
+
+### Do I have to write anything for knowledge to get captured?
+
+No. Meetings, chat, email, code and agent sessions connect once, and the
+swarm takes it from there — you never file anything yourself.
+
+### Can AI agents like Claude use CoralSwarm?
+
+Yes — CoralSwarm has an MCP connector, so an agent's session can open
+already knowing what your team knows instead of starting from zero every
+time. Answers are cited and scoped: a token bound to one ocean limits what
+any agent can see, and it gets the same answer with the same citations a
+person asking would.
+
+### Is my data private and secure?
+
+Yes. Every capture lands in your own private ocean and stays there until
+you actively promote it — nothing moves on its own. Your keys never touch
+our servers, so we can't read your data or recover it, and on Enterprise
+each tenant runs on its own private database rather than a shared one.
+
+### How much does CoralSwarm cost?
+
+Personal Pro is $25/month for 1,500 queries; Personal Max is $100/month for
+7,000 queries — both include every connector and MCP access, with a 14-day
+free trial at launch. Enterprise is priced per seat and quoted with your
+team; capture, ingestion and review are never metered, only queries are.
+
+## Contact
+
+Talk to sales, or join the waitlist: https://coralswarm.example/#contact
+
+---
+
+Status: pre-launch · looking for design partners.

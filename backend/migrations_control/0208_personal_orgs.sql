@@ -1,0 +1,80 @@
+-- 0208_personal_orgs.sql — the map from a Clerk organization to the ONE person
+-- whose personal ocean it stands for.
+--
+-- Description:
+--
+-- WHY THIS TABLE EXISTS.
+--   Clerk draws the OAuth consent screen, and that screen lists ONLY
+--   organizations — it has no row for a person's own ocean (verified against a
+--   real screen 2026-07-25). So a user connecting an MCP client for their own
+--   ocean reaches a picker that cannot express what they want. That is why
+--   `user:org:read` was dropped in #810 and tenant selection moved to a
+--   post-connect tool.
+--
+--   The founder's fix (2026-09-07) is to give every user a Clerk organization
+--   that STANDS FOR their own ocean, so the picker has a row for it. This table
+--   is the record of which organization stands for whom.
+--
+-- THE ORG ID IS A SELECTOR, NOT AN AUTHORIZATION.
+--   Same rule as `mcp_tenant_selection` (0203). A row here says "org X denotes
+--   the personal ocean of Clerk user Y". It NEVER says "the bearer may act as
+--   Y". The request path re-checks the token's own `sub` against
+--   `clerk_user_id` on every call, and refuses when they differ — see
+--   `tenancy::personal_org::resolve_personal_org_plane`, whose
+--   `PersonalOrgOfAnotherUser` arm exists for exactly that case.
+--
+-- A PERSONAL ORG GETS NO DATABASE, AND NO ROUTING ROW.
+--   Founder decision, asked and answered directly. There is deliberately no
+--   `tenant_databases` row for these org ids and no entry in `accounts`. The
+--   request path translates the org id back to the caller's personal path
+--   BEFORE `resolve_clerk_context` runs, so nothing downstream ever looks one
+--   up. If you are here because `live_org_membership` returned no row for one
+--   of these ids: that is the design, and the translation is what you are
+--   missing, not the row.
+--
+-- BOTH COLUMNS ARE CLERK-SIDE IDENTIFIERS, SO NEITHER IS A FOREIGN KEY.
+--   `clerk_org_id` follows `org_revocations` (0082) and `mcp_tenant_selection`
+--   (0203): Clerk org ids outlive any local row and must survive account
+--   deletion and recreation.
+--
+--   `clerk_user_id` is stored as the CLERK id (`user_...`), not our internal
+--   `users.id` UUID, and that is load-bearing rather than incidental. The
+--   translation runs BEFORE `resolve_clerk_context`, which is the thing that
+--   maps a Clerk subject to a local `users` row — so at lookup time no local
+--   UUID is in hand yet. Comparing the token's own `sub` against this column
+--   is also the shortest possible path from token to decision: no join, no
+--   intermediate row whose absence or staleness could change the answer.
+--
+-- ONE ORG PER PERSON, ONE PERSON PER ORG.
+--   `clerk_org_id` is the primary key and `clerk_user_id` is UNIQUE. Two people
+--   cannot share a personal org, and one person cannot accumulate several. The
+--   creation command relies on the UNIQUE constraint for idempotency: a second
+--   run for the same user conflicts instead of minting a second Clerk org.
+--
+-- NO RLS POLICY — same rationale as 0201 and 0203. This table is read only by
+--   the auth spine, before any tenant scope exists, and carries no user
+--   content.
+--
+-- Registered in `scripts/check_schema_parity.sh`'s CONTROL_TABLES in this same
+-- PR (the paired-migration discipline that script's header asks for).
+--
+-- Depends on: nothing. Both columns are opaque Clerk identifiers.
+--
+-- Down:
+--   DROP TABLE IF EXISTS personal_orgs;
+
+CREATE TABLE IF NOT EXISTS personal_orgs (
+    -- The Clerk organization that stands for one person's personal ocean.
+    clerk_org_id  TEXT        PRIMARY KEY,
+    -- The Clerk user (`sub`) whose personal ocean it stands for. Compared
+    -- against the verified token's own `sub` on every request; a mismatch is
+    -- refused, never served.
+    clerk_user_id TEXT        NOT NULL UNIQUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- No backfill. Before this PR nothing in this codebase could create a personal
+-- org, so there is nothing to migrate — an empty table is exactly the state
+-- every existing user is already in, and an empty table means every token
+-- behaves precisely as it does today. Rows arrive only from
+-- `backend/src/bin/create_personal_orgs.rs`, which the founder runs himself.

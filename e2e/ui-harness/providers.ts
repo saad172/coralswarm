@@ -1,0 +1,1 @@
+export const useApp = () => ({getAuthToken: () => "eyJhbGciOiJub25lIn0.eyJzdWIiOiJmaXh0dXJlIn0.fixture", authReady: true, ready:true, resolvedOrgId:null, isPersonalOrg:true, queryScope: "fixture", accountId:"fixture"});

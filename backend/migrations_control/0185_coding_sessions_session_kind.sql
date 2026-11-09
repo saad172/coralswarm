@@ -1,0 +1,83 @@
+-- Migration: 0185_coding_sessions_session_kind
+-- Description: Give a captured session its own KIND, so the derived
+--   `atoms.source_type` can be something other than `'coding_session'`.
+--
+--   The problem this closes (capture blocker B1). Migration 0098 made
+--   `atoms.source_type` DERIVED for session captures:
+--   `routes::ingest::ingest_atom_impl` overwrote whatever the caller sent
+--   with `'coding_session'` whenever `session_id` was present, at the single
+--   choke point both entry points (REST `/v1/ingest/atom`, MCP
+--   `add_context`) pass through. That rule was right — before it, every
+--   captured checkpoint landed stamped `'note'`/`'chat'` on the harness
+--   primer's instruction and was indistinguishable from a hand-typed note —
+--   but it was also TOTAL: a session could only ever be a coding session.
+--
+--   A second capture surface (the ambient desktop work-capture app) submits
+--   sessions of screen-observed work, not coding. Under the old rule every
+--   one of them would land labelled `'coding_session'`, permanently:
+--   `atoms.source_type` is INSERT-only across sync (see 0098's KNOWN
+--   LIMITATION block — the libsql apply path sets it on INSERT only, so a
+--   relabel can never reach a desktop replica), and it is what the corals
+--   list, the Sources view, ask citations and the `corals by source`
+--   aggregate all read.
+--
+--   The fix keeps derivation and replaces the derivation RULE. The caller
+--   now declares a `session_kind` from a CLOSED set validated server-side
+--   (`routes::ingest::SessionKind`), and `source_type` is derived from that:
+--   `coding` → `'coding_session'`, `work` → `'work_session'`. The caller
+--   still cannot choose `source_type` directly — the anti-spoofing property
+--   `CODING_SESSION_SOURCE_TYPE`'s doc comment describes is unchanged, since
+--   a kind only becomes a label by also creating the `coding_sessions` row
+--   this column lives on.
+--
+--   Why `DEFAULT 'coding'` and not NULL. Backward compatibility is the whole
+--   point: the MCP plugin, the `cs` CLI and the Claude Code harness primer
+--   all post today and none of them will send the new field. An absent
+--   `session_kind` must keep deriving `'coding_session'` exactly as before,
+--   and every row written before this migration IS a coding session. A
+--   NOT NULL DEFAULT backfills those rows in one statement with the right
+--   answer and leaves no "unknown kind" state for readers to handle.
+--
+--   Why the column is INSERT-only in practice. `Store::upsert_coding_session`
+--   deliberately does NOT list `session_kind` in its `ON CONFLICT DO UPDATE
+--   SET` clause, so the first checkpoint of a session fixes the kind and a
+--   later one cannot flip it. This mirrors `atoms.source_type`, which the
+--   session's own corals already carry immutably: if a later checkpoint of
+--   the same `(graph_id, session_id)` could change the row's kind, the row
+--   and its corals would permanently disagree. The upsert instead RETURNS
+--   the stored kind, and the ingest route fails the whole request (409,
+--   rolling its transaction back before any atom is committed) when the
+--   declared kind differs from the stored one.
+--
+--   Why there is NO `CHECK (session_kind IN (...))`. The closed set is
+--   enforced in Rust at the one choke point that derives `source_type` from
+--   it — a value can only reach this column by passing that validation. A
+--   CHECK would additionally freeze the set into the schema of every plane,
+--   including the libsql/desktop one, which has no migration runner: exactly
+--   the `nodes.type` trap migration 0076's own header cites as the reason
+--   coding sessions are a table rather than a reef type. That reasoning was
+--   vindicated immediately: ticket 11 (2026-08-23) decided the meeting
+--   recorder DOES need a third kind (`meeting` -> 'meeting_session'), and
+--   adding it cost zero schema change on any plane -- no CHECK to alter, no
+--   rebuild of every desktop SQLite file.
+--
+--   Paired with `migrations_tenant/0065_coding_sessions_session_kind.sql`
+--   (`coding_sessions` is a shared tenant table — `check_schema_parity.sh`
+--   fails if the two trees diverge). POSTGRES ONLY: the libsql bootstrap
+--   schema in `backend/src/store/libsql.rs` is deliberately NOT given this
+--   column. That plane already stores no coding sessions at all (every
+--   getter is an empty stub), and issue #549 decision 5 settles that it is
+--   deleted rather than ported — teaching it a new column would only widen
+--   that deletion's blast radius. Its `upsert_coding_session` takes the new
+--   argument for trait-shape reasons only and echoes it straight back.
+--
+-- Depends on: 0076_coding_sessions (the table), 0098_coding_session_source_type
+--   (the derivation rule this generalizes).
+-- Down:
+--   ALTER TABLE coding_sessions DROP COLUMN IF EXISTS session_kind;
+--   -- (lossy: every non-'coding' session loses the only record of its kind.
+--   -- The corals themselves keep their `atoms.source_type`, which is what
+--   -- readers actually display.)
+
+ALTER TABLE coding_sessions
+    ADD COLUMN IF NOT EXISTS session_kind TEXT NOT NULL DEFAULT 'coding';

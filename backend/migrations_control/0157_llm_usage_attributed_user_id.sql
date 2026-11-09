@@ -1,0 +1,68 @@
+-- Migration: 0157_llm_usage_attributed_user_id
+-- Description: Billing Phase 1 (seats + per-member metering) — add a STORED
+--   attribution column to `llm_usage` recording which member an LLM call was
+--   FOR, so a later phase can enforce per-seat limits and render a per-member
+--   cost breakdown. `llm_usage` records what a call cost but not who it was
+--   for; this closes that gap.
+--
+--   ── READ THIS BEFORE TOUCHING `user_id` ANYWHERE NEAR THIS TABLE ──
+--   `llm_usage_pending.user_id` (migration `0149`) is, and remains, the
+--   TENANT-PLANE RLS SCOPE SELECTOR — it picks `begin_tenant_scoped` vs
+--   `begin_account_scoped` in `llm::usage::reserve`/`finalize`/`record`, is
+--   gate-verified (`TenantContext::user_id`, never a caller-supplied id — see
+--   `tenancy::scope::begin_tenant_scoped`'s own doc), and is NEVER stored on
+--   `llm_usage` itself. `attributed_user_id`, added here, is the OPPOSITE
+--   shape: it is STORED-ONLY and NEVER influences transaction scoping or
+--   which `begin_*` function a call site uses. Two sibling tables now carry
+--   similarly-named-but-differently-meaning columns
+--   (`llm_usage_pending.user_id` = scope selector, never stored;
+--   `llm_usage.attributed_user_id` = stored attribution, never a scope
+--   selector) — do not conflate them, and do not "simplify" by reusing
+--   `user_id` for this purpose: reusing it would flip ~24 worker call sites
+--   from `begin_account_scoped` to `begin_tenant_scoped` on the consumer
+--   plane and set `app.user_id` from table data rather than a
+--   gate-verified request context, a real RLS-widening bug.
+--
+--   Nullable, no default, no FK — same posture 0044's header already states
+--   for `account_id`/`graph_id` on this table (`llm_usage` is an append-only
+--   accounting log, recorded loosely, and some call sites genuinely have no
+--   member in scope — the background job workers, per `llm::usage`'s own
+--   module doc) and 0141's header repeats for `source_job_id`/
+--   `source_query_id` (no referential-integrity enforcement needed against a
+--   `users`/`account_members` row, which would also complicate any future
+--   retention/pruning of either table independent of this log). Left NULL
+--   and unbackfilled for every pre-epoch row and every call site with no
+--   member to attribute to (see the Rust-side `llm::usage` module doc's
+--   per-call-site inventory) — a later phase's per-seat enforcement counts
+--   and treats NULL as "unattributed", never folds it into a member's total.
+--
+--   `ADD COLUMN ... UUID` with no default is a fast, metadata-only operation
+--   in Postgres 11+ (no full-table rewrite). `llm_usage` is still a hot,
+--   high-write table (every background LLM call and every synthesis prose
+--   call eventually writes here), so `SET LOCAL lock_timeout = '3s'` guards
+--   against queuing behind a long-running transaction already holding a
+--   conflicting lock — same precedent as `0141_llm_usage_provider_cost` on
+--   this identical table.
+--
+--   The supporting index is deliberately NOT in this file — see
+--   `0158_llm_usage_attributed_user_id_index_concurrently.sql`. Same
+--   established precedent as every other index added to this hot table
+--   (0142-0147, 0152 and this file's own tenant twin's siblings): `CREATE
+--   INDEX CONCURRENTLY` in its own `-- no-transaction`, single-statement
+--   file, never bundled with the column-add.
+--
+-- PAIRED WITH: backend/migrations_tenant/0057_llm_usage_attributed_user_id.sql —
+--   `llm_usage` is a SHARED table, present in both trees and NOT in
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster, so the DDL
+--   statement below (below this header) must stay byte-for-byte identical to
+--   that file's. Only this header's prose is control-tree-specific.
+--
+-- Depends on: 0044_llm_usage.sql (creates llm_usage), 0141_llm_usage_provider_cost.sql
+--   (most recent prior ALTER on this table, same lock-timeout-free-because-fast
+--   column-add shape).
+-- Down:
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS attributed_user_id;
+
+SET LOCAL lock_timeout = '3s';
+
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS attributed_user_id UUID;

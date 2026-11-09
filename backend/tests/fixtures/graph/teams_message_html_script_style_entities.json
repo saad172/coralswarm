@@ -1,0 +1,15 @@
+{
+  "id": "1738368240000",
+  "messageType": "message",
+  "createdDateTime": "2026-02-01T09:04:00Z",
+  "from": {
+    "user": {
+      "id": "aad-user-priya-0001",
+      "displayName": "Priya Nair"
+    }
+  },
+  "body": {
+    "contentType": "html",
+    "content": "<style>.warn{color:red}</style><script>alert('x');</script><p>Deploy at 5&nbsp;pm &amp; watch dashboards &mdash; don&#39;t forget the &lt;prod&gt; flag.</p>"
+  }
+}

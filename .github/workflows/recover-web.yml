@@ -1,0 +1,102 @@
+name: Recover web release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Completed main Deploy run that pushed the approved web image
+        required: true
+        type: string
+      image_digest:
+        description: Exact sha256 digest from that run's production web push log
+        required: true
+        type: string
+      machine_id:
+        description: Existing started coralswarm-web serving machine to update
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+# Serialize with the ordinary main workflow, including its backend release.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  recover-web:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+      - name: Validate source run, pushed digest, frozen config and existing machine
+        id: admission
+        run: >-
+          python3 scripts/deployment.py prepare-recovery
+          --run-id "$SOURCE_RUN" --digest "$IMAGE_DIGEST" --machine "$MACHINE_ID"
+          --config "$RUNNER_TEMP/recovery-web.toml"
+          --receipt "$RUNNER_TEMP/recovery/intent.json"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          MACHINE_ID: ${{ inputs.machine_id }}
+      - name: Roll out the existing image once to the selected machine
+        id: rollout
+        run: >-
+          flyctl deploy --app coralswarm-web --config "$RUNNER_TEMP/recovery-web.toml"
+          --image "registry.fly.io/coralswarm-web@$IMAGE_DIGEST"
+          --only-machines "$MACHINE_ID" --update-only --ha=false
+          --max-concurrent 1 --deploy-retries 0 --strategy rolling --wait-timeout 5m
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          MACHINE_ID: ${{ inputs.machine_id }}
+      - name: Verify actual serving version and public routes
+        if: ${{ always() && steps.admission.outcome == 'success' && steps.rollout.outcome != 'skipped' }}
+        run: >-
+          python3 scripts/deployment.py verify --app coralswarm-web
+          --sha "$SOURCE_SHA" --digest "$IMAGE_DIGEST"
+          --receipt "$RUNNER_TEMP/recovery/verification.json"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SOURCE_SHA: ${{ steps.admission.outputs.sha }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          DEPLOY_SMOKE_TOKEN: ${{ secrets.DEPLOY_SMOKE_TOKEN }}
+          DEPLOY_SMOKE_GRAPH_ID: ${{ vars.DEPLOY_SMOKE_GRAPH_ID }}
+          DEPLOY_REQUIRE_APP_SMOKE: ${{ vars.DEPLOY_REQUIRE_APP_SMOKE }}
+      - name: Record recovery outcome
+        if: ${{ always() }}
+        env:
+          RECOVERY_STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          p = Path(os.environ['RUNNER_TEMP']) / 'recovery'
+          p.mkdir(exist_ok=True)
+          steps = json.loads(os.environ['RECOVERY_STEPS'])
+          (p / 'outcome.json').write_text(json.dumps(steps, indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write('## Web-only recovery\n\n')
+              for name, result in steps.items(): out.write(f"- {name}: {result['outcome']}\n")
+              out.write('\nNo backend or marketing release was requested. See verification.json for actual image and public checks. Authenticated application status not_configured means NOT tested.\n')
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: web-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/recovery/*.json
+          if-no-files-found: warn
+          retention-days: 30

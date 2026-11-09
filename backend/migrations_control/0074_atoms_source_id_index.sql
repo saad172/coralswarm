@@ -1,0 +1,54 @@
+-- no-transaction
+-- Migration: 0074_atoms_source_id_index
+-- Description: Index `atoms(graph_id, source_id)` to support the prefix-LIKE
+--   lookups `list_meeting_merges` / `list_meeting_new_entities` run against a
+--   meeting's chunk atoms (`a.graph_id = $1 AND a.source_id LIKE $2`, where
+--   `$2` is always a `like_prefix()`-escaped prefix pattern — see
+--   `store::mod::like_prefix`).
+--
+--   No existing index covers this. `idx_atoms_graph_source` (0003) is on
+--   `(graph_id, source_type)` — a different column entirely, of no help here.
+--   Without this index those two queries (and `meeting_occurred_at`'s
+--   `source_id LIKE $2` scan) fall back to a sequential scan filtered by
+--   `graph_id` alone, over every atom in a graph, on every `get_meeting` call
+--   (dogfooding gap-sweep #2, item 4, 2026-07-18).
+--
+--   `text_pattern_ops` (rather than the default btree opclass) is required
+--   for the index to actually be usable by a `LIKE 'prefix%'` predicate under
+--   the `C`/`POSIX` — and in Postgres generally any non-C — locale; the
+--   default opclass only helps `=`/range predicates. `graph_id` stays the
+--   leading column (always an equality predicate; standard btree opclass) and
+--   `source_id` follows with `text_pattern_ops`.
+--
+--   `atoms` is a live, read/write-heavy production table (every Slack/email/
+--   transcript ingest writes to it — see 0059's header for the same
+--   rationale) — `CREATE INDEX CONCURRENTLY` avoids taking a `SHARE` lock
+--   that would block concurrent ingestion writes while the index builds. Same
+--   `-- no-transaction` / standalone-file requirement as 0059 (Postgres
+--   rejects `CONCURRENTLY` inside a transaction block; sqlx's migrator would
+--   otherwise implicitly wrap this file's SQL in one).
+--
+--   Single statement only: a self-healing `DROP INDEX CONCURRENTLY IF
+--   EXISTS` before the `CREATE` was tried (CodeRabbit review, 2026-07-18)
+--   but reverted — sqlx sends a migration file's SQL as a single
+--   wire-protocol Query message, and Postgres implicitly wraps MULTIPLE
+--   statements in one such message in a transaction even though
+--   `-- no-transaction` stops *sqlx itself* from wrapping one. Two
+--   `CONCURRENTLY` statements in the same file therefore fails with
+--   "DROP INDEX CONCURRENTLY cannot run inside a transaction block" —
+--   verified against CI (Remote MCP e2e, Retrieval eval both failed on
+--   this exact error). `CONCURRENTLY` must stay this file's ONLY
+--   statement, matching 0059's established convention.
+--
+--   Known residual risk (same as 0059): if this build is interrupted
+--   mid-way, Postgres can leave an INVALID index of the same name behind,
+--   which `IF NOT EXISTS` then silently skips rebuilding on a retry. If
+--   that happens operationally: run
+--   `DROP INDEX CONCURRENTLY idx_atoms_graph_source_id_pattern;` then
+--   re-run this migration.
+--
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_atoms_graph_source_id_pattern;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_atoms_graph_source_id_pattern
+    ON atoms (graph_id, source_id text_pattern_ops);

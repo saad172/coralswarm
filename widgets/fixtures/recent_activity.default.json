@@ -1,0 +1,59 @@
+{
+  "toolInput": {
+    "ocean_id": "818ccfa2-051b-417a-96af-06335e439fac",
+    "page": 1,
+    "page_size": 20
+  },
+  "toolOutput": {
+    "events": [
+      {
+        "id": "a0000000-0000-4000-8000-000000000001",
+        "user_id": "da668bdc-cd92-418a-93fb-8f2ff17ebd5c",
+        "graph_id": "818ccfa2-051b-417a-96af-06335e439fac",
+        "event_type": "query_run",
+        "payload": { "citation_count": 4, "mode": "retrieval_only" },
+        "payload_truncated": false,
+        "created_at": "2026-02-14T14:02:00Z"
+      },
+      {
+        "id": "a0000000-0000-4000-8000-000000000002",
+        "user_id": "b3b77f04-fcb2-4d1f-acf1-c1c38314ec23",
+        "graph_id": "818ccfa2-051b-417a-96af-06335e439fac",
+        "event_type": "atom_ingested",
+        "payload": { "atom_count": 14, "chunks_created": 14, "source_type": "slack" },
+        "payload_truncated": false,
+        "created_at": "2026-02-14T10:15:00Z"
+      },
+      {
+        "id": "a0000000-0000-4000-8000-000000000003",
+        "user_id": "b3b77f04-fcb2-4d1f-acf1-c1c38314ec23",
+        "graph_id": "818ccfa2-051b-417a-96af-06335e439fac",
+        "event_type": "promote",
+        "payload": { "promoted_atom_count": 3, "source_graph_id": "aff253b3-7614-4a01-bd48-a4163c7fe2f8" },
+        "payload_truncated": false,
+        "created_at": "2026-02-14T09:12:00Z"
+      },
+      {
+        "id": "a0000000-0000-4000-8000-000000000004",
+        "user_id": "da668bdc-cd92-418a-93fb-8f2ff17ebd5c",
+        "graph_id": "818ccfa2-051b-417a-96af-06335e439fac",
+        "event_type": "supersession_created",
+        "payload": { "superseder_id": "f20d96e4-f7ef-4c80-97ff-8a533033e077", "superseded_id": "d0bc13f1-0e09-481f-95a0-3cbea71d0129", "source": "auto" },
+        "payload_truncated": false,
+        "created_at": "2026-02-13T16:30:00Z"
+      },
+      {
+        "id": "a0000000-0000-4000-8000-000000000005",
+        "user_id": "68c60ef0-8207-4b23-a1e9-4c5e0dd2e238",
+        "graph_id": "818ccfa2-051b-417a-96af-06335e439fac",
+        "event_type": "atom_ingested",
+        "payload": { "atom_count": 1, "chunks_created": 3, "source_type": "meeting" },
+        "payload_truncated": false,
+        "created_at": "2026-02-13T13:05:00Z"
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "has_more": false
+  }
+}

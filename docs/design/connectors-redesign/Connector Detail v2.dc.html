@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="stylesheet" href="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/styles.css"><script src="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/_ds_bundle.js"></script><style>body{margin:0;background:#f0eee9;font-family:system-ui,sans-serif}a{color:var(--brand-2)}a:hover{color:var(--ink)}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 14px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11.5px/1.4 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-notes{margin:0 0 22px;max-width:900px;font:12.5px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.62);display:flex;flex-direction:column;gap:4px}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}</style></helmet>
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Connector detail: one card per source, plus recent captures and topics</span></div>
+  <div class="dv-notes">
+    <span><b>Same in all three:</b> a header with the account and connected date, one Notice at the top when something's wrong, and one card per source. Each card shows its status, scope, a 7-day sparkline, last captured, and import progress while history imports. Edit expands the card in place. Recent captures open in place, with no jump to Library.</span>
+    <span>Pause moved into the expanded card, since it wasn't on your list of things each source should show. Click any capture in the feed to open it.</span>
+  </div>
+  <div class="dv-opts">
+    <sc-for list="{{ options }}" as="o" hint-placeholder-count="3">
+      <div class="dv-opt" id="{{ o.id }}">
+        <div class="dv-olabel"><a class="dv-oid" href="#{{ o.id }}">{{ o.id }}</a>{{ o.label }}</div>
+        <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+          <div style="display:flex;height:52px;align-items:center;gap:10px;border-bottom:1px solid var(--line-2);background:var(--bg);padding:0 20px"><span style="font-size:14px;color:var(--ink-3)">Connectors</span><span style="color:var(--ink-4);font-size:13px">/</span><span style="font-size:14px;font-weight:500;letter-spacing:-0.01em">Microsoft</span></div>
+          <div style="padding:24px 28px 36px;display:flex;flex-direction:column;gap:18px">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px 16px">
+              <dc-import name="ProviderMark" provider="microsoft" letter="M" hue="plum" box="{{ 44 }}" hint-size="44px,44px"></dc-import>
+              <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:10px"><h1 style="margin:0;font-family:var(--display);font-weight:400;font-size:30px;line-height:1.1">Microsoft</h1><span style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:var(--r-full);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);background:color-mix(in srgb, var(--warn) 18%, transparent);font-family:var(--mono);font-size:10px;line-height:1.5"><span style="color:var(--warn);font-weight:600">!</span><span>Needs attention</span></span></div>
+                <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">signed in as dana@acme.com · connected Sep 2</span>
+              </div>
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" hint-size="96px,30px">Disconnect</x-import>
+            </div>
+            <div role="status" style="display:flex;align-items:center;gap:12px;border-radius:var(--r-control);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);background:color-mix(in srgb, var(--warn) 10%, transparent);padding:10px 12px;font-size:12.5px;line-height:1.55;color:var(--ink-2)"><span style="flex:1"><b style="font-weight:500;color:var(--ink)">Teams chats stopped on Oct 28.</b> Microsoft returned a permission error. Reconnect to resume. The other sources are fine.</span><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="primary" size="sm" hint-size="96px,30px">Reconnect</x-import></div>
+
+            <sc-if value="{{ o.isA }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">sources · 3 of 5 on</span>
+                  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start"><sc-for list="{{ sources }}" as="s" hint-placeholder-count="5"><dc-import name="SourceCard" s="{{ s }}" expanded="{{ s.expandA }}" hint-size="100%,170px"></dc-import></sc-for></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:18px">
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">feeds into</span>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden"><sc-for list="{{ topics }}" as="t" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-top:{{ t.rule }}"><span style="width:7px;height:7px;border-radius:var(--r-full);background:{{ t.hue }};flex:none"></span><span style="flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.n }}</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ t.count }}</span></div></sc-for></div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">recent captures</span>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+                      <sc-for list="{{ feed }}" as="f" hint-placeholder-count="5">
+                        <div onClick="{{ f.toggle }}" style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-top:{{ f.rule }};background:{{ f.bg }};cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover)">
+                          <div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)">{{ f.src }}</span><span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-4)">{{ f.time }}</span></div>
+                          <span style="font-size:13px;font-weight:500;line-height:1.4;white-space:{{ f.ws }};overflow:hidden;text-overflow:ellipsis">{{ f.title }}</span>
+                          <sc-if value="{{ f.open }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px;padding-top:4px"><span style="font-size:12.5px;line-height:1.55;color:var(--ink-2)">{{ f.body }}</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-3)">{{ f.meta }}</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ f.topics }}" as="ft" hint-placeholder-count="1"><span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--r-full);padding:2px 9px 2px 7px;font-size:11.5px;color:var(--ink-2)"><span style="width:5px;height:5px;border-radius:var(--r-full);background:{{ ft.hue }}"></span>{{ ft.n }}</span></sc-for></div></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ o.isB }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">sources · 3 of 5 on</span>
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:stretch"><sc-for list="{{ sources }}" as="s" hint-placeholder-count="5"><dc-import name="SourceCard" s="{{ s }}" hint-size="100%,170px"></dc-import></sc-for></div>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:20px;align-items:start">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">recent captures</span>
+                  <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+                    <sc-for list="{{ feed }}" as="f" hint-placeholder-count="5">
+                      <div onClick="{{ f.toggle }}" style="display:grid;grid-template-columns:110px minmax(0,1fr) 70px;gap:4px 14px;align-items:baseline;padding:11px 14px;border-top:{{ f.rule }};background:{{ f.bg }};cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover)">
+                        <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)">{{ f.src }}</span>
+                        <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.title }}</span><span style="font-size:12.5px;color:var(--ink-2);white-space:{{ f.ws }};overflow:hidden;text-overflow:ellipsis;line-height:1.55">{{ f.body }}</span>
+                          <sc-if value="{{ f.open }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:6px"><span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-right:4px">{{ f.meta }}</span><sc-for list="{{ f.topics }}" as="ft" hint-placeholder-count="1"><span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--r-full);padding:2px 9px 2px 7px;font-size:11.5px;color:var(--ink-2)"><span style="width:5px;height:5px;border-radius:var(--r-full);background:{{ ft.hue }}"></span>{{ ft.n }}</span></sc-for></div></sc-if>
+                        </div>
+                        <span style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--ink-4)">{{ f.time }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">feeds into</span>
+                  <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden"><sc-for list="{{ topics }}" as="t" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-top:{{ t.rule }}"><div style="display:flex;align-items:center;gap:9px"><span style="width:7px;height:7px;border-radius:var(--r-full);background:{{ t.hue }};flex:none"></span><span style="flex:1;min-width:0;font-size:13px;font-weight:500">{{ t.n }}</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ t.count }}</span></div><span style="padding-left:16px;font-family:var(--mono);font-size:10px;color:var(--ok)">{{ t.week }}</span></div></sc-for></div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ o.isC }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin-right:4px">feeds into</span><sc-for list="{{ topics }}" as="t" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--bg);border-radius:var(--r-full);padding:4px 11px 4px 9px;font-size:12.5px;color:var(--ink)"><span style="width:6px;height:6px;border-radius:var(--r-full);background:{{ t.hue }}"></span>{{ t.n }}<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ t.short }}</span></span></sc-for></div>
+              <div style="display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px;align-items:start">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">sources · 3 of 5 on</span>
+                  <div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ sources }}" as="s" hint-placeholder-count="5"><dc-import name="SourceCard" s="{{ s }}" tall="{{ true }}" hint-size="100%,170px"></dc-import></sc-for></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">recent captures</span><div style="margin-left:auto;display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ feedFilters }}" value="{{ filter }}" on-change="{{ setFilter }}" hint-size="380px,32px"></x-import></div></div>
+                  <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+                    <sc-for list="{{ feedFiltered }}" as="f" hint-placeholder-count="6">
+                      <div onClick="{{ f.toggle }}" style="display:flex;flex-direction:column;gap:5px;padding:13px 16px;border-top:{{ f.rule }};background:{{ f.bg }};cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover)">
+                        <div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)">{{ f.src }}</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">· {{ f.who }}</span><span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-4)">{{ f.time }}</span></div>
+                        <span style="font-size:14px;font-weight:500;line-height:1.4">{{ f.title }}</span>
+                        <span style="font-size:12.5px;line-height:1.55;color:var(--ink-2);white-space:{{ f.ws }};overflow:hidden;text-overflow:ellipsis">{{ f.body }}</span>
+                        <sc-if value="{{ f.open }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:4px"><span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-right:4px">{{ f.meta }}</span><sc-for list="{{ f.topics }}" as="ft" hint-placeholder-count="1"><span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--r-full);padding:2px 9px 2px 7px;font-size:11.5px;color:var(--ink-2)"><span style="width:5px;height:5px;border-radius:var(--r-full);background:{{ ft.hue }}"></span>{{ ft.n }}</span></sc-for></div></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <p class="dv-next">Try next: "<a class="dv-oid" href="#1a">1a</a>, build it at 390 too" · "<a class="dv-oid" href="#1c">1c</a>'s filtered feed in <a class="dv-oid" href="#1b">1b</a>'s layout" · "drop the topics"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { open: 0, filter: "all" };
+  renderVals() {
+    const H = { coral: "var(--hue-coral)", pink: "var(--hue-pink)", amber: "var(--hue-amber)", teal: "var(--hue-teal)", plum: "var(--hue-plum)" };
+    const sources = [
+      { n: "Outlook mail", status: "active", scope: "4 followed threads", last: "last captured 3 min ago", week: [3, 5, 2, 0, 6, 4, 2], expandA: true, searchLabel: "Search threads…", items: ["Q4 pricing review — final numbers", "EU invoicing vendor shortlist", "Launch checklist v3", "Re: Seat caps for mid-market"], itemMeta: ["Oct 28", "Oct 24", "Oct 17", "Oct 21"] },
+      { n: "Calendar", status: "importing", scope: "Everything I can see", last: "importing 30 days · 62%", progress: 62, week: [12, 9, 1, 0, 14, 11, 10] },
+      { n: "Teams chats", status: "attention", scope: "6 chats", last: "stopped Oct 28", week: [8, 10, 0, 0, 0, 0, 0] },
+      { n: "Teams channels", status: "off", what: "Messages in the channels you're a member of." },
+      { n: "Teams meetings", status: "off", what: "Transcripts of Teams meetings you join, live." },
+    ];
+    const T = { eu: { n: "EU rollout", hue: H.teal }, bill: { n: "Billing migration", hue: H.coral }, seat: { n: "Seat caps", hue: H.amber }, launch: { n: "Q4 launch", hue: H.plum } };
+    const topics = [["eu", "38 corals", "+6 this week"], ["bill", "22 corals", "+4 this week"], ["seat", "14 corals", "+2 this week"], ["launch", "9 corals", "+1 this week"]].map(([k, count, week], i) => ({ ...T[k], count, week, short: count.split(" ")[0], rule: i ? "1px solid var(--line-3)" : "none" }));
+    const raw = [
+      ["outlook", "Outlook", "Maya Chen", "3 min ago", "Re: Q4 pricing review — final numbers", "Usage tiers are locked for the Q4 launch. Seat minimums stay at 5 for mid-market, and existing customers keep their current price until renewal.", "thread · 6 messages · Oct 29 14:02", ["bill", "seat"]],
+      ["calendar", "Calendar", "you", "8 min ago", "EU invoicing — vendor decision", "Thu Oct 30, 14:00–14:45 · Jonas Weber, Maya Chen, Priya Raman and 3 others.", "event · imported from history", ["eu"]],
+      ["teams", "Teams chat", "Jonas Weber", "Oct 28", "Pushing EU invoicing to Jan 6", "Finance needs the new entity's VAT setup first. Rollout order stays NA → UK → EU, EU last.", "chat · 14 messages · Oct 28 17:40", ["eu", "launch"]],
+      ["outlook", "Outlook", "Priya Raman", "Oct 27", "Re: Seat caps for mid-market", "Three of the last five stalled deals cited the seat cap. Proposal: make seats a floor, not a cap.", "thread · 4 messages · Oct 27 09:15", ["seat"]],
+      ["calendar", "Calendar", "you", "Oct 27", "Billing migration sync", "Mon Oct 27, 10:00–10:30 · weekly · 5 people.", "event", ["bill"]],
+      ["teams", "Teams chat", "Sam Ortiz", "Oct 26", "Launch checklist owners", "Sam owns docs, Ana owns pricing page, Dana signs off on the email.", "chat · 9 messages · Oct 26 16:02", ["launch"]],
+    ];
+    const feed = raw.map(([key, src, who, time, title, body, meta, tp], i) => ({ key, src, who, time, title, body, meta, topics: tp.map(k => T[k]), i }));
+    const decorate = (list) => list.map((f, k) => {
+      const open = this.state.open === f.i;
+      return { ...f, open, rule: k ? "1px solid var(--line-3)" : "none", bg: open ? "var(--bg-subtle)" : "var(--bg)", ws: open ? "normal" : "nowrap", toggle: () => this.setState({ open: open ? -1 : f.i }) };
+    });
+    const filter = this.state.filter;
+    return {
+      options: [
+        { id: "1a", isA: true, label: "Cards + side rail: two-column source cards with one open for editing; topics and recent captures in a 320px rail." },
+        { id: "1b", isB: true, label: "Cards, then activity: all five sources across the top; a wide capture feed and the topics below." },
+        { id: "1c", isC: true, label: "Feed-led: topics as a chip strip, sources stacked on the left, and a large capture feed you can filter by source." },
+      ],
+      sources, topics, feed: decorate(feed.slice(0, 5)),
+      feedFiltered: decorate(filter === "all" ? feed : feed.filter(f => f.key === filter)),
+      feedFilters: [{ key: "all", label: "All" }, { key: "outlook", label: "Outlook" }, { key: "calendar", label: "Calendar" }, { key: "teams", label: "Teams chats" }],
+      filter, setFilter: (k) => this.setState({ filter: k }),
+    };
+  }
+}
+</script>
+</body>
+</html>

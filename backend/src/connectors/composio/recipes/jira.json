@@ -1,0 +1,101 @@
+{
+  "toolkit": "jira",
+  "label": "Jira",
+  "version": "20261001_00",
+  "scopes": { "required": ["read:jira-work"], "optional": ["offline_access"] },
+  "read_tools": [
+    "JIRA_GET_SERVER_INFO",
+    "JIRA_LIST_ISSUE_COMMENTS",
+    "JIRA_SEARCH_FOR_ISSUES_USING_JQL_GET",
+    "JIRA_WHO_AM_I"
+  ],
+  "namespace": {
+    "kind": "site",
+    "source": {
+      "match": {
+        "anchor": { "call": { "tool": "JIRA_GET_SERVER_INFO", "args": {} }, "value": "/baseUrl" },
+        "candidates": { "call": { "tool": "JIRA_WHO_AM_I", "args": {} }, "list": ["/data/sites", "/sites", ""] },
+        "key": "/url",
+        "id": "/id"
+      }
+    }
+  },
+  "streams": [
+    {
+      "kind": "issue",
+      "change": "filter",
+      "call": {
+        "tool": "JIRA_SEARCH_FOR_ISSUES_USING_JQL_GET",
+        "args": {
+          "jql": "updated >= -{{since_minutes}}m ORDER BY updated ASC",
+          "fields": ["summary", "description", "status", "project", "creator", "created", "updated"],
+          "max_results": "{{page_size}}",
+          "next_page_token": "{{cursor}}"
+        }
+      },
+      "items": "/issues",
+      "paging": { "is_last": "/isLast", "next": "/nextPageToken" },
+      "fields": {
+        "id": "/id",
+        "updated_at": ["/fields/updated", "/updated", "/fields/created", "/created"],
+        "container": {
+          "kind": "project",
+          "id": ["/fields/project/id", "/project/id"],
+          "name": ["/fields/project/name", "/project/name"]
+        },
+        "title": ["/fields/summary", "/summary"],
+        "body": ["/fields/description", "/description"],
+        "state": ["/fields/status/name", "/status/name"],
+        "reference": "/key",
+        "author": {
+          "object": ["/fields/creator", "/creator", "/reporter"],
+          "id": ["/accountId", "/account_id"],
+          "name": ["/displayName", "/display_name"]
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "{reference}: {title}",
+          "{title}"
+        ]
+      },
+      "children": {
+        "kind": "comment",
+        "call": {
+          "tool": "JIRA_LIST_ISSUE_COMMENTS",
+          "args": { "issue_id_or_key": "{{parent}}", "start_at": "{{offset}}", "max_results": 100 }
+        },
+        "page": "",
+        "items": "/comments",
+        "paging": { "style": "offset", "total": "/total" },
+        "fields": {
+          "id": "/id",
+          "updated_at": ["/updated", "/created"],
+          "body": "/body",
+          "author": { "object": "/author", "id": "/accountId", "name": "/displayName" }
+        },
+        "capture": {
+          "chunk": "document",
+          "title": [
+            "Comment on {parent_reference}: {parent_title}",
+            "Comment on {parent_title}",
+            "Comment: {excerpt}"
+          ]
+        }
+      }
+    }
+  ],
+  "limits": {
+    "coverage": "every issue the connected account can read on the site, changed after you connect, with all its permitted comments",
+    "history": "nothing from before you connect is imported",
+    "description_history": "each captured change keeps the previous version as evidence",
+    "state_history": "states observed at each change; Jira's changelog is not read",
+    "projects": "project descriptions are not captured (Jira has no cheap project change query)",
+    "archives": "archived issues not verified"
+  },
+  "references": [
+    "https://docs.composio.dev/toolkits/jira.md",
+    "https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated"
+  ]
+}

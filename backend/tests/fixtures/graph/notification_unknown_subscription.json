@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "subscriptionId": "00000000-0000-0000-0000-000000000000",
+      "clientState": "does-not-matter-nobody-will-check-it",
+      "changeType": "created",
+      "resource": "me/mailFolders('inbox')/messages",
+      "resourceData": {
+        "@odata.type": "#Microsoft.Graph.Message",
+        "id": "MSG-GONE"
+      }
+    }
+  ]
+}

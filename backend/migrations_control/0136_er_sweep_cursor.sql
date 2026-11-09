@@ -1,0 +1,42 @@
+-- Migration: 0136_er_sweep_cursor
+-- Description: Entity-resolution sweep cursor (ADR-0008 follow-up, "lift the
+--   500-node cap"). `workers::entity_resolution`'s default (`ER_BLOCKING`
+--   unset/`rust`) blocking path used to list at most `MAX_ENTITY_NODES` (500)
+--   entity reefs per job, always starting at offset 0 — an ocean with more
+--   than 500 entity reefs permanently stopped resolving duplicates past the
+--   first 500 (by the pre-existing `list_nodes` ordering), no matter how many
+--   debounced `EntityResolution` jobs ran.
+--
+--   These two columns are a keyset-pagination cursor, `(updated_at, node_id)`,
+--   persisted PER GRAPH so successive debounced job runs continue the sweep
+--   instead of restarting it: each run lists the next page of entity reefs
+--   after the stored cursor, advances the cursor to the last row it saw when
+--   the page is full, and resets it to NULL (wrap to the start) when the page
+--   comes back short — i.e. the sweep reached the end of the ocean's entity
+--   reefs and the next run starts over, so reefs updated since the last full
+--   lap are eventually revisited. `MAX_PAIRS_PER_JOB` (unchanged, in-process
+--   constant) still bounds how many LLM adjudications one job performs.
+--
+--   Added to `graphs` rather than a new table: `graphs` already carries full
+--   RLS on both planes (0083_consumer_rls / migrations_tenant/0009_tenant_rls),
+--   so two nullable columns need no new policy — same reasoning as
+--   0127_review_deadlines' `relationship_edge.queued_at` column-only add.
+--   Nullable, no default: NULL means "no cursor yet / just wrapped", which the
+--   Rust-side keyset query treats as "start from the beginning".
+--
+--   Deliberately NOT added to the sync op schema: this is server-side
+--   resolution-sweep bookkeeping, not knowledge-graph content, and has no
+--   desktop/libsql equivalent (the entity-resolution worker itself is
+--   cloud-only — see `Store::upsert_supersession_edge_with_kind`'s doc comment
+--   for the same "cloud-only, default-body-on-the-trait" precedent).
+--
+-- PAIRED WITH: migrations_tenant/0043_er_sweep_cursor.sql
+-- Depends on: 0011_nodes (graphs)
+-- Down:
+--   ALTER TABLE graphs
+--       DROP COLUMN IF EXISTS er_sweep_cursor_updated_at,
+--       DROP COLUMN IF EXISTS er_sweep_cursor_node_id;
+
+ALTER TABLE graphs
+    ADD COLUMN IF NOT EXISTS er_sweep_cursor_updated_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS er_sweep_cursor_node_id UUID;

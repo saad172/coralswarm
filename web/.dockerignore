@@ -1,0 +1,17 @@
+node_modules
+# The Dockerfile COPYs exactly two paths out of .next/ (standalone, static).
+# Everything else — build manifests, traces, server output, and the 400MB+
+# cache — was being uploaded to the remote builder on every deploy and never
+# used: CI reported a 107MB context. Excluding it shortens every deploy and
+# narrows the transfer window in which a builder-side network failure can
+# land. Negation requires excluding the CHILDREN (.next/*), not .next itself.
+.next/*
+!.next/standalone
+!.next/static
+out
+.git
+.env.local
+.env*.local
+npm-debug.log*
+Dockerfile
+.dockerignore

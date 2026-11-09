@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CoralSwarm — Mobile</title>
+
+<link rel="stylesheet" href="_ds/coralswarm-design-system-91cd0b98-0e13-493b-ba53-1f6e7ae27fec/styles.css" />
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="_ds/coralswarm-design-system-91cd0b98-0e13-493b-ba53-1f6e7ae27fec/_ds_bundle.js"></script>
+
+<style>
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg-3); display: grid; place-items: center; overflow: hidden; }
+  #stage { transform-origin: center center; }
+  @keyframes mfade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes mrise { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+  * { scrollbar-width: none; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="root"></div></div>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="shell-shared.jsx"></script>
+<script type="text/babel" src="mobile-app.jsx"></script>
+<script type="text/babel" src="mobile-pages.jsx"></script>
+
+<script type="text/babel">
+  const { IOSDevice } = window;
+  const DEVICE_W = 402, DEVICE_H = 874, STATUS_H = 56;
+
+  function Phone() {
+    return (
+      <IOSDevice width={DEVICE_W} height={DEVICE_H}>
+        <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+          <div style={{ height: STATUS_H, flex: "none" }} />
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <window.MobileApp />
+          </div>
+        </div>
+      </IOSDevice>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<Phone />);
+
+  // scale device to fit viewport
+  function fit() {
+    const pad = 48;
+    const s = Math.min((window.innerWidth - pad) / DEVICE_W, (window.innerHeight - pad) / DEVICE_H, 1);
+    document.getElementById("stage").style.transform = `scale(${s})`;
+  }
+  window.addEventListener("resize", fit);
+  fit();
+</script>
+</body>
+</html>

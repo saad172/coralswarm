@@ -1,0 +1,9 @@
+{
+  "message": {
+    "data": "eyJlbWFpbEFkZHJlc3MiOiJzYW0ucml2ZXJhQGFjbWUtY29ycC5leGFtcGxlIiwiaGlzdG9yeUlkIjo5ODc2NTQzfQ==",
+    "messageId": "12897654321098765",
+    "publishTime": "2026-08-21T15:20:00.123Z",
+    "attributes": {}
+  },
+  "subscription": "projects/coralswarm-prod/subscriptions/gmail-push-sub"
+}

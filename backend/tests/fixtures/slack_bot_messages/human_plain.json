@@ -1,0 +1,33 @@
+{
+  "user": "U0TESTUSR0",
+  "type": "message",
+  "ts": "1788723963.500779",
+  "client_msg_id": "00000000-0000-4000-8000-000000000001",
+  "text": "Our organisation now has Slack connected to it, <@U0TESTUSR1> you should be getting your workspace filled with data with messages going forward",
+  "team": "T0TESTWS0",
+  "blocks": [
+    {
+      "type": "rich_text",
+      "block_id": "L3Kk5",
+      "elements": [
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "Our organisation now has Slack connected to it, "
+            },
+            {
+              "type": "user",
+              "user_id": "U0TESTUSR1"
+            },
+            {
+              "type": "text",
+              "text": " you should be getting your workspace filled with data with messages going forward"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

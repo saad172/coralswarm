@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/styles.css"><script src="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/_ds_bundle.js"></script><script src="connectors-kit.js"></script></helmet>
+<div style="display:flex;min-height:{{ minH }};background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+  <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+    <nav style="display:flex;width:224px;flex:none;flex-direction:column;border-right:1px solid var(--line);background:var(--bg-2)">
+      <div style="padding:12px 11px 9px"><div style="display:flex;align-items:center;gap:8px;padding:0 1px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.DotMandala" size="{{ 22 }}" density="{{ 0.8 }}" hint-size="22px,22px"></x-import><span style="flex:1;font-size:13px;font-weight:600">Acme</span><span style="color:var(--ink-3);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="chevronUpDown" size="{{ 14 }}" hint-size="14px,14px"></x-import></span></div></div>
+      <div style="display:flex;flex-direction:column;gap:5px;padding:0 11px 8px">
+        <div style="display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12.5px;color:var(--ink-3)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="search" size="{{ 14 }}" hint-size="14px,14px"></x-import>Search<span style="margin-left:auto;font-family:var(--mono);font-size:10px">⌘K</span></div>
+        <div style="display:flex;align-items:center;gap:7px;border-radius:var(--r-field);border:1px solid var(--line);background:var(--bg);padding:7px 10px;font-size:13px;font-weight:500;box-shadow:var(--shadow-card)"><span style="color:var(--brand);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="add" size="{{ 15 }}" stroke-width="{{ 2 }}" hint-size="15px,15px"></x-import></span>New chat<span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-4)">⌘N</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1px;padding:0 11px 6px"><sc-for list="{{ places }}" as="p" hint-placeholder-count="5"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" icon="{{ p.icon }}" label="{{ p.label }}" count="{{ p.count }}" hint-size="100%,30px"></x-import></sc-for></div>
+      <div style="flex:1;padding:6px 11px">
+        <div style="padding:0 10px 7px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">recent</div>
+        <div style="display:flex;flex-direction:column;gap:1px"><sc-for list="{{ chats }}" as="ch" hint-placeholder-count="4"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" label="{{ ch }}" style="font-size:12.5px" hint-size="100%,30px"></x-import></sc-for></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1px;padding:0 11px 8px"><sc-for list="{{ utilities }}" as="p" hint-placeholder-count="2"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" icon="{{ p.icon }}" label="{{ p.label }}" active="{{ p.active }}" hint-size="100%,30px"></x-import></sc-for></div>
+      <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding:9px 11px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Avatar" name="Dana Ross" size="{{ 24 }}" hint-size="24px,24px"></x-import><span style="flex:1;font-size:12.5px;font-weight:500">Dana Ross</span><span style="color:var(--ink-3);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="settings" size="{{ 15 }}" hint-size="15px,15px"></x-import></span></div>
+    </nav>
+  </sc-if>
+  <div style="display:flex;min-width:0;flex:1;flex-direction:column">
+    <sc-if value="{{ chrome }}" hint-placeholder-val="{{ true }}">
+      <header style="display:flex;height:52px;flex:none;align-items:center;gap:10px;border-bottom:1px solid var(--line-2);background:var(--bg);padding:0 {{ headerPad }}">
+        <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.IconButton" label="Open sidebar" size="{{ 30 }}" hint-size="30px,30px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="sidebar" size="{{ 15 }}" hint-size="15px,15px"></x-import></x-import></sc-if>
+        <span style="font-size:14px;font-weight:500;letter-spacing:-0.01em">Connectors</span>
+      </header>
+    </sc-if>
+    <main style="flex:1;background:var(--bg-2)">
+      <div style="margin:0 auto;max-width:1040px;padding:{{ pad }}">
+        <sc-if value="{{ full }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.PageHead" title="Connectors" hint-size="100%,80px">Sign in to the tools you already use and choose exactly what CoralSwarm captures from each.</x-import></sc-if>
+        <sc-if value="{{ full }}" hint-placeholder-val="{{ true }}">
+        <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden;margin-bottom:24px">
+          <div style="position:relative;height:{{ streamH }};border-bottom:1px solid var(--line-2);background:var(--bg-subtle)">
+            <div style="position:absolute;inset:0">{{ swarm }}</div>
+            <span style="position:absolute;left:16px;bottom:11px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">{{ inLabel }}</span>
+            <span style="position:absolute;right:16px;bottom:11px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">{{ outLabel }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ bandCols }};gap:16px 24px;align-items:start;padding:20px 20px 18px">
+            <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+              <span style="font-family:var(--display);font-size:28px;line-height:1.15">Use CoralSwarm <i style="color:var(--brand)">anywhere</i></span>
+              <span style="font-size:13.5px;line-height:1.5;color:var(--ink-2);text-wrap:pretty">Your AI tools add context to your ocean and ask it questions. Tool not listed? Anything that speaks MCP can add to it.</span>
+            </div>
+            <button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;justify-content:space-between;gap:10px;max-width:100%;border:1px solid var(--line);background:var(--bg-2);border-radius:var(--r-full);padding:7px 8px 7px 14px;font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover);border-color:var(--ink-3)"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">https://api.coralswarm.example/mcp</span><span style="flex:none;display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 8px;font-size:10.5px;color:var(--ink-2)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+          </div>
+          <div style="padding:11px 20px;border-top:1px solid var(--line-2);background:var(--bg-subtle);font-family:var(--mono);font-size:11px;color:var(--ink-3)">paste it into any MCP client · no key — you sign in with your CoralSwarm account</div>
+        </div>
+        </sc-if>
+        <div style="display:grid;grid-template-columns:{{ cols }};gap:12px;margin-bottom:{{ gridMb }}">
+          <sc-for list="{{ connectors }}" as="c" hint-placeholder-count="9"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" recommended="{{ c.recommended }}" hint-size="100%,170px"></dc-import></sc-for>
+        </div>
+        
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:1200},&quot;narrow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;chrome&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;cards&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;fresh&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;\&quot;live\&quot;|\&quot;fresh\&quot;&quot;},&quot;recommend&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;client&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;},&quot;onPickClient&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(k: string) =&gt; void&quot;},&quot;minHeight&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { client: null, copied: false, tick: 0 };
+  componentDidMount() {
+    this._t = setInterval(() => { if (window.CSKit && window.CoralSwarmDesignSystem_451767) { clearInterval(this._t); this.setState({ tick: 1 }); } }, 80);
+  }
+  componentWillUnmount() { clearInterval(this._t); clearTimeout(this._c); }
+  renderVals() {
+    const K = window.CSKit, NS = window.CoralSwarmDesignSystem_451767;
+    const narrow = !!this.props.narrow;
+    const chrome = this.props.chrome ?? true;
+    const ic = (name) => (NS ? React.createElement(NS.Icon, { name, size: 15 }) : null);
+    let connectors = K ? (this.props.cards === "fresh" ? K.fresh() : K.connectors()) : [];
+    if (this.props.recommend) connectors = connectors.map(c => ({ ...c, recommended: c.key === this.props.recommend }));
+    if (!this._sw && K) this._sw = K.makeSwarm(React);
+    return {
+      narrow, chrome, showSidebar: chrome && !narrow, full: !this.props.gridOnly, gridMb: "0",
+      minH: this.props.minHeight ?? (chrome ? "860px" : "auto"),
+      headerPad: narrow ? "10px" : "20px",
+      pad: this.props.gridOnly ? "0" : narrow ? "18px 16px 28px" : "24px 28px 40px",
+      cols: narrow ? "minmax(0,1fr)" : "repeat(3,minmax(0,1fr))",
+      bandCols: narrow ? "minmax(0,1fr)" : "minmax(0,1fr) auto",
+      streamH: narrow ? "112px" : "150px",
+      inLabel: narrow ? "in" : "in · notes, decisions, sessions",
+      outLabel: narrow ? "out" : "out · cited answers",
+      connectors,
+      swarm: this._sw ? React.createElement(this._sw, { lanes: narrow ? 6 : 9 }) : null,
+      places: [["chats", "Chats"], ["library", "Library"], ["today", "Today"], ["review", "Review"], ["workspaces", "Workspaces"]].map(([k, l]) => ({ icon: ic(k), label: l, count: k === "review" && NS ? React.createElement(NS.CountPill, null, "3") : undefined })),
+      utilities: [{ icon: ic("connectors"), label: "Connectors", active: true }, { icon: ic("settings"), label: "Settings", active: false }],
+      chats: ["Why did billing move to usage-based?", "Who owns the EU rollout?", "What did we decide about seat caps?", "Auth rewrite — where did it land?"],
+      clients: K ? K.clients : [], client: this.state.client ?? this.props.client ?? "",
+      setClient: (k) => { this.setState({ client: k }); this.props.onPickClient && this.props.onPickClient(k); },
+      copyLabel: this.state.copied ? "copied ✓" : "copy",
+      copy: () => { try { navigator.clipboard.writeText("https://api.coralswarm.example/mcp"); } catch (e) {} this.setState({ copied: true }); clearTimeout(this._c); this._c = setTimeout(() => this.setState({ copied: false }), 1800); },
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,358 @@
+[package]
+name = "coralswarm-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+# `tokio_util::task::TaskTracker` — tracks handler-spawned background tasks
+# (Slack webhook probe persist / message ingest / member-joined prompts) so
+# `run()` can give them a bounded grace-period drain on shutdown, mirroring
+# the job-worker grace-window pattern in `lib.rs` instead of inventing a
+# second one. Already present transitively (tower depends on it); pinned
+# directly since we now call its API.
+tokio-util = { version = "0.7", features = ["rt"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_urlencoded = "0.7"
+serde_path_to_error = "0.1"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tower-http = { version = "0.6", features = ["cors", "trace", "limit"] }
+uuid = { workspace = true }
+# `rust_decimal` on top of the workspace's base feature set (backend-only —
+# no other workspace member touches Postgres NUMERIC columns that need exact
+# decimal fidelity): `billing::credit_conversion` reads
+# `credit_conversion.reference_cost_per_credit` as `sqlx::types::Decimal`,
+# never `f64` — see `migrations_control/0148_model_rates.sql`'s header for
+# why float rounding is unacceptable on that specific column.
+sqlx = { workspace = true, features = ["rust_decimal"] }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+# `stream` on top of the workspace entry's rustls/json base: this crate is the
+# only one that reads response bodies as a stream.
+reqwest = { workspace = true, features = ["stream"] }
+async-trait = "0.1"
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+jsonwebtoken = "9"
+bytes = { workspace = true }
+# W2: the admission middleware wraps the response body so an in-flight slot
+# is released when the BODY completes, not when the headers do — otherwise SSE
+# requests (the heaviest on the service) are systematically under-counted.
+# Version pinned to what axum 0.8 / hyper 1.x already resolve to.
+http-body = "1"
+sha2 = "0.10"
+# `store::journal_input_fingerprint` — the one place the `journal_rollups`
+# change-detection hash (migration 0113/0024) is derived, so PR B's sweep and
+# any future recompile caller read the identical algorithm sha2 doesn't
+# offer directly (md5 is fine here: this is a cheap dirty-check, never a
+# security boundary).
+md5 = "0.7"
+hmac = "0.12"
+# `crypto::kdf` — per-purpose HKDF-SHA256 keys from shared secrets. Already
+# resolved transitively at this version; pinned directly since we call it.
+hkdf = "0.12"
+hex = "0.4"
+rand = "0.8"
+base64 = "0.22"
+# Reef-write boundary validation (docs/plans/graph-temporal-memory.md §6.2):
+# deterministic diarisation-placeholder rejection in `store::reef_guard`.
+# Already resolved transitively (sqlx and others depend on it) — this just
+# makes it a direct dependency of this crate.
+regex = "1"
+# Self-serve signup A2 (N6): NFKC-normalise organization names. Already in
+# the lock through `idna`; pinned to the locked 0.1 line.
+unicode-normalization = "0.1"
+utoipa = { version = "5", features = ["uuid"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+async-stream = "0.3"
+dashmap = "6"
+lru = "0.16"
+# Public Suffix List (compiled in): the self-serve sign-up caps bucket an
+# email by its registrable domain (eTLD+1), #1540 SF6.
+psl = "2"
+futures = "0.3"
+subtle = "2"
+pgvector = { version = "0.4", features = ["sqlx"] }
+urlencoding = "2"
+# `connectors::github_code_filter` (docs/connectors/github.md §3.9): gitignore-
+# style glob matching for `.gitattributes` `linguist-generated`/
+# `linguist-vendored` patterns and the vendored/build-directory skip list.
+# Pure-Rust, no C toolchain, tiny — unlike the `ignore` crate (which pulls in
+# a whole directory-walker this filter doesn't need; the tree listing already
+# comes from GitHub's own API, not a local filesystem walk).
+globset = "0.4"
+# Batched geo resolution (platform-admin-metrics PR 4 of 7,
+# `workers::geo_backfill`): reads a local MaxMind GeoLite2 City `.mmdb` file
+# offline — no outbound HTTP call, no third-party IP transmission. See that
+# module's doc comment for why this is batched off the auth hot path rather
+# than an inline HTTP geo-IP API client.
+maxminddb = "0.24"
+# Remote MCP server (docs/plans/remote-mcp-v1.md). `rmcp` is edition-2024
+# (effective MSRV 1.85); confirmed against the local/CI toolchain (`stable` via
+# dtolnay/rust-toolchain, currently 1.97+) before pinning. Streamable-HTTP
+# server transport only — no client/stdio transports needed in-process.
+rmcp = { version = "3.1.2", features = ["server", "macros", "schemars", "transport-streamable-http-server"] }
+# `uuid1` enables `JsonSchema` for `uuid::Uuid` (schemars' optional dep on the
+# real `uuid` crate) — every MCP tool input schema with a `Uuid` field
+# (ocean_id, reef_id, atom_id, ...) needs this.
+schemars = { version = "1", features = ["uuid1"] }
+
+coralswarm-core = { path = "../packages/core" }
+
+[features]
+default = ["binaries"]
+binaries = []
+# Exposes a handful of otherwise-private test-only constructors (the full
+# public `app()` router + a bare `AppState` builder) so integration tests under
+# `tests/` (which link this crate as an ordinary external dependency and so
+# cannot see private/`pub(crate)` items) can drive real HTTP requests through
+# `tower::oneshot`, matching the in-crate `#[cfg(test)]` pattern used by
+# `lib.rs`'s and `middleware/auth.rs`'s own router tests. Never enabled in a
+# normal build — see the self-dependency below, which is the whole point: it
+# turns this feature on automatically (and only) while building test targets.
+# It carries core's `test-utils` so `test_object_store` (a local S3 stand-in
+# behind `R2Client::new_with_endpoint_override`) compiles with it.
+test-support = ["coralswarm-core/test-utils"]
+# The e2e harness build (`e2e/`, `.github/workflows/pr.yml`). Debug builds
+# only, three ways: `build.rs` refuses it unless opt-level is 0 AND
+# CORALSWARM_E2E_BUILD=1; `lib.rs` refuses it without debug_assertions; and
+# the binary refuses to start where FLY_APP_NAME/FLY_MACHINE_ID or
+# APP_ENV=production is set. No deploy path passes it. With it on, and only then, the binary:
+#   * honours R2_ENDPOINT_OVERRIDE (MinIO stands in for R2, via core's
+#     test-utils-only `R2Client::new_with_endpoint_override`);
+#   * points the cloud embedder at OPENROUTER_BASE_URL like the LLM already is,
+#     and accepts an http:// base there and in STRIPE_API_BASE (the in-runner
+#     fakes);
+#   * takes the web origin for return URLs and links from E2E_WEB_ORIGIN
+#     (the harness's plain-http localhost UI) instead of https://app.<apex>;
+#   * mounts the one seeding route, `POST /v1/e2e/seed/extraction`
+#     (`e2e_seed.rs`).
+e2e = ["coralswarm-core/test-utils"]
+# Syntax-aware `github_code` chunking (docs/connectors/github.md §3.9, PR B)
+# — forwards to `coralswarm-core`'s own `code-chunking` feature (tree-sitter +
+# one grammar crate per recognised language). Deliberately NOT default and
+# NOT requested by this crate's own `coralswarm-core` dependency above: a
+# default feature would pull every tree-sitter grammar — and the C compiler
+# each one's build script invokes — into every build of this crate, including
+# the test and tool binaries. The real Fly deployment build must pass
+# `--features code-chunking` explicitly; with it off, `github_code` atoms
+# still chunk via `coralswarm-core`'s fixed-line-window fallback, just without
+# syntax-aware boundaries. See `packages/core/Cargo.toml`'s matching feature
+# doc and docs/connectors/github.md §9's ledger entry.
+code-chunking = ["coralswarm-core/code-chunking"]
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+futures-util = "0.3"
+# `tokio`'s workspace-level `features = ["full"]` does NOT include
+# `test-util` (it's deliberately excluded from `full`) — needed for
+# `graph_rate_limit`'s paused-clock tests (`#[tokio::test(start_paused =
+# true)]`, `tokio::time::advance`), m365 Train 2 PR 2.6. Cargo unifies
+# features across normal and dev dependencies within one build, so this
+# additive feature is active for `cargo test` without affecting the
+# production binary (dev-dependencies never link into a release build).
+tokio = { workspace = true, features = ["test-util"] }
+# Cargo explicitly supports a package depending on itself under
+# `[dev-dependencies]` for exactly this purpose: `tests/*.rs` integration
+# binaries link `coralswarm-backend` as a normal dependency, and normal
+# dependencies never see `--cfg test`. Depending on ourselves with
+# `test-support` enabled is what makes the `#[cfg(feature = "test-support")]`
+# helpers in `lib.rs` visible to `backend/tests/mcp_http.rs` without a manual
+# `--features` flag on `cargo test`.
+coralswarm-backend = { path = ".", default-features = false, features = ["test-support"] }
+# Same self/sibling-dependency trick as `test-support` above, applied to
+# `coralswarm-core`: `R2Client::new_with_endpoint_override` (graph-temporal-
+# memory hardening, fix 2) lives behind `coralswarm-core`'s `test-utils`
+# feature so it's never compiled into a production binary. Re-declaring the
+# path dependency here with that feature enabled unifies it in for test/bench
+# targets only — the normal `[dependencies]` entry above stays feature-bare.
+coralswarm-core = { path = "../packages/core", features = ["test-utils"] }
+# GitHub connector (PR A): generates a throwaway RSA key IN the test process
+# for `connectors::github`'s App-JWT claims test — never the real
+# `GITHUB_APP_PRIVATE_KEY`. Already present in the dependency graph
+# transitively via `jsonwebtoken`'s own RS256 support; this just exposes it
+# directly to test code at the same version already resolved (0.9.x).
+rsa = "0.9"
+
+[[bin]]
+name = "adopt_personal_org_account"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_billing_enforcement"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_oauth_tokens_wrapped_dek"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_node_atoms_bridge"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_chunk_links"
+required-features = ["binaries"]
+
+[[bin]]
+name = "reextract_source_atoms_v2"
+required-features = ["binaries"]
+
+[[bin]]
+name = "carry_forward_unchanged_versions"
+required-features = ["binaries"]
+
+[[bin]]
+name = "retry_failed_extractions_v2"
+required-features = ["binaries"]
+
+[[bin]]
+name = "dedupe_reefs"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_fact_supersession"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_co_occurrence"
+required-features = ["binaries"]
+
+[[bin]]
+name = "quality_eval_ask"
+required-features = ["binaries"]
+
+[[bin]]
+name = "retract_fixture_kinship"
+required-features = ["binaries"]
+
+[[bin]]
+name = "resolve_ambiguous_mentions"
+required-features = ["binaries"]
+
+[[bin]]
+name = "repair_sweep_duplicates"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_promoted_blobs"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_provenance_links"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_reef_judgement_from_history"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_self_reefs"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_slack_oauth_tokens"
+required-features = ["binaries"]
+
+[[bin]]
+name = "backfill_unattributed_job_accounts"
+required-features = ["binaries"]
+
+[[bin]]
+name = "coralswarm-backend"
+required-features = ["binaries"]
+
+[[bin]]
+name = "create_personal_orgs"
+required-features = ["binaries"]
+
+[[bin]]
+name = "export_member_ocean"
+required-features = ["binaries"]
+
+[[bin]]
+name = "org_deletion_admin"
+required-features = ["binaries"]
+
+[[bin]]
+name = "fold_subtopics"
+required-features = ["binaries"]
+
+[[bin]]
+name = "gen_golden"
+required-features = ["binaries"]
+
+[[bin]]
+name = "grant_plan"
+required-features = ["binaries"]
+
+[[bin]]
+name = "merge_reefs"
+required-features = ["binaries"]
+
+[[bin]]
+name = "purge_desktop_data"
+required-features = ["binaries"]
+
+[[bin]]
+name = "jobs_retention"
+required-features = ["binaries"]
+
+[[bin]]
+name = "migrate_control"
+required-features = ["binaries"]
+
+[[bin]]
+name = "migrate_personal_to_member_ocean"
+required-features = ["binaries"]
+
+[[bin]]
+name = "migrate_tenants"
+required-features = ["binaries"]
+
+[[bin]]
+name = "ocean_health"
+required-features = ["binaries"]
+
+[[bin]]
+name = "pipeline_stage_health"
+required-features = ["binaries"]
+
+[[bin]]
+name = "provision_stripe"
+required-features = ["binaries"]
+
+[[bin]]
+name = "retrieval_eval"
+required-features = ["binaries"]
+
+[[bin]]
+name = "seed_large_ocean"
+required-features = ["binaries"]
+
+[[bin]]
+name = "library_text_search_sql"
+required-features = ["test-support"]
+
+[[bin]]
+name = "library_listing_switch"
+path = "src/bin/library_listing_switch.rs"
+required-features = ["binaries"]
+
+[[bin]]
+name = "library_read_model_diff"
+path = "src/bin/library_read_model_diff.rs"
+required-features = ["binaries"]
+
+[[test]]
+name = "library_read_mode_pg"
+path = "tests/library_read_mode_pg.rs"
+required-features = ["test-support"]
+
+[[test]]
+name = "library_live_fallback_pg"
+path = "tests/library_live_fallback_pg.rs"
+required-features = ["test-support"]

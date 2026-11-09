@@ -1,0 +1,16 @@
+{
+  "id": "1738368060000",
+  "messageType": "message",
+  "createdDateTime": "2026-02-01T09:01:00Z",
+  "from": {
+    "user": {
+      "id": "aad-user-devon-0002",
+      "displayName": "Devon Blake"
+    }
+  },
+  "body": {
+    "contentType": "text",
+    "content": "Sounds good, I'll draft the doc today."
+  },
+  "chatId": "19:chat-devon-priya@unq.gbl.spaces"
+}

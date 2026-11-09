@@ -1,0 +1,97 @@
+-- no-transaction
+-- Migration: 0145_jobs_extract_entities_done_index_concurrently
+-- Description: PR7 of the usage-metering + credit-ledger train (13-PR plan,
+--   `.scratch/usage-metering/plan.md` §1 PR7) — build the index backing PR9's
+--   derivation-worker cursor query over completed entity-extraction jobs,
+--   WITHOUT blocking writes on `jobs` while it builds.
+--
+--   PR9 (not yet written) needs to cursor over every `jobs` row that reaches
+--   `status='done'` with `kind='ExtractEntities'`, in commit order, to cost
+--   each job from its `llm_usage` rows and emit one `credit_ledger` row per
+--   job (plan §1 PR9, "The double-charge trap"). Today NOTHING indexes
+--   `finished_at`, `status`, or `kind` on this table — `idx_jobs_pending`
+--   (0004) is `(run_after, id) WHERE status='pending'`, the opposite
+--   lifecycle state, and `idx_jobs_idem_pending` (0004) is the same partial
+--   predicate on a different column entirely. That cursor query is therefore
+--   a full sequential scan of `jobs` today, on a table every ingest pipeline
+--   writes to continuously (extract / extract_relationships / embed /
+--   entity_resolution / infer_expertise / conflict_detection all enqueue
+--   here) — pathological at any real row count and specifically the thing
+--   this PR's title commits to fixing before PR9 makes it a ~5-minute-tick
+--   hot path.
+--
+--   Column order and partiality mirror PR9's own stated cursor shape
+--   (plan §1 PR9, "Cursor: `(finished_at, id)` composite with a lag window"):
+--     * `finished_at` leads because `finished_at` is `now()` AT COMMIT and
+--       therefore NOT strictly monotonic across concurrent transactions — a
+--       naive cursor on `finished_at` alone can skip a row that commits late
+--       relative to one already read (plan §4 item 3: "a naive `>` cursor
+--       skips rows that commit late. Permanently lost credits, since the
+--       cursor never goes back."). `id` is the tie-breaker for a stable
+--       `(finished_at, id) > (cursor_finished_at, cursor_id)` predicate,
+--       exactly the row-comparison idiom already proven index-usable by
+--       `idx_jobs_pending`'s own `(run_after, id)` shape.
+--     * `WHERE status='done' AND kind='ExtractEntities'` makes the index
+--       partial on both the lifecycle state PR9 cursors over and the one job
+--       kind it costs (batch-path `ExtractEntities` completions carry the
+--       same `kind`/`status`, so the batch path — up to ~24h latency,
+--       plan §1 PR9 "Never derive credits from atom creation time" — is
+--       covered by the same index without a separate predicate). Every
+--       OTHER job kind/status combination is excluded from the index
+--       entirely rather than carried as dead weight on every job-queue
+--       write.
+--
+--   `jobs` is a live, read/write-heavy production table (same class of hot
+--   table as `atoms`/`llm_usage` — see 0059's header for the general
+--   rationale) — a plain `CREATE INDEX` takes a `SHARE` lock for the whole
+--   build, blocking every concurrent enqueue/claim/complete against the
+--   table regardless of today's write rate. `CREATE INDEX CONCURRENTLY`
+--   avoids that at the cost of two index-build passes, and Postgres REQUIRES
+--   it to run outside a transaction block, which is why this migration is a
+--   SEPARATE, single-statement file carrying the `-- no-transaction`
+--   directive on line 1 — sqlx sends a migration file's SQL as one
+--   wire-protocol Query message, and Postgres implicitly wraps MULTIPLE
+--   statements in such a message in a transaction even though
+--   `-- no-transaction` stops sqlx itself from wrapping one; `CONCURRENTLY`
+--   refuses to run inside that transaction block either way. Same mechanics
+--   as 0059 (first precedent in this tree), 0074, 0075, 0099,
+--   `migrations_tenant/0012`, and PR2's own split
+--   (0142/0143/0144 control, 0049/0050/0051 tenant) — followed exactly here,
+--   not reinvented.
+--
+--   EXPLAIN evidence (seeded local Postgres 17.10, 500,000 `jobs` rows with a
+--   realistic kind/status mix — ~35,500 matching `status='done' AND
+--   kind='ExtractEntities'`, ~7% of the table, enough that the planner
+--   genuinely prefers a sequential scan without this index):
+--     BEFORE: `Parallel Seq Scan on jobs` + top-N heapsort, ~30ms, reads
+--       ~154,834 rows the filter then discards.
+--     AFTER:  `Index Only Scan using idx_jobs_extract_entities_done`,
+--       ~0.2ms, `Heap Fetches: 0`.
+--     NEGATIVE CONTROL: dropping the index reverted the plan to the same
+--       parallel sequential scan (~27ms) — confirmed before restoring.
+--   Full plans pasted in this PR's description.
+--
+--   `IF NOT EXISTS` + `CONCURRENTLY`: a failed concurrent build leaves an
+--   INVALID index behind, and `IF NOT EXISTS` will then happily skip it
+--   forever. If this migration errors, drop `idx_jobs_extract_entities_done`
+--   before re-running rather than reading the skip as success — the same
+--   operational caveat every `CONCURRENTLY` migration in this tree carries
+--   (0059/0074/0075/0099/0142/0143/0144).
+--
+-- PAIRED WITH: backend/migrations_tenant/0052_jobs_extract_entities_done_index_concurrently.sql
+--   — `jobs` is a SHARED tenant-tree table (0083's header: one of the 3
+--   content tables deliberately left off consumer-plane RLS — jobs,
+--   connector_identities, sync_cursors) present in both trees and NOT in
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster, so the DDL
+--   statement below (below this header) must stay byte-for-byte identical to
+--   that file's. Only this header's prose is control-tree-specific.
+--
+-- Depends on: 0004_jobs.sql (creates `jobs`, including `finished_at`,
+--   `status`, `kind`, and the `job_status` enum this index's predicate
+--   compares against).
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_jobs_extract_entities_done;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_extract_entities_done
+    ON jobs (finished_at, id)
+    WHERE status = 'done' AND kind = 'ExtractEntities';

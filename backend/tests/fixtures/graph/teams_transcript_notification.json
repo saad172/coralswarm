@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "subscriptionId": "b2d4e6f8-1234-4abc-9def-0123456789ab",
+      "clientState": "3c2b1a0f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a3928170f6e5d",
+      "changeType": "created",
+      "resource": "users('48d31887-5fad-4d73-a9f5-3c356e68a038')/onlineMeetings('MSoxMjM0NTY3ODkw')/transcripts('MSMjMCMjZDk4YWY5OWMt')",
+      "resourceData": {
+        "@odata.type": "#microsoft.graph.callTranscript",
+        "id": "MSMjMCMjZDk4YWY5OWMt"
+      }
+    }
+  ]
+}

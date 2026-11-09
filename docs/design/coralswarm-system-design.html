@@ -1,0 +1,2762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light" />
+<title>Coralswarm — System Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@400;500;600&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF8;
+    --bg-2: #F3F2EE;
+    --bg-3: #ECEAE4;
+    --ink: #1A1814;
+    --ink-2: #4A4740;
+    --ink-3: #8A8780;
+    --coral: #E8533F;
+    --coral-soft: #FDE8E5;
+    --coral-mid: #F4A99A;
+    --kelp: #3D7A52;
+    --kelp-soft: #E4F0E8;
+    --blue: #2952A3;
+    --blue-soft: #E8EEF8;
+    --amber: #B5620A;
+    --amber-soft: #FEF3E5;
+    --rule: #E2E0DA;
+    --rule-strong: #C8C5BC;
+    --code-bg: #F0EFE9;
+    --shadow: 0 1px 3px rgba(26,24,20,0.08), 0 4px 12px rgba(26,24,20,0.04);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Geist', -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 100vh;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--rule);
+    padding: 2.5rem 0;
+    background: var(--bg);
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 2px; }
+
+  .sidebar-brand {
+    padding: 0 1.75rem 2rem;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 1.5rem;
+  }
+
+  .sidebar-brand .wordmark {
+    font-family: 'Fraunces', serif;
+    font-size: 1.3rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .sidebar-brand .wordmark em {
+    font-style: italic;
+    color: var(--coral);
+  }
+
+  .sidebar-brand .doc-type {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-3);
+    margin-top: 0.35rem;
+  }
+
+  .nav-section {
+    padding: 0 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .nav-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-3);
+    padding: 0.75rem 0.5rem 0.4rem;
+  }
+
+  .nav-link {
+    display: block;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.875rem;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+    line-height: 1.4;
+  }
+
+  .nav-link:hover {
+    background: var(--bg-2);
+    color: var(--ink);
+  }
+
+  .nav-link.active {
+    background: var(--coral-soft);
+    color: var(--coral);
+    font-weight: 500;
+  }
+
+  .nav-link .nav-badge {
+    float: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    background: var(--bg-3);
+    color: var(--ink-3);
+  }
+
+  .nav-link .nav-badge.v2 {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+
+  /* Main content */
+  .main {
+    padding: 4rem 5rem;
+    max-width: 860px;
+  }
+
+  /* Doc header */
+  .doc-header {
+    margin-bottom: 4rem;
+    padding-bottom: 3rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .doc-header .version-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--kelp);
+    background: var(--kelp-soft);
+    padding: 0.35rem 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 1.5rem;
+  }
+
+  .doc-header h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 3rem;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin-bottom: 1.25rem;
+  }
+
+  .doc-header h1 em {
+    font-style: italic;
+    color: var(--coral);
+  }
+
+  .doc-header .lead {
+    font-size: 1.1rem;
+    line-height: 1.65;
+    color: var(--ink-2);
+    max-width: 55ch;
+    margin-bottom: 2rem;
+  }
+
+  .doc-meta {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .doc-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .doc-meta-item .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-3);
+  }
+
+  .doc-meta-item .value {
+    font-size: 0.875rem;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  /* Sections */
+  .section {
+    margin-bottom: 5rem;
+    scroll-margin-top: 2rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .section-header h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 1.9rem;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  .section-header h2 em { font-style: italic; color: var(--coral); }
+
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    letter-spacing: 0.1em;
+    flex-shrink: 0;
+  }
+
+  .subsection {
+    margin-bottom: 3rem;
+    scroll-margin-top: 2rem;
+  }
+
+  .subsection h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 1.3rem;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin-bottom: 1rem;
+  }
+
+  .subsection h4 {
+    font-family: 'Geist', sans-serif;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-2);
+    margin-bottom: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
+  p {
+    color: var(--ink-2);
+    margin-bottom: 1rem;
+    max-width: 68ch;
+  }
+
+  p strong { color: var(--ink); font-weight: 600; }
+
+  /* Feature cards */
+  .feature-card {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    background: white;
+    box-shadow: var(--shadow);
+  }
+
+  .feature-card-header {
+    padding: 1.25rem 1.5rem;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .feature-card-header .feature-name {
+    font-family: 'Geist', sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--ink);
+  }
+
+  .feature-card-header .feature-tags {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .tag.v1 { background: var(--kelp-soft); color: var(--kelp); }
+  .tag.v2 { background: var(--amber-soft); color: var(--amber); }
+  .tag.core { background: var(--blue-soft); color: var(--blue); }
+  .tag.privacy { background: var(--coral-soft); color: var(--coral); }
+
+  .feature-card-body {
+    padding: 1.5rem;
+  }
+
+  .feature-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 0.75rem 1.5rem;
+    margin-bottom: 1.25rem;
+    align-items: start;
+  }
+
+  .feature-row:last-child { margin-bottom: 0; }
+
+  .feature-row .row-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    padding-top: 0.15rem;
+  }
+
+  .feature-row .row-value {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+
+  .feature-row .row-value strong { color: var(--ink); }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--ink);
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+
+  .code-block .comment { color: var(--ink-3); }
+  .code-block .key { color: var(--blue); }
+  .code-block .val { color: var(--kelp); }
+  .code-block .str { color: var(--coral); }
+
+  /* Flow diagrams (text-based) */
+  .flow {
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1.25rem 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 2;
+    color: var(--ink);
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+
+  .flow .arrow { color: var(--coral); }
+  .flow .node {
+    display: inline-block;
+    background: white;
+    border: 1px solid var(--rule-strong);
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  .flow .node.highlight {
+    background: var(--coral-soft);
+    border-color: var(--coral-mid);
+    color: var(--coral);
+  }
+
+  /* Callout boxes */
+  .callout {
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+  }
+
+  .callout.info { background: var(--blue-soft); border-left: 3px solid var(--blue); }
+  .callout.warning { background: var(--amber-soft); border-left: 3px solid var(--amber); }
+  .callout.privacy { background: var(--coral-soft); border-left: 3px solid var(--coral); }
+  .callout.v2 { background: var(--amber-soft); border-left: 3px solid var(--amber); }
+
+  .callout-icon { font-size: 1rem; line-height: 1.6; }
+  .callout-body { color: var(--ink-2); }
+  .callout-body strong { color: var(--ink); }
+
+  /* Data model tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    margin: 1.25rem 0;
+  }
+
+  th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    font-weight: 400;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid var(--rule-strong);
+    background: var(--bg-2);
+  }
+
+  td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink-2);
+    vertical-align: top;
+  }
+
+  td:first-child {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg-2); }
+
+  /* Architecture diagram placeholder */
+  .arch-diagram {
+    border: 2px dashed var(--rule-strong);
+    border-radius: 8px;
+    padding: 3rem 2rem;
+    text-align: center;
+    margin: 1.5rem 0;
+    background: var(--bg-2);
+  }
+
+  /* Version timeline */
+  .version-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 1.5rem 0;
+  }
+
+  .version-item {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 0 2rem;
+    position: relative;
+  }
+
+  .version-item::before {
+    content: '';
+    position: absolute;
+    left: 110px;
+    top: 1.5rem;
+    bottom: -1rem;
+    width: 1px;
+    background: var(--rule);
+  }
+
+  .version-item:last-child::before { display: none; }
+
+  .version-label {
+    padding: 1.25rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    text-align: right;
+    color: var(--ink-3);
+    padding-top: 1.35rem;
+  }
+
+  .version-label .ver {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.7rem;
+  }
+
+  .version-label .ver.v1 { background: var(--kelp-soft); color: var(--kelp); }
+  .version-label .ver.v1-1 { background: var(--blue-soft); color: var(--blue); }
+  .version-label .ver.v2 { background: var(--amber-soft); color: var(--amber); }
+
+  .version-content {
+    padding: 1.25rem 0 2rem 2rem;
+    border-left: none;
+  }
+
+  .version-content h4 {
+    font-family: 'Geist', sans-serif;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--ink);
+    margin-bottom: 0.75rem;
+  }
+
+  .version-content ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .version-content li {
+    font-size: 0.875rem;
+    color: var(--ink-2);
+    padding-left: 1rem;
+    position: relative;
+  }
+
+  .version-content li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--coral);
+    font-size: 0.8rem;
+  }
+
+  /* Inline code */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* Divider */
+  hr {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 2.5rem 0;
+  }
+
+  /* Footer */
+  .doc-footer {
+    margin-top: 5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--rule);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--ink-3);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .main { padding: 2rem 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- SIDEBAR NAV -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <div class="wordmark">coral<em>swarm</em></div>
+      <div class="doc-type">System Design · v1</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Overview</div>
+      <a href="#overview" class="nav-link active">Architecture Overview</a>
+      <a href="#core-loop" class="nav-link">Core Loop</a>
+      <a href="#data-model" class="nav-link">Data Model</a>
+      <a href="#tech-stack" class="nav-link">Tech Stack</a>
+      <a href="#scale" class="nav-link">Scale &amp; Data Volume</a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Core Features — v1</div>
+      <a href="#ingestion" class="nav-link">Ingestion Engine <span class="nav-badge">v1</span></a>
+      <a href="#graph" class="nav-link">Knowledge Graph <span class="nav-badge">v1</span></a>
+      <a href="#temporal" class="nav-link">Temporal Memory <span class="nav-badge">v1</span></a>
+      <a href="#copresence" class="nav-link">Co-presence Sharing <span class="nav-badge">v1</span></a>
+      <a href="#query" class="nav-link">Query & Retrieval <span class="nav-badge">v1</span></a>
+      <a href="#mcp" class="nav-link">MCP Server <span class="nav-badge">v1</span></a>
+      <a href="#llm" class="nav-link">LLM Layer <span class="nav-badge">v1</span></a>
+      <a href="#sync" class="nav-link">Team Graph Sync <span class="nav-badge">v1</span></a>
+      <a href="#connectors" class="nav-link">Connectors <span class="nav-badge">v1</span></a>
+      <a href="#offboarding" class="nav-link">Offboarding Mode <span class="nav-badge">v1</span></a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">v2 Roadmap</div>
+      <a href="#local-capture" class="nav-link">Local Capture (Whisper) <span class="nav-badge v2">v1.x</span></a>
+      <a href="#mobile" class="nav-link">Mobile App <span class="nav-badge v2">v1.5</span></a>
+      <a href="#cloud-app" class="nav-link">Cloud App <span class="nav-badge v2">v1.5</span></a>
+      <a href="#pricing-tiers" class="nav-link">Free vs Paid Tiers <span class="nav-badge v2">v1.5</span></a>
+      <a href="#org-graph" class="nav-link">Org Graph <span class="nav-badge v2">v2</span></a>
+      <a href="#conflict-detection" class="nav-link">Conflict Detection <span class="nav-badge v2">v2</span></a>
+      <a href="#freshness" class="nav-link">Freshness Signals <span class="nav-badge v2">v2</span></a>
+      <a href="#enterprise" class="nav-link">Enterprise Layer <span class="nav-badge v2">v2</span></a>
+      <a href="#local-mode" class="nav-link">Local Mode <span class="nav-badge v2">v2+</span></a>
+      <a href="#native-mac" class="nav-link">Native Mac App <span class="nav-badge v2">v2</span></a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Reference</div>
+      <a href="#permissions" class="nav-link">Permissions Model</a>
+      <a href="#open-questions" class="nav-link">Open Questions</a>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- HEADER -->
+    <div class="doc-header">
+      <div class="version-badge">● Live Document · May 2026</div>
+      <h1>Coralswarm<br><em>System Design</em></h1>
+      <p class="lead">Coralswarm auto-populates and organizes team documentation as a passive byproduct of normal work. Individuals get a personal knowledge graph built for them from their own work; teams share a queryable reef that anyone can contribute to or pull from. This document is a feature-by-feature technical reference for v1, covering what each system does, how it works, and how it fits together — written for smart outsiders: technical co-founders, engineers, and investors doing due diligence.</p>
+      <div class="doc-meta">
+        <div class="doc-meta-item">
+          <span class="label">Author</span>
+          <span class="value">Alex</span>
+        </div>
+        <div class="doc-meta-item">
+          <span class="label">Status</span>
+          <span class="value">Design locked, pre-build</span>
+        </div>
+        <div class="doc-meta-item">
+          <span class="label">Domain</span>
+          <span class="value">coralswarm.example</span>
+        </div>
+        <div class="doc-meta-item">
+          <span class="label">Scope</span>
+          <span class="value">v1 + v2 roadmap</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION: OVERVIEW -->
+    <section class="section" id="overview">
+      <div class="section-header">
+        <span class="section-num">01</span>
+        <h2>Architecture <em>Overview</em></h2>
+      </div>
+
+      <p>Coralswarm is a cloud-backed knowledge graph product. People use it through the Next.js web app, the <code>cs</code> CLI, and a remote MCP server at <code>/mcp</code> for AI tools; connectors bring in content from Slack and other platforms. A Rust cloud backend handles ingestion processing, retrieval, and synthesis, and serves the MCP endpoint itself. The data architecture has three roles:</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">System roles</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Cloud Backend</span>
+            <span class="row-value">Rust service (Axum + Tokio) backed by Postgres for metadata and Cloudflare R2 for encrypted blob storage. Owns the canonical graph for every user and team. Runs ingestion processing (chunking, embedding, extraction), serves retrieval queries (vector + keyword + graph expansion), and proxies LLM calls. Encrypts data at rest; decrypts during the user's active session to handle queries, then discards decrypted state from working memory.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Clients</span>
+            <span class="row-value">The Next.js web app and the <code>cs</code> CLI, with native iOS (Swift) and Android (Kotlin) apps on the roadmap. All are thin clients: they own UI, navigation, and auth, and none of them embed the Rust core for retrieval. Queries flow over an authenticated session to the cloud backend, which runs the retrieval pipeline and returns synthesized answers. ADR 0015 (<code>docs/decisions/0015-retire-desktop-app.md</code>) retired the desktop client and its local MCP sidecar on 2026-10-28.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Remote MCP server</span>
+            <span class="row-value">Served by the cloud backend at <code>/mcp</code> over MCP's streamable HTTP transport. AI tools (Claude Code, Cursor, custom agents) connect to it directly and authenticate with OAuth; nothing runs on the user's machine. Tool calls run the same query and write paths as the web app.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Integration surface</span>
+            <span class="row-value">Platform add-ins (Zoom, Gmail, Outlook, Meet, Teams) and chat bots (Slack, Teams) talk directly to the cloud backend's ingestion API. The cloud handles the platform API calls, transcript fetches, and message subscriptions. AI tools write through the remote MCP server, and the web app shows the activity feed.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div>External Sources &nbsp;<span class="arrow">→</span>&nbsp; <span class="node">Cloud Ingestion</span> &nbsp;<span class="arrow">→</span>&nbsp; <span class="node">Encrypted Atom Store (R2)</span></div>
+        <div style="margin-left: 2rem; color: var(--ink-3);">↓</div>
+        <div><span class="node">Extraction Pipeline (LLM)</span> &nbsp;<span class="arrow">→</span>&nbsp; <span class="node highlight">Cloud Knowledge Graph</span></div>
+        <div style="margin-left: 2rem; color: var(--ink-3);">↓</div>
+        <div><span class="node">Cloud Query Engine</span> &nbsp;<span class="arrow">→</span>&nbsp; Web app / CLI clients</div>
+        <div style="margin-left: 2rem; color: var(--ink-3);">↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
+        <div><span class="node">Remote MCP Server (/mcp)</span> &nbsp;<span class="arrow">→</span>&nbsp; <span class="node">AI Tools (Claude Code, Cursor…)</span></div>
+      </div>
+
+      <div class="callout info">
+        <span class="callout-icon">ℹ</span>
+        <div class="callout-body"><strong>Design principle (v1):</strong> The cloud backend is the source of truth. Native clients are UI surfaces over a shared query engine. This is the deliberate v1 architecture — it ships fast, gives Coralswarm production telemetry on the hardest problem (extraction and retrieval quality), and keeps a single code path for retrieval logic across every surface. A future <strong>Local Mode</strong> premium feature (see v2 Roadmap) will offer fully local retrieval as an option for users who require strict E2E privacy.</div>
+      </div>
+
+      <div class="callout privacy">
+        <span class="callout-icon">🔒</span>
+        <div class="callout-body"><strong>Privacy and data use.</strong> Coralswarm's v1 privacy posture is uniform across surfaces and built on two commitments:<br><br>
+        <strong>1. Encrypted at rest, decrypted only during your active session.</strong> User data — personal reefs, team reefs, atoms, nodes — is stored encrypted in cloud blob storage. When a user runs a query, the cloud backend decrypts the relevant portion of their graph in working memory only for the duration of the query (typically seconds), runs retrieval and synthesis, returns the answer, and discards the decrypted state. Persistent storage is never plaintext.<br><br>
+        <strong>2. No training on user data, period.</strong> User content — atoms, nodes, queries, retrieved context, anything in any reef at any scope — is never used to train, fine-tune, or improve any AI model: not Coralswarm's, not any vendor's, not for any product-improvement purpose. Coralswarm uses LLM APIs (Anthropic, OpenAI) on endpoints that operate under no-training defaults. For BYOK mode, the no-training guarantee depends on the user's chosen provider; Coralswarm recommends providers whose terms match this policy.<br><br>
+        Team-reef content is encrypted with a per-team key during ingestion; the cloud backend holds the team key in encrypted form and uses it only when authorized team members are actively querying. Team members not in the team's membership list cannot trigger decryption — the access control runs server-side and is enforceable + auditable.<br><br>
+        <strong>The honest concession:</strong> this is not strict end-to-end encryption. A Coralswarm operator with privileged production access could, in principle, observe decrypted content during an active user session. Strict E2E remains available as the future <strong>Local Mode</strong> premium feature (see v2 Roadmap), for users whose threat model requires that Coralswarm itself never has the capability to view their data.</div>
+      </div>
+    </section>
+
+    <!-- SECTION: CORE LOOP -->
+    <section class="section" id="core-loop">
+      <div class="section-header">
+        <span class="section-num">02</span>
+        <h2>Core <em>Loop</em></h2>
+      </div>
+
+      <p>The product philosophy in one sentence: <strong>teams work as normal, and documentation populates and organizes itself as a byproduct of that work</strong>. Nothing about how a team writes code, runs meetings, sends email, or coordinates in Slack needs to change. Coralswarm observes the work that's already happening and turns it into structured, queryable knowledge — first for the individual, then for the team if they choose to share it.</p>
+
+      <p>This section describes the user journey end-to-end. Everything in the rest of the document is in service of this loop.</p>
+
+      <div class="subsection">
+        <h3>The solo loop</h3>
+        <p>A single user, working alone with Coralswarm running in the background.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Solo workflow — personal reef builds itself</span>
+            <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">What the user does</span>
+              <span class="row-value">Connect Coralswarm once (Slack, Gmail, Calendar, optionally a meeting capture toggle). Work as normal. Take meetings, send emails, write in Slack, work with AI tools.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">What Coralswarm does</span>
+              <span class="row-value">
+                Captures content from each source through a <strong>platform-native ingestion mechanism</strong>, not through background polling:<br>
+                — <strong>Meetings:</strong> the user hits "Ingest" in the Coralswarm add-in inside Zoom/Teams/Meet. The add-in triggers the platform's recording and pulls the transcript via the platform API.<br>
+                — <strong>Email:</strong> the user hits "Ingest" in the Coralswarm add-in inside Outlook/Gmail. The add-in pulls the thread (and future replies on that thread) via the mail provider's API.<br>
+                — <strong>Chat:</strong> the user invites the Coralswarm bot into a Slack/Teams channel or group chat. The bot is a visible member and ingests messages going forward — the group consents by accepting its presence.<br>
+                — <strong>AI tools:</strong> the user connects Coralswarm's MCP server to Claude Code, Cursor, etc., and configures a hook that auto-dumps decisions, summaries, or context atoms on session events.<br>
+                Then: extraction pipeline runs async after each ingestion, building entity, thread, and decision-candidate nodes. Decision candidates surface in a low-friction review queue.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">What the user gets</span>
+              <span class="row-value">A personal reef — a knowledge graph of the user's own work — that they didn't have to write. They can query it ("what did I decide about the auth migration?"), browse it (entity pages, thread summaries), and use it from any AI tool via MCP. All of this without changing how they work.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Privacy boundary</span>
+              <span class="row-value">The personal reef is the user's private workspace, encrypted at rest in the cloud and accessible only to them. No other user can see it — not their team, not Coralswarm staff in routine operation. The user explicitly chooses what to share to a team reef.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow">
+          <div><span class="node">Normal work</span> &nbsp;<span class="arrow">→</span>&nbsp; <span class="node">Auto-capture</span> &nbsp;<span class="arrow">→</span>&nbsp; <span class="node">Auto-extraction</span> &nbsp;<span class="arrow">→</span>&nbsp; <span class="node highlight">Personal reef</span></div>
+          <div style="margin-left: 2rem; color: var(--ink-3);">↓</div>
+          <div><span class="node">Query (in-app / CLI / MCP)</span></div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>The team loop</h3>
+        <p>Two or more Coralswarm users sharing context with each other. The shared graph is called the <strong>team reef</strong>.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Team workflow — bidirectional sharing and querying</span>
+            <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Sharing into the reef</span>
+              <span class="row-value">
+                <strong>Explicit promotion:</strong> User picks a node (decision, thread, entity) from their personal reef and promotes it to the team reef. One action, one decision, end-to-end encrypted upload.<br>
+                <strong>Co-presence (automatic):</strong> When the user ingests content from a shared event (a meeting, an email thread, a Slack channel), the resulting nodes are automatically distributed to every co-present participant who is also a Coralswarm user. One person ingests; the whole room receives. See section 08.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Pulling from the reef</span>
+              <span class="row-value">Any team member can query the team reef the same way they query their personal one: natural language, hybrid retrieval, cited synthesized answers. Queries can be scoped to personal, team, or both. The MCP server exposes team reef content to AI tools the same way it exposes personal content — with appropriate scope flags.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Adding back to the reef</span>
+              <span class="row-value">
+                When a team member opens a shared node, they can:<br>
+                — <strong>Add their own atoms</strong> linked to that node (a note, a clarification, a follow-up).<br>
+                — <strong>Edit the node</strong> (versioned; conflict-resolved per the sync model in section 12).<br>
+                — <strong>Promote one of their own related personal nodes</strong> to attach to the existing team node.<br>
+                The team reef is not a read-only export of one person's brain — it's a shared, growing document of the team's collective knowledge.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Provenance</span>
+              <span class="row-value">Every atom and every node carries its origin: who ingested it, where it came from, when it was added, who edited it. Nothing in the team reef is anonymous. This matters for trust, for offboarding (section 14), and for resolving disagreements about what was actually decided.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow">
+          <div><span class="node">User A personal reef</span> &nbsp;<span class="arrow">→</span>&nbsp; <span class="node highlight">Team Reef</span> &nbsp;<span class="arrow">←</span>&nbsp; <span class="node">User B personal reef</span></div>
+          <div style="margin-left: 2rem; color: var(--ink-3);">↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓</div>
+          <div><span class="node">Query A</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="node">Both query</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="node">Query B</span></div>
+        </div>
+
+        <div class="callout info">
+          <span class="callout-icon">ℹ</span>
+          <div class="callout-body"><strong>Terminology:</strong> "Reef" is the user-facing name for a graph. <strong>Personal reef</strong> = personal-scope graph (your own work). <strong>Team reef</strong> = team-scope graph (shared with teammates). <strong>Org reef</strong> = org-scope graph (v2, shared across the company). Technical names in the rest of this document use "graph"; user-facing copy uses "reef."</div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Design implications of the loop</h3>
+        <p>Several design constraints fall out of treating "work as normal → docs auto-populate" as the core loop. They're called out explicitly here because they shape decisions in the rest of the document:</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Constraints the loop imposes</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Ingestion is volume-heavy</span>
+              <span class="row-value">"Auto-populate from normal work" means continuous, indefinite, multi-source ingestion. The system has to assume the graph grows forever. See section 05 (Scale & Data Volume) for the projections, limits, and tiering strategy.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Friction in the loop kills it</span>
+              <span class="row-value">Anything that requires the user to think — "should I save this?", "where does this belong?", "is this worth ingesting?" — breaks the passive-capture promise. Decision candidates are queued, not blocking. Promotion to team is a one-click, not a workflow. Co-presence is automatic, not opt-in-per-event.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">No silent ingestion</span>
+              <span class="row-value">Coralswarm never captures from a private source without a <strong>visible consent signal</strong>. The signal is mechanism-specific:<br>
+                — Meetings: hitting Ingest triggers the platform's recording notice (every major platform announces recording to participants).<br>
+                — Email: the add-in surfaces an in-thread indicator that this thread is being captured; the user with the add-in initiates, but the act is visible in their UI and auditable in the activity feed.<br>
+                — Chat: the bot is a visible member of the channel. Group consent is established by accepting its presence — same model as a recording bot in a meeting.<br>
+                — AI tools: the MCP hook is configured by the user explicitly and writes are logged.<br>
+                Connection establishes <em>authorization</em>; a per-event mechanism establishes <em>action</em>. There is no OAuth-and-poll path that pulls from accounts silently in the background. <strong>Opening the Coralswarm app is also not itself an ingestion trigger</strong> — the user might open the app to query or browse, and ingestion as a silent side effect of "I launched the window" blurs the consent line. Ingestion happens on explicit triggers (hit Ingest, hit Sync, configure a hook) and on pre-authorized continuous mechanisms (chat bot subscriptions, periodic polling of watched email threads while the app runs).</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Personal-first, team-by-consent</span>
+              <span class="row-value">A user has a working personal reef before they ever share anything. Team sharing is a deliberate act on top of an already-useful product. This is the inverse of most team tools, which require team setup before any individual value.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Provenance everywhere</span>
+              <span class="row-value">Auto-captured content needs source citations. When the system synthesizes "we decided to use Postgres" from someone's meeting transcript, the user needs to click through to the actual sentence in the actual transcript. Otherwise the auto-documentation is unfalsifiable and won't be trusted.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Bidirectional reef requires conflict handling</span>
+              <span class="row-value">Multiple users editing the same team node creates merge/conflict scenarios. The data model treats atoms as append-only (no conflict possible), and uses last-write-wins with preserved history on node metadata. See section 12 for the full sync/conflict spec.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: DATA MODEL -->
+    <section class="section" id="data-model">
+      <div class="section-header">
+        <span class="section-num">03</span>
+        <h2>Data <em>Model</em></h2>
+      </div>
+
+      <p>The Coralswarm data model has two layers: <strong>atoms</strong> (raw ingested content) and <strong>nodes</strong> (semantic units the user interacts with). Users live at the node layer. The retrieval system uses both.</p>
+
+      <div class="subsection">
+        <h3>Atoms</h3>
+        <p>The raw data layer. Atoms are ingested from external sources and stored verbatim (with chunking for large documents). Users rarely see atoms directly — they surface as citations when a node is queried.</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>atom_id</td><td>uuid</td><td>Primary key</td></tr>
+            <tr><td>source_type</td><td>enum</td><td>slack_message, email, meeting_transcript, jira_issue, notion_page, calendar_event, mcp_context</td></tr>
+            <tr><td>source_id</td><td>string</td><td>Original ID in the source system</td></tr>
+            <tr><td>content</td><td>text</td><td>Raw content chunk (max ~512 tokens)</td></tr>
+            <tr><td>embedding</td><td>vector(384)</td><td>Local embedding (bge-small or nomic-embed)</td></tr>
+            <tr><td>participants</td><td>string[]</td><td>User identifiers who were present (for co-presence logic)</td></tr>
+            <tr><td>timestamp</td><td>datetime</td><td>When the original content was created</td></tr>
+            <tr><td>ingested_by</td><td>user_id</td><td>Who ingested this atom</td></tr>
+            <tr><td>scope</td><td>enum</td><td>personal, team, org</td></tr>
+            <tr><td>graph_id</td><td>uuid</td><td>Which graph this atom belongs to</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="subsection">
+        <h3>Nodes</h3>
+        <p>The semantic layer. Four node types, each composed from one or more atoms. The unit users name, share, query, and hand off.</p>
+
+        <table>
+          <thead>
+            <tr><th>Node Type</th><th>What it is</th><th>Creation method</th><th>Key fields</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>entity</td>
+              <td>A person, company, project, or system</td>
+              <td>Auto-extracted from atoms</td>
+              <td>name, type, aliases, related_nodes[], atom_ids[]</td>
+            </tr>
+            <tr>
+              <td>decision</td>
+              <td>"We chose X because Y"</td>
+              <td>User-approved (system suggests)</td>
+              <td>title, rationale, alternatives[], decided_by, decided_at, atom_ids[]</td>
+            </tr>
+            <tr>
+              <td>thread</td>
+              <td>A bounded conversation or work unit</td>
+              <td>Auto-extracted from atoms</td>
+              <td>title, source_type, participants[], date_range, atom_ids[], summary</td>
+            </tr>
+            <tr>
+              <td>reference</td>
+              <td>Pointer to an external doc + team context</td>
+              <td>Manual or auto-suggested</td>
+              <td>title, url, source_system, team_context, atom_ids[]</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout privacy">
+          <span class="callout-icon">🔒</span>
+          <div class="callout-body"><strong>Privacy note:</strong> Every node has a <code>scope</code> field (personal / team / org) and an <code>owner_id</code>. Personal nodes never leave the local machine unless the user explicitly promotes them. Team and org nodes are synced to the cloud in encrypted form.</div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Graphs</h3>
+        <p>Scope containers. Each user has one personal graph. Teams share one team graph. Organizations have one org graph (v2).</p>
+
+        <table>
+          <thead>
+            <tr><th>Graph Type</th><th>Who owns it</th><th>Where it lives</th><th>Who can query</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>personal</td><td>The individual user</td><td>Local only</td><td>The user only</td></tr>
+            <tr><td>team</td><td>The team</td><td>Local + encrypted cloud</td><td>All team members</td></tr>
+            <tr><td>org</td><td>The company</td><td>Encrypted cloud</td><td>All org members (v2)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <span class="callout-icon">&#8505;</span>
+        <div class="callout-body"><strong>Temporal relationships</strong> (<code>supersession_edge</code>, <code>non_supersession_pair</code>) are defined in section 08 &mdash; Temporal Memory. They're kept separate from the core node schema so the temporal layer is cleanly composable. <code>decided_at</code> on decision nodes is mandatory in v1 (see section 08).</div>
+      </div>
+    </section>
+
+    <!-- SECTION: TECH STACK -->
+    <section class="section" id="tech-stack">
+      <div class="section-header">
+        <span class="section-num">04</span>
+        <h2>Tech <em>Stack</em></h2>
+      </div>
+
+      <p>Coralswarm's v1 architecture is organized around <strong>one Rust cloud backend and several thin native clients</strong>. The Rust core lives server-side — it owns Postgres + R2 storage, vector search (sqlite-vec or pgvector), ONNX embedding inference, AES-256-GCM encryption, retrieval logic, and the MCP protocol. Each user-facing surface (the web app and the <code>cs</code> CLI today, native mobile apps later) provides UI, navigation, and auth, calling the cloud backend's APIs for ingestion and query. Platform add-ins (Zoom, Gmail, Outlook, Slack, etc.) are JavaScript shims that signal the cloud backend.</p>
+
+      <p>The tradeoff: a single retrieval code path, fast iteration on extraction quality, smaller install sizes, lower hardware floor for users, and production visibility into what queries succeed and fail — at the cost of cloud infrastructure spend and not offering strict end-to-end encryption in v1 (see Privacy and Data Use in the Architecture Overview). A future <strong>Local Mode</strong> premium feature will re-enable local retrieval for users whose threat model requires strict E2E. See v2 Roadmap.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Rust core</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it is</span>
+            <span class="row-value">A Rust crate (cargo workspace with sub-crates) implementing the full retrieval and ingestion pipeline: Postgres + R2 access, vector search, ONNX embedding inference (via the <code>ort</code> crate), AES-256-GCM + X25519 encryption (via <code>ring</code> / <code>rustls</code>), the MCP JSON-RPC protocol, atom/node/graph types, and the LLM orchestration layer.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Where it runs</span>
+            <span class="row-value">
+              — <strong>Cloud backend (primary):</strong> the core <em>is</em> the cloud backend. Axum routes wrap it.<br>
+              — <strong>Remote MCP server:</strong> part of the cloud backend, mounted at <code>/mcp</code>. Not a separate process.<br>
+              — <strong>CLI:</strong> linked as a Rust binary, used in thin-client mode (calls the cloud APIs over HTTP).<br>
+              The mobile apps (iOS, Android) and the web app do not consume the Rust core directly — they call the cloud backend's APIs. There is one canonical implementation of retrieval, extraction, and encryption logic, and it runs in one place.
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Why this matters for v1</span>
+            <span class="row-value">Sync bugs, retrieval-quality fixes, and extraction-prompt improvements ship from one deploy. No client update required, no version skew across surfaces, no FFI work for iOS/Android/web. The core can iterate fast on the open question that matters most: extraction and retrieval quality.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Forward path to Local Mode</span>
+            <span class="row-value">The core is structured so it can be re-targeted to clients (Swift via <code>cbindgen</code>, Kotlin via <code>UniFFI</code>) when Local Mode ships. The retrieval, embedding, and storage logic doesn't change — only the deployment target. That work is real but not on the v1 critical path. See Local Mode in the v2 Roadmap.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <span class="callout-icon">ℹ</span>
+        <div class="callout-body"><strong>No desktop client.</strong> ADR 0015 (<code>docs/decisions/0015-retire-desktop-app.md</code>) retired the desktop client on 2026-10-28, together with its local MCP sidecar and the backend's local storage mode. Its jobs moved to the web app, the <code>cs</code> CLI, and the remote MCP server at <code>/mcp</code>.</div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">iOS app (Swift)</span>
+          <div class="feature-tags"><span class="tag v1">v1.5</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Language &amp; UI</span>
+            <span class="row-value">Swift + SwiftUI. iOS 17+ target. Native iOS app, not React Native.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Architecture</span>
+            <span class="row-value"><strong>Thin native client.</strong> Calls the cloud backend's query API for all retrieval and synthesis. Does not embed the Rust core for retrieval — that work happens server-side. The Rust core's logic still backs every query, but it runs in the cloud backend, not on the device.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">What's on the device</span>
+            <span class="row-value">SwiftUI UI, navigation, auth flow, biometric unlock, push notification handling, and a small local cache of recently-viewed nodes for fast re-open and basic offline browsing. No vector search, no embedding inference, no full graph cache.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Crypto &amp; secrets</span>
+            <span class="row-value">CryptoKit for any device-local encryption (cache, session tokens). Keychain Services for tokens and keys. Secure Enclave for biometric-protected unlock. Face ID / Touch ID required to open the app.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Networking</span>
+            <span class="row-value">REST for query submission and node browsing, WebSocket for push events (co-presence arrivals, team-reef updates). URLSession with native HTTPS pinning.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Push</span>
+            <span class="row-value">APNs via the cloud backend. Used for co-presence notifications and team-reef updates.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Distribution</span>
+            <span class="row-value">App Store.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Code reuse with Mac native</span>
+            <span class="row-value">The eventual Native Mac App (v1.7+, also Swift) shares SwiftUI components and the data layer with this iOS app. In v1.7 Mac native ships as a thin client like iOS — Local Mode capability is added later as part of that premium tier. Net code reuse is substantial on UI and navigation, less on platform integration.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Android app (Kotlin)</span>
+          <div class="feature-tags"><span class="tag v1">v1.6</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Language &amp; UI</span>
+            <span class="row-value">Kotlin + Jetpack Compose. Android 13+ target. Native Android app, not React Native.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Architecture</span>
+            <span class="row-value"><strong>Thin native client.</strong> Same model as iOS: calls the cloud backend's query API. No Rust core embedded for retrieval. No UniFFI/JNI bridge needed for the query path. The mobile architecture is symmetric between iOS and Android — both are native UI clients backed by the same cloud query engine.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">What's on the device</span>
+            <span class="row-value">Compose UI, navigation, auth flow, biometric unlock, push handling, and a small local cache of recently-viewed nodes. No vector search, no embedding inference, no full graph cache.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Crypto &amp; secrets</span>
+            <span class="row-value">Android Keystore for tokens and keys, BiometricPrompt for unlock. Native Android crypto APIs for device-local cache encryption.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Networking</span>
+            <span class="row-value">OkHttp / Ktor for REST, OkHttp WebSocket or Ktor WebSocket for push events.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Push</span>
+            <span class="row-value">FCM via the cloud backend.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Distribution</span>
+            <span class="row-value">Play Store.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Web app (Next.js)</span>
+          <div class="feature-tags"><span class="tag v1">v1.5</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Framework</span>
+            <span class="row-value">Next.js 15+ with App Router + TypeScript. React Server Components for most pages; Client Components only where interactive (query input, streaming answer rendering). Deployed on Cloudflare Pages or Vercel.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Retrieval model</span>
+            <span class="row-value"><strong>Server-side, like every other v1 client.</strong> The browser is a thin client that sends queries to the cloud backend; the cloud does embedding, retrieval, and LLM synthesis, returns the answer. No Rust core in the browser, no WASM, no in-browser SQLite, no in-browser embedding model. Same query path as the CLI and the MCP server.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Why server-side</span>
+            <span class="row-value">Same reasoning as every other v1 surface: ship fast, single retrieval code path, easy iteration. The pre-Option-C plan had the web running an in-browser WASM bundle for E2E retrieval — that path was abandoned along with local retrieval on every other surface. Local retrieval comes back as Local Mode, not on web first.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Crypto</span>
+            <span class="row-value">Auth session establishes a server-side decryption key for the user's data. Web Crypto API for any client-side encryption needs (e.g. local form state). Most of the crypto burden moves to the cloud backend.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">First-load weight</span>
+            <span class="row-value">Standard Next.js bundle, ~200–500KB. No WASM model download. Users see the app in seconds.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">CLI</span>
+          <div class="feature-tags"><span class="tag v1">v1</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Language</span>
+            <span class="row-value">Rust, distributed as a standalone binary. <code>cargo install coralswarm-cli</code> for Rust devs; signed binaries via GitHub Releases for everyone else.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">How it works</span>
+            <span class="row-value">Thin client over the cloud backend's API. Authenticates with the cloud backend and sends queries, ingestion commands, and share operations over HTTPS. Requires connectivity — does not have a local graph. Local Mode users will get a CLI variant that talks to the local Rust core directly.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Commands</span>
+            <span class="row-value"><code>cs query "..."</code>, <code>cs context --project X</code>, <code>cs share &lt;node-id&gt; --to team</code>, <code>cs status</code>. Same surface as documented in the Query &amp; Retrieval section.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Cloud backend (Rust)</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Stack</span>
+            <span class="row-value">Axum (web framework) + Tokio (async runtime) + sqlx (Postgres client) + Postgres for metadata, atoms, nodes, and indexes + Cloudflare R2 for encrypted content blobs. Hosts the Rust core directly — no separate "core library" / "backend service" split.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Role</span>
+            <span class="row-value">The source of truth for every client in v1. Handles ingestion (chunks atoms, embeds, runs extraction), serves query (vector + keyword + graph-expansion retrieval, LLM synthesis), routes co-presence distribution, manages auth, holds team key material, manages the activity feed and push notifications. The web app, the CLI, and the MCP server all use the same APIs.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Crypto posture</span>
+            <span class="row-value">User content is encrypted at rest in R2 (AES-256-GCM with per-account / per-team keys). The backend holds the keys in encrypted form, decrypts them in working memory only during authenticated user sessions, and uses them to decrypt graph chunks for retrieval. After a query is served, decrypted state is discarded from working memory. Persistent storage is never plaintext. See Privacy and Data Use in Architecture Overview for the honest framing — this is not strict E2E.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Vector storage</span>
+            <span class="row-value">Two reasonable options to evaluate before GA: <code>pgvector</code> on Postgres (one fewer system, native to the main store, mature) vs <code>sqlite-vec</code> on per-graph SQLite files in R2 (matches what would run client-side under Local Mode, simpler local/cloud parity). Recommendation: pgvector for v1 — fewer moving parts, better operational tooling. Revisit if Local Mode shipping pushes for cloud/local parity.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Other responsibilities</span>
+            <span class="row-value">Magic-link auth via Resend. Stores email/user mappings for co-presence lookup. WebSocket push to connected clients for real-time activity and team-reef updates. Outreach email job for non-user co-presence participants. Connector OAuth token storage (encrypted at rest, used server-side to call platform APIs for ingestion).</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Hosting</span>
+            <span class="row-value">Fly.io to start — good fit for Tokio apps, scales horizontally with sticky WebSocket sessions, supports managed Postgres in the same region. R2 lives separately on Cloudflare. Move to AWS / GCP / dedicated infra at scale (likely Enterprise-tier requirement).</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">What it explicitly does not do</span>
+            <span class="row-value">Does not act as an LLM proxy (LLM calls go from the backend to Anthropic / OpenAI / BYOK directly). Does not log decrypted user content beyond the in-memory query lifetime. <strong>Does not use any user content for training, fine-tuning, or model improvement — Coralswarm's or anyone else's.</strong> See Privacy and Data Use.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Native Mac app (Swift)</span>
+          <div class="feature-tags"><span class="tag v2">v1.7–v2</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Language &amp; UI</span>
+            <span class="row-value">Swift + SwiftUI primary, AppKit where SwiftUI falls short (menu bar, vibrancy, native command bar). Shares meaningful UI surface with iOS — same SwiftUI components, same design language — though platform-specific code (menu bar, file integrations) is Mac-only.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">v1.7 architecture</span>
+            <span class="row-value">Ships as a thin client like the web app and iOS — calls the cloud backend's APIs. The native Mac investment in v1.7 is about <strong>better macOS feel and integration</strong>, not about local retrieval. Local Mode capability is added later (see v2 Roadmap).</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Why native Mac at all</span>
+            <span class="row-value">Better macOS integration than a browser tab can offer: Spotlight indexing, Quick Look previews, Services menu, native menu-bar presence, vibrancy effects, native command-bar UX, proper TCC permission flows. Mac is disproportionately important in Coralswarm's likely beachhead markets (software teams, design teams, creative studios) and these users notice native vs webview-wrapped quality.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Strategic role</span>
+            <span class="row-value">The Mac native app is the most natural surface for the eventual Local Mode rollout. Mac users on Apple Silicon have the hardware for local embedding inference; the same audience overlaps with the privacy-maximalist segment Local Mode targets. Building Mac native in v1.7 doesn't require Local Mode — but it positions the company to ship Local Mode on Mac first when that time comes.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Distribution</span>
+            <span class="row-value">Signed + notarized DMG via direct download. Possibly a sandboxed Mac App Store variant later.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Platform add-ins (JS/TS, by necessity)</span>
+          <div class="feature-tags"><span class="tag v1">v1</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Why JS</span>
+            <span class="row-value">Zoom App SDK, Office.js (Outlook), Apps Script (Gmail), Slack Bolt, Microsoft Teams Toolkit — these platforms don't offer Rust SDKs. The add-ins must be JS/TS regardless of the rest of the stack.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">What they actually do</span>
+            <span class="row-value">Thin UI shims. Show the "Ingest" button in the host platform; on click, call the cloud backend's ingestion API with the relevant context (meeting ID, thread ID, channel ID). The cloud backend then pulls the content from the platform API using its stored OAuth tokens. Add-ins themselves carry no user content and no core logic — they're effectively triggers.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Per-platform tech</span>
+            <span class="row-value">
+              — Zoom: TypeScript + React via the Zoom App SDK<br>
+              — Gmail: Google Workspace Add-on, Apps Script + CardService<br>
+              — Outlook: Office.js manifest, TypeScript hosted on CDN<br>
+              — Slack: Slack Bolt (Node.js) for the bot + Events API + slash commands<br>
+              — Teams (v1.1): Microsoft Teams Toolkit + Bot Framework SDK<br>
+              — Google Meet (v1.2): Google Workspace Add-on framework
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Distribution</span>
+            <span class="row-value">Each platform's app marketplace (Zoom Marketplace, Google Workspace Marketplace, Microsoft AppSource, Slack Apps, etc.). Subject to each platform's review process — typically 1–4 weeks per submission.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Cross-cutting concerns</span>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Embedding model</span>
+            <span class="row-value"><code>bge-small-en</code> (384 dimensions, ONNX format, ~30MB) loaded into the Rust core. In v1 the model runs server-side only — clients don't carry it. Local Mode will distribute the same model to client devices for on-device inference.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Encryption</span>
+            <span class="row-value">AES-256-GCM for symmetric encryption of stored content. X25519 for any key-exchange operations. Keys are held server-side, encrypted at rest with envelope keys derived from authentication. The cloud backend decrypts during active user sessions to serve queries. <strong>This is not strict end-to-end encryption — see Privacy and Data Use in Architecture Overview.</strong> Strict E2E returns as part of Local Mode.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">LLM</span>
+            <span class="row-value">Claude Haiku for extraction (cost-optimized), Claude Sonnet for synthesis (quality-optimized). Managed mode bills through Coralswarm; BYOK mode uses the user's own Anthropic / OpenAI / compatible API key, stored client-side. Local model mode (v1.1) via Ollama. All three modes available from every surface.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Auth</span>
+            <span class="row-value">Magic link via Resend → device trust token in the OS keychain / Secure Enclave / Android Keystore / browser credential storage. SSO (SAML / OIDC) lands with the Enterprise Layer.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Build &amp; CI</span>
+            <span class="row-value">Cargo workspace for Rust (core + cloud backend + CLI in one workspace). npm workspaces for the TypeScript code (web app + add-ins). Turbo or Nx for cross-package coordination if needed. GitHub Actions for CI; server releases are GitHub Releases that deploy the backend to Fly.io.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Telemetry</span>
+            <span class="row-value">PostHog for product analytics, Sentry for error tracking. Telemetry events are scoped to actions and counts (query ran, atom ingested, decision accepted, etc.) — never include user content, query text, or retrieved snippets. Crash reports auto-scrub content fields. Telemetry is opt-out, not opt-in, with a visible toggle in app settings. <strong>Aggregated telemetry never feeds model training</strong> — same no-training commitment applies.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: SCALE & DATA VOLUME -->
+    <section class="section" id="scale">
+      <div class="section-header">
+        <span class="section-num">05</span>
+        <h2>Scale &amp; Data <em>Volume</em></h2>
+      </div>
+
+      <p>The core loop is built on the assumption of continuous, indefinite ingestion from many sources. This section makes the resulting data-volume problem explicit: how much data is generated, where it lives, when it stops fitting in the current design, and what we do about it. These projections inform every component below — they are not afterthoughts.</p>
+
+      <div class="callout warning">
+        <span class="callout-icon">⚠</span>
+        <div class="callout-body"><strong>Single most important number in this document:</strong> a heavy individual user generates ~10,000 atoms per year. A 50-person team generating team-reef content at a 20% promotion rate generates ~100,000 atoms per year. At 5 years, that team reef holds ~500K atoms. The design must work at that volume without re-architecture.</div>
+      </div>
+
+      <div class="subsection">
+        <h3>Per-user data projections</h3>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Atom volume per active user</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Working assumptions</span>
+              <span class="row-value">
+                5 meetings/week × 30 min avg × 150 words/min = ~22,500 words/week from meetings.<br>
+                200 Slack messages/week × ~50 words = ~10,000 words/week from Slack.<br>
+                100 email atoms/week × ~100 words = ~10,000 words/week from email.<br>
+                AI-tool MCP write-backs: ~20/week × ~200 words = ~4,000 words/week.<br>
+                <strong>Total: ~46,000 words/week ≈ ~60,000 tokens/week ≈ ~120 atoms/week</strong> (at 512 tokens/atom).
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Annualized</span>
+              <span class="row-value">~6,000–10,000 atoms/year for an active user. Lighter users (1 meeting/week, light Slack): ~1,500/year. Heavy users (10+ meetings/week, multiple Slack workspaces): ~20,000/year.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Storage per atom</span>
+              <span class="row-value">
+                Text content (avg 512 tokens ≈ 2KB UTF-8): ~2KB<br>
+                Embedding (384d float32, bge-small): ~1.5KB<br>
+                Metadata (source, timestamps, participants[], scope, hash): ~0.5KB<br>
+                Index overhead (sqlite-vec + BM25): ~1KB<br>
+                <strong>Total: ~5KB per atom on disk.</strong>
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Personal reef storage (cloud)</span>
+              <span class="row-value">
+                Year 1: ~30–50 MB per user in R2. Year 5: ~150–250 MB. Year 10: ~300–500 MB.<br>
+                At R2 pricing (~$0.015/GB/month): year-5 storage cost per user is ~$0.004/month. Negligible relative to subscription revenue.<br>
+                Compute (extraction, embedding, query handling) is the cost driver, not storage.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Local cache on client devices</span>
+              <span class="row-value">Each client (web, mobile) keeps a small encrypted cache of recently-viewed nodes — typically &lt;10MB. Not a full mirror. The cache speeds up app reopen and basic offline browsing but does not support running new queries offline. Local Mode (future premium) is where local full-graph storage returns.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Per-team data projections</h3>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Team reef volume</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Working assumptions</span>
+              <span class="row-value">
+                ~20% promotion rate (users share roughly 1 in 5 of their personal atoms to the team reef, mostly via co-presence on shared events).<br>
+                Co-presence multiplier: when N users are co-present, the same atom is referenced N times in the team reef metadata, but stored once.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Team reef atom count</span>
+              <span class="row-value">
+                <strong>10-person team:</strong> ~12K atoms/year → ~60K at year 5.<br>
+                <strong>50-person team:</strong> ~60K atoms/year → ~300K at year 5.<br>
+                <strong>200-person team (v2 territory):</strong> ~240K atoms/year → ~1.2M at year 5.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Cloud storage cost</span>
+              <span class="row-value">
+                At ~5KB/atom and current S3-compatible pricing (~$0.023/GB/month):<br>
+                10-person team year 5: ~300MB → ~$0.007/month. Negligible.<br>
+                50-person team year 5: ~1.5GB → ~$0.035/month. Still negligible.<br>
+                200-person team year 5: ~6GB → ~$0.14/month. Still trivial relative to subscription revenue.<br>
+                Storage cost is not the constraint. Compute (extraction, embedding, sync) is.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Where team reef data lives</span>
+              <span class="row-value">All canonical team reef content lives in R2, encrypted at rest. Clients (web, CLI, mobile) do not maintain a full local mirror — they cache recently-viewed nodes only. A 50-person team's 1.5GB at year 5 lives in one place (the cloud), not replicated to every member's machine. This is one of the costs of moving to thin-client architecture removed: no client-side multi-GB cache pressure.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Query latency at scale</h3>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">sqlite-vec performance and the indexing strategy</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Default behavior</span>
+              <span class="row-value">sqlite-vec ships with brute-force cosine similarity by default — no ANN index. Excellent for correctness, simple to reason about, and fast at modest scale.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Measured break-even</span>
+              <span class="row-value">
+                On modern hardware (M2 Mac / mid-range Windows CPU), brute-force search over 384d float32 vectors:<br>
+                — 10K atoms: ~5–10ms per query. Imperceptible.<br>
+                — 100K atoms: ~50–100ms per query. Acceptable.<br>
+                — 1M atoms: ~500ms–1s per query. Noticeable, especially with reranking.<br>
+                — 10M atoms: ~5–10s. Unacceptable.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Mitigation 1 — scope narrowing</span>
+              <span class="row-value">Every query has a scope filter (personal, team, or specific entity/thread). Apply the scope filter as a SQL WHERE clause <em>before</em> the vector search runs. For most queries this collapses the search space by 10–100x. Implementation: index <code>scope</code>, <code>owner_id</code>, and <code>entity_ids[]</code> as standard SQL indexes; sqlite-vec scans only matching rows.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Mitigation 2 — date partitioning</span>
+              <span class="row-value">Default query window is "last 6 months" with explicit opt-in to query older content ("include archived"). A simple <code>WHERE created_at &gt; ?</code> clause caps the working set for 90% of queries. Older atoms remain queryable but on demand only.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Mitigation 3 — ANN index at threshold</span>
+              <span class="row-value">When a graph crosses ~500K atoms (post scope/date filters), the backend opportunistically builds an HNSW index over the active corpus. pgvector supports HNSW natively; sqlite-vec supports it as of v0.1.4 (used in Local Mode). Build runs in background, falls back to brute-force during build, swaps in atomically on completion.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Query budget</span>
+              <span class="row-value">Target end-to-end latency for a query (embed → retrieve → rerank → synthesize): <strong>under 3 seconds</strong> at the 90th percentile. Retrieval budget within that: ~500ms. Above 1M atoms, the synthesis call (Sonnet) dominates anyway — context window assembly and LLM TTFT are the real ceiling.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Tiering &amp; retention</h3>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Hot / warm / cold tiers</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Hot (in-memory cache on backend)</span>
+              <span class="row-value">Atoms accessed or created in the last 90 days. Decrypted segments cached in the cloud backend's working memory per active user session, indexed and ready to query. Most queries are served entirely from hot tier.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Warm (Postgres + R2, on-demand decrypt)</span>
+              <span class="row-value">Atoms 90 days to 2 years old. Stored encrypted in R2; metadata indexed in Postgres. First query touching this tier in a session pays a small decrypt + load cost (~100ms).</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Cold (compressed R2 archive)</span>
+              <span class="row-value">Atoms older than 2 years. Compressed (zstd) to ~20% original size, moved to R2's infrequent-access tier. Embedding kept but stored separately from text. Queryable on explicit "include archived" flag; otherwise excluded from default retrieval.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Retention defaults</span>
+              <span class="row-value">
+                <strong>Personal reef:</strong> indefinite by default. User can configure auto-delete-after-N-years per source type (e.g., "delete Slack atoms older than 1 year").<br>
+                <strong>Team reef:</strong> retention is a team-admin setting. Default: indefinite for decision/entity/thread nodes; auto-archive Slack/meeting atoms after 2 years (the node persists, the underlying atoms move to cold).<br>
+                <strong>Hard delete:</strong> deletes are immediate in the cloud and surface to clients on next refresh. Client-side caches honor server-issued deletion markers.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Why tiering matters</span>
+              <span class="row-value">A 5-year user with 50K atoms only has ~12K hot atoms in active rotation. The backend caches working sets per user (LRU eviction across users), keeping query latency stable as the long tail of historical content grows.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Background pipeline throughput</h3>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Extraction and embedding pipeline capacity</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Embedding throughput</span>
+              <span class="row-value">bge-small ONNX on CPU: ~50–200 atoms/second batched, depending on hardware. A user's daily ingestion (~25 atoms) embeds in well under a second. A 1-hour meeting transcript (~120 atoms) embeds in 1–3 seconds. Embedding is never the bottleneck.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Extraction throughput</span>
+              <span class="row-value">Claude Haiku at current rate limits: ~50 atoms/minute per user under default API tier. A daily batch of 25 atoms processes in 30 seconds. Heavy backfill (initial connector ingestion of 6 months of Slack history) can produce 10,000+ atoms in a burst; the extraction pipeline runs against a bounded queue with backoff to stay under rate limits. Heavy backfills complete in 2–6 hours.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Cost at scale</span>
+              <span class="row-value">
+                Per active user at heavy use (10K atoms/year): ~$20/year in extraction costs (Haiku) + ~$30/year in synthesis costs (Sonnet, 20 queries/week × $0.03/query × 50 weeks).<br>
+                <strong>Total managed-mode LLM cost per heavy user: ~$50/year.</strong> Subscription pricing must support this — early ballpark: $20/user/month team-plan = $240/year, leaving healthy margin even at heavy use.<br>
+                BYOK and local-model modes shift this cost off Coralswarm entirely.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Backpressure</span>
+              <span class="row-value">Ingestion writes atoms to Postgres + R2 quickly. Extraction reads from a per-user job queue (Postgres-backed or Redis) and runs async with concurrency limits. If extraction falls behind (e.g. during a backfill), atoms remain queryable via vector search — the LLM-derived entity/thread/decision nodes just trail by minutes to hours. The user always has access to raw atoms, even if they haven't been "processed" yet.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Re-indexing and migrations</h3>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Handling embedding model upgrades and schema changes</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Embedding model upgrades</span>
+              <span class="row-value">When the embedding model changes (e.g. bge-small → a better successor), every atom needs to be re-embedded. At 200 atoms/sec on backend workers, a 50K-atom personal reef re-embeds in ~4 minutes. A 1M-atom team reef re-embeds in ~80 minutes. Re-embedding runs as a backend job, in chunks; the old embedding remains authoritative until the new one is built. No client-side work, no client downtime. Local Mode users will need to re-embed locally on their devices when they upgrade — that's a future consideration.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Embedding dimensionality is a schema lock</span>
+              <span class="row-value">Both pgvector and sqlite-vec require fixed vector dimensions at table creation. Choice of 384d (bge-small) vs 768d (nomic-embed) is permanent for a graph unless we run a full migration. Decision needs to be made before v1 GA — see Open Questions. Recommendation: 384d for v1 (faster, smaller, good enough); leave a clean migration path to 768d for v2 if quality demands it.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Schema migrations</span>
+              <span class="row-value">Backend Postgres migrations run on deploy via sqlx-migrate. Each migration is idempotent and reversible where possible. Client surfaces (web, CLI, mobile) receive new schemas through the API — no client-side migrations needed since clients don't own canonical state.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>What breaks first</h3>
+        <p>An honest list of failure modes ordered by when we expect to hit them, given the projections above:</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Scale failure modes, ranked</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">1. Initial connector backfill UX</span>
+              <span class="row-value">A user connects Slack with 5 years of history. The extraction pipeline produces 50K+ atoms in a single backfill. This is the first scale wall most users hit — within hours of signup. Mitigation: bounded backfill window (default: last 90 days) with explicit "import historical" action for older content.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">2. Query latency on large team reefs</span>
+              <span class="row-value">At ~500K atoms in a team reef, brute-force similarity search starts to feel slow. Mitigation: scope narrowing + date partitioning (described above). The HNSW index is the v1.x backstop if those don't suffice.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">3. Backend compute concurrency at peak</span>
+              <span class="row-value">Under cloud-primary retrieval, every query touches backend compute (decrypt, embed, retrieve, synthesize). At ~1,000 concurrent active users each issuing a query every few minutes, the backend needs to handle ~10–50 queries/second sustained, with bursts higher. Mitigation: stateless query workers behind a load balancer + autoscaling on Fly.io. Embedding inference is the per-query CPU hot path — batched across users when possible. Worth a load-test pass before paid-tier launch.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">4. LLM cost at the long tail</span>
+              <span class="row-value">A small number of very heavy users drive disproportionate LLM spend. Mitigation: per-user budgets in managed mode with soft caps + nudge to BYOK or local-model mode if exceeded consistently.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">5. R2 egress and decrypt overhead on team queries</span>
+              <span class="row-value">A large team where many members are querying simultaneously means the backend is decrypting overlapping team-reef segments. Mitigation: shared decrypted working sets in backend memory (one decrypt serves N concurrent team-member queries), R2 read caching at the backend layer. Not a v1 problem; will become one as teams scale past 100 members.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: INGESTION ENGINE -->
+    <section class="section" id="ingestion">
+      <div class="section-header">
+        <span class="section-num">06</span>
+        <h2>Ingestion <em>Engine</em></h2>
+      </div>
+
+      <p>The ingestion engine receives content from external sources, chunks it into atoms, generates embeddings, and writes atoms to the user's encrypted reef storage in the cloud. Under v1's cloud-primary architecture the engine runs in the cloud backend — platform add-ins and chat bots call its ingestion API directly; AI tools write through the remote MCP server, which calls the same ingestion path. There is no OAuth-and-poll silent connector path — every external source connects through a platform-native mechanism that surfaces ingestion as a visible, in-context act. Three modes cover the v1 surface.</p>
+
+      <div class="subsection" id="ingestion-modes">
+        <h3>Mode 1 — Platform add-ins (meetings &amp; email)</h3>
+        <p>The user installs a Coralswarm add-in inside the source platform — Zoom, Microsoft Teams, Google Meet, Outlook, Gmail. The add-in is the UI surface for ingestion: a button the user presses inside the platform where the content lives. When pressed, the add-in calls the platform's API to fetch the underlying content (or trigger a recording, in the case of meetings).</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Meeting add-in — Zoom / Teams / Meet</span>
+            <div class="feature-tags"><span class="tag v1">v1</span><span class="tag privacy">privacy-critical</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">What it does</span>
+              <span class="row-value">During a live meeting, the user clicks the Coralswarm Ingest button in the platform's add-in surface (Zoom App Marketplace, Teams app, Google Workspace add-on). The add-in triggers the platform's native recording / transcription via API. When the meeting ends, the add-in fetches the resulting transcript from the platform API and pipes it into the local ingestion engine as atoms.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">How it works</span>
+              <span class="row-value">
+                1. User clicks Ingest inside the Zoom/Teams/Meet add-in.<br>
+                2. Add-in calls the platform's API to start recording and request a transcript. The platform shows its standard recording notice to all participants (this is the consent signal).<br>
+                3. Coralswarm's cloud backend polls the platform API for transcript availability (using OAuth tokens authorized at install time). Most platforms make the transcript available within minutes of meeting end.<br>
+                4. Transcript pulled via API, chunked into ~512-token atoms with speaker attribution from the platform's metadata.<br>
+                5. Atoms embedded server-side and written to the user's encrypted reef storage. Extraction pipeline runs async to suggest thread / entity / decision nodes.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Consent model</span>
+              <span class="row-value">Relies on the meeting platform's own recording notice — every major platform announces and indicates recording to participants by policy. This satisfies two-party consent in CA, FL, IL, MD, etc. by the same mechanism that any other recording action in Zoom/Teams/Meet does. The user doesn't need to send a separate notice.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Audio handling</span>
+              <span class="row-value">Coralswarm does <strong>not</strong> capture audio locally. The audio stays inside the meeting platform's pipeline. Only the resulting transcript (text) leaves the platform, on a per-meeting user-triggered basis. This is a deliberate scope choice: the platforms already have the audio; Coralswarm doesn't expand the surface area.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">v1 platforms</span>
+              <span class="row-value">Zoom (Marketplace app + transcript API), Microsoft Teams (Teams app + Graph API for transcripts), Google Meet (Workspace add-on + Meet transcript API, requires Workspace Business Standard+).</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Out of scope for v1</span>
+              <span class="row-value">In-person meetings, audio-only calls, meetings on platforms without a transcript API. These are addressed by the v1.x screen-recording + Whisper fallback path (committed — see v2 Roadmap and Open Questions). v1 ships with platform-API capture only.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Email add-in — Outlook / Gmail</span>
+            <div class="feature-tags"><span class="tag v1">v1</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">What it does</span>
+              <span class="row-value">User opens a thread in Outlook or Gmail and clicks Ingest in the Coralswarm add-in (Outlook add-in pane / Gmail add-on). The add-in calls the mail provider's API (Microsoft Graph for Outlook, Gmail API for Gmail) to fetch the thread's content and registers the thread for ongoing capture.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">How it works</span>
+              <span class="row-value">
+                1. User clicks Ingest inside the email client's add-in pane.<br>
+                2. Add-in calls the mail provider's API with the thread ID.<br>
+                3. Current thread state (subject, participants, all messages to date) pulled and ingested as atoms.<br>
+                4. The thread ID is added to the user's "watched threads" list. New replies on the same thread are ingested automatically (per the mail provider's push or polling-on-trigger model) until the user explicitly un-watches.<br>
+                5. The add-in pane surfaces an indicator that this thread is being captured, visible to the user every time they open it.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Future replies</span>
+              <span class="row-value">Once a thread is ingested, future replies on it flow in automatically — the user has signaled that this thread is in scope. Mechanism: the cloud backend maintains a per-user <code>watched_threads</code> list and polls each thread via the mail provider's API (Gmail / Graph) using the user's stored OAuth tokens, on two triggers: <strong>(1)</strong> a periodic cadence (~10–15 minutes) regardless of whether any Coralswarm client is open, and <strong>(2)</strong> on demand via a "Sync this thread now" action in the email add-in. App launch is deliberately not a trigger — opening a client is not, by itself, an ingestion intent. The user can un-watch a thread at any time. Threads not explicitly ingested are never touched.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Consent boundary</span>
+              <span class="row-value"><strong>Honest disclosure:</strong> other recipients of an email thread are not notified that one party has ingested it through Coralswarm. This is the same posture as forwarding, BCC-archiving, or copying-into-Notion — a recipient's own copy of content they were sent is theirs to capture. Coralswarm doesn't take this further: it does not analyze contacts, summarize unread mail, or pull anything the user has not actively chosen to ingest.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">v1 platforms</span>
+              <span class="row-value">Outlook (Microsoft 365 add-in via Office.js + Graph API), Gmail (Workspace Marketplace add-on via Gmail API). Both desktop and web mail clients supported through the same add-in.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Mode 2 — Chat bots</h3>
+        <p>For team chat platforms (Slack, Microsoft Teams chat, Discord), Coralswarm runs as a bot user. Someone with admin or workspace rights installs the bot at the workspace level; individual channels opt in by inviting the bot. Once invited, the bot ingests messages in that channel from the moment of invite forward. The bot's presence in the member list is the consent signal — every person in the channel can see it's there.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Chat bot ingestion</span>
+            <div class="feature-tags"><span class="tag v1">v1</span><span class="tag privacy">privacy-critical</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">What it does</span>
+              <span class="row-value">Once invited to a Slack channel, Teams chat, or Discord channel, the Coralswarm bot subscribes to new messages via the platform's events API. Each new message becomes an atom in the inviting user's personal reef (and, by co-presence, in the personal reefs of any other Coralswarm users in the channel). No historical backfill from before the invite — the bot ingests from invite-time forward only.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">How it works</span>
+              <span class="row-value">
+                1. Workspace admin installs Coralswarm as an app at the workspace/server level (one-time OAuth at install time, scoped narrowly to messages.read on channels the bot is invited to).<br>
+                2. A user invites the bot to a specific channel (<code>/invite @coralswarm</code> in Slack, "Add member" in Teams, etc.).<br>
+                3. The bot subscribes to that channel's message events via the platform's webhook/socket API.<br>
+                4. Each new message: streamed to the inviting user's local Coralswarm client, chunked into an atom (one message = one atom typically), embedded, stored.<br>
+                5. The bot posts a one-time message on invite: "Coralswarm is now capturing this channel for [inviting user]. Anyone can <code>/coralswarm-pause</code> to stop." So everyone sees the intent.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Consent model</span>
+              <span class="row-value">The bot is a visible member of the channel. Group consent is established the same way as a meeting bot: everyone sees it, anyone can object, the inviting user takes responsibility for its presence. This is the model platforms like Otter, Read, and Granola already use for meetings — generalized to chat.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Scope &amp; control</span>
+              <span class="row-value">
+                Bot only ingests from channels it's invited to. Never DMs unless invited to a group DM.<br>
+                Any channel member can <code>/coralswarm-pause</code> or remove the bot.<br>
+                Coralswarm doesn't index private or admin-only channels unless the bot is explicitly added.<br>
+                The bot identity (display name, avatar) is consistent across workspaces — recognizable as a Coralswarm bot, not disguised.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">v1 platforms</span>
+              <span class="row-value">Slack (Apps + Events API), Microsoft Teams (Bot Framework + Graph API), Discord (deferred to v1.x — different consent norms in Discord communities). DMs not supported in v1.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>Mode 3 — AI tool capture (MCP + hooks)</h3>
+        <p>The remote MCP server is bidirectional. AI tools the user has connected — Claude Code, Cursor, Cowork, custom agents — can read context from Coralswarm and write context back to it. User-configured hooks define when the AI tool should auto-dump data, eliminating the need to manually save context at the end of each session.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Bidirectional MCP ingestion</span>
+            <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">What it does</span>
+              <span class="row-value">When an AI tool reaches a decision, finishes a task, or hits a configured hook event (session end, branch checkout, file commit, etc.), it writes a context atom back to Coralswarm via MCP. The personal reef grows from AI-assisted work the same way it grows from meetings and email.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">MCP write surface</span>
+              <span class="row-value">
+                <code>write_context(content, type, metadata)</code> — generic context atom write.<br>
+                <code>suggest_decision(title, rationale, alternatives)</code> — queue a decision candidate for user review.<br>
+                <code>append_to_thread(thread_id, content)</code> — extend an existing thread with new context.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Hook configuration</span>
+              <span class="row-value">
+                Users configure hooks per tool. Common patterns:<br>
+                — <strong>Claude Code:</strong> hook on session end → dump a session summary, list of files touched, and any decisions reached. Hook on <code>Stop</code> events → write a final-state atom.<br>
+                — <strong>Cursor:</strong> hook on commit → write a "what changed and why" atom linked to the commit.<br>
+                — <strong>Custom agents:</strong> any agent calling MCP can be configured to dump on its own task-completion events.<br>
+                Hooks are defined in the AI tool's own configuration (Claude Code's <code>settings.json</code> hooks block, Cursor's rules file, etc.), pointing at Coralswarm's MCP server.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">User control</span>
+              <span class="row-value">MCP write permissions are granted per-tool, separately from read permissions. Every write surfaces in the live activity feed with a "see what was written" link. The user can revoke write access at any time without losing previously-written content.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: KNOWLEDGE GRAPH -->
+    <section class="section" id="graph">
+      <div class="section-header">
+        <span class="section-num">07</span>
+        <h2>Knowledge <em>Graph</em></h2>
+      </div>
+
+      <p>The knowledge graph is the core product surface. It transforms raw atoms into structured, queryable nodes — and maintains the relationships between them. Two processes build the graph: the extraction pipeline (automatic) and user curation (manual).</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Extraction pipeline</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">After atoms are stored, an async background pipeline runs LLM-powered extraction to identify entities, threads, and candidate decisions from the new atoms. Entities and threads are created automatically. Decision candidates are queued for user review.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Entity extraction</span>
+            <span class="row-value">LLM prompt identifies named entities (people, companies, projects, systems) in new atoms. Resolves aliases (e.g. "the Henderson client" → existing "Henderson" entity). Creates new entity node if no match. Links atom to entity via <code>atom_ids[]</code>.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Thread extraction</span>
+            <span class="row-value">Groups atoms by source event (a meeting = one thread, an email thread = one thread, a Slack channel session = one thread). Generates a short LLM summary stored as <code>thread.summary</code>. Links all atoms from the event to the thread node.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Decision candidates</span>
+            <span class="row-value">LLM prompt looks for decision-shaped content in atoms: "we decided / we chose / we're going with / we're not doing X because." Extracts title, rationale, and alternatives. Queues as a candidate — does not create a decision node until user approves.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">LLM used</span>
+            <span class="row-value">Claude Haiku (default) for cost efficiency. Extraction prompts are small and well-structured. Estimated ~$0.002 per meeting hour of extraction at current Haiku pricing.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">User curation interface</span>
+          <div class="feature-tags"><span class="tag v1">v1</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">Surfaces decision candidates in a review queue. User accepts (with optional edits), rejects, or marks as "not a decision." Also allows manual node creation, entity merging, and graph editing.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Decision review</span>
+            <span class="row-value">Notification badge on the Coralswarm icon when new candidates are queued. Review UI shows: candidate title, extracted rationale, source atoms (with context), and the option to edit any field before accepting. Rejections feed back as negative examples to improve future extraction.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Manual creation</span>
+            <span class="row-value">User can create any node type directly: "New Decision," "New Entity," "New Reference." Manual nodes can be linked to existing atoms or created standalone.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: TEMPORAL MEMORY -->
+    <section class="section" id="temporal">
+      <div class="section-header">
+        <span class="section-num">08</span>
+        <h2>Temporal <em>Memory</em></h2>
+      </div>
+
+      <p>Coralswarm's knowledge graph grows over time, and time matters in how it stays useful. Three temporal behaviors are first-class in v1: <strong>recency-staged answers</strong> (every claim is dated so the user knows how fresh it is), <strong>contradiction handling</strong> (when two pieces of data disagree, the system picks the newer by default but surfaces the assumption for the user to confirm or reject), and <strong>entity drift</strong> (entities whose description has shifted over time are flagged on their entity page). Together these turn the graph from a static accumulation of atoms into something that ages well.</p>
+
+      <p>Underlying all three: the <code>decided_at</code> field on decision nodes is mandatory in v1, sourced from the underlying event timestamp (meeting time, Slack message time, email send time) rather than from when the extraction pipeline ran. Manual override exists for cases where the source-event time isn't the actual decision time, but the default is source-event. This is the field the entire temporal layer depends on being honest.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Recency-staged synthesis</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">Every synthesized answer surfaces timestamps inline with its claims. "We're using Paddle" becomes "We're using Paddle (decided 1 week ago)." The user weighs recency against whether the claim is fresh or stale in their context &mdash; the system doesn't assume on the user's behalf.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">How it works</span>
+            <span class="row-value">The retrieved-context block passed to the synthesizer carries each atom's and each node's relevant timestamps (<code>atom.timestamp</code> for raw content, <code>decision.decided_at</code> for decisions, <code>thread.date_range</code> for threads). The synthesis prompt instructs the LLM to surface those timestamps inline with the substantive claims they support. No new data model, no retrieval-time work &mdash; a synthesis-prompt change only.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Why it matters</span>
+            <span class="row-value">RAG products commonly answer with full confidence from material of unknown age. The user can't tell if "we're using Stripe" was decided yesterday or 18 months ago. Surfacing the age makes the answer honest and lets the user override the system's implicit recency judgment when their domain knowledge says the older claim is still operative.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Contradiction handling</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">When retrieval surfaces two pieces of data that disagree on the same point &mdash; "we're using Stripe" from 3 weeks ago and "we're using Paddle" from 1 week ago &mdash; the system picks the newer for its answer, surfaces the assumption inline, and offers a one-click confirm or reject. Confirmed supersessions become permanent edges in the graph; rejections become permanent non-supersession markers. Future queries get cleaner.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Default behavior</span>
+            <span class="row-value">Newer wins by default &mdash; never older wins, never both shown without commentary, never a refusal to answer. The system commits to an answer, and is transparent about the assumption that drove it. Recency is the right default for "what's currently true" queries, which is the dominant query shape. The newer-wins assumption is occasionally wrong, which is why the inline confirmation exists.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Data model additions</span>
+            <span class="row-value">
+              Two new tables, kept separate from the node schema so the temporal layer is cleanly composable:<br><br>
+              <code>supersession_edge</code> &mdash; one row per confirmed supersession. Fields: <code>superseded_id</code>, <code>superseder_id</code>, <code>confirmed_by</code>, <code>confirmed_at</code>, <code>source</code> (<code>'suggested'</code> when accepted from an inline prompt, <code>'manual'</code> when a user explicitly creates one).<br><br>
+              <code>non_supersession_pair</code> &mdash; one row per pair of nodes the user has marked as not in a supersession relationship. Order-insensitive. Fields: <code>node_a_id</code>, <code>node_b_id</code>, <code>marked_by</code>, <code>marked_at</code>. Without this, the same prompt fires every query for the same pair &mdash; fatigue.
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Retrieval changes</span>
+            <span class="row-value">One new step in the retrieval pipeline (see section 10), inserted between graph expansion and rerank: <strong>contradiction detection</strong>. For the retrieved node set, find pairs that (a) share an entity, (b) have substantively different content on the same point, (c) don't already have a <code>supersession_edge</code>, (d) aren't in <code>non_supersession_pair</code>. Pass any flagged pairs to the synthesizer.<br><br>
+              Detection itself happens inside the synthesis LLM in v1 &mdash; the synthesis prompt asks for structured output that includes a <code>contradiction_suggestions</code> field alongside the answer. If quality suffers at scale, upgrade to a dedicated Haiku pre-pass before synthesis. Unlikely to be needed at typical retrieval set sizes of ~10 nodes.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">UX</span>
+            <span class="row-value">
+              Inline below the answer, when a contradiction was detected:<br><br>
+              <em>"Paddle (decided 1 week ago) &mdash; appears to replace Stripe (3 weeks ago). [Replaces Stripe]&nbsp;&nbsp;[These are separate]"</em><br><br>
+              <strong>[Replaces Stripe]</strong> writes a <code>supersession_edge</code>; future queries auto-resolve to the newer node, with the supersession shown as historical context. <strong>[These are separate]</strong> writes a <code>non_supersession_pair</code>; future queries continue to surface both but don't re-prompt about their relationship.
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">No proactive surfacing</span>
+            <span class="row-value">v1 deliberately does <strong>not</strong> notify users about contradictions outside of query context. The system doesn't ping you to say "I noticed two contradicting decisions about auth, review?" If you never ask, the contradiction sits in the graph as latent. This is a constraint, not an oversight &mdash; proactive notifications fight the passive-capture promise. Easier to add later than to remove.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Entity drift</span>
+          <div class="feature-tags"><span class="tag v1">v1</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">When the user opens an entity page and that entity's recent atoms describe it substantively differently than its older atoms, surface a "this entity's description has shifted" indicator with an optional "see evolution" timeline view. The user can read the evolution, manually fork the entity into two if the shift was actually a rename (e.g., "Project Atlas" &rarr; "Atlas Migration"), or ignore the indicator.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">How it works</span>
+            <span class="row-value">Computed at view time, not at ingest time. When the user opens an entity page, the backend (a) collects the entity's atoms split by date &mdash; last 90 days vs. older, (b) generates a brief LLM summary of each half, (c) embeds both summaries and computes cosine distance. If the distance crosses a threshold (TBD, see Open Questions), the drift indicator shows. No background job, no stored state, no retrieval-time impact.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Why lazy</span>
+            <span class="row-value">Drift is the lowest-leverage of the three temporal behaviors &mdash; most users don't think about it most of the time. Computing it eagerly at ingest time would waste compute on entities no one revisits. Computing it lazily at view time keeps the cost proportional to actual user interest.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">No automatic forking</span>
+            <span class="row-value">The system never forks an entity automatically. Even when drift is detected, the action is a flag, not a structural change. The user decides whether the drift represents the same entity evolving or two entities that should be split. Auto-forking would create silent graph mutations the user can't predict &mdash; and that breaks the trust the rest of the design works to earn.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <span class="callout-icon">&#8505;</span>
+        <div class="callout-body"><strong>What's deliberately not in v1.</strong> True bitemporal modeling (separating valid time from transaction time), point-in-time entity reconstruction ("show me Henderson as of March"), and automatic entity-state-at-date computation. These are real features for an audit or compliance product; they're heavy and they're not what the v1 use case demands. The three behaviors above cover the daily workflow &mdash; knowing how old something is, resolving conflicts when they arise, and noticing when meaning has shifted. The heavier temporal features land in v2 or later if customer conversations push for them.</div>
+      </div>
+    </section>
+
+    <!-- SECTION: CO-PRESENCE SHARING -->
+    <section class="section" id="copresence">
+      <div class="section-header">
+        <span class="section-num">09</span>
+        <h2>Co-presence <em>Sharing</em></h2>
+      </div>
+
+      <p>Co-presence is the mechanism that automatically distributes context to all participants of a shared event — without requiring any explicit sharing action. It's the viral loop: one user ingests, everyone benefits.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Co-presence distribution</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">When an atom is ingested from a shared event (meeting, email thread, group chat), the ingestion engine identifies all co-present participants from the source metadata. Any participant who is a Coralswarm user receives a copy of the resulting nodes in their personal graph.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">How it works</span>
+            <span class="row-value">
+              1. Ingestion engine extracts <code>participants[]</code> from source metadata (calendar attendees, email recipients, Slack channel members).<br>
+              2. Looks up each participant email against the Coralswarm user directory (cloud lookup — just email → user_id mapping, no content shared yet).<br>
+              3. For each matched user: the thread/entity nodes generated from the atoms are queued in that user's co-presence inbox on the cloud backend (encrypted).<br>
+              4. When the matched user opens Coralswarm, their client decrypts and syncs the co-presence nodes into their personal graph.<br>
+              5. Nodes land with <code>source: copresence</code> so the user knows the origin.
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Opt-out</span>
+            <span class="row-value">Any co-presence node can be deleted from the personal graph at any time. Deletion is local — doesn't affect the originating user's copy or other participants' copies.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Outreach to non-users</span>
+            <span class="row-value">When the participant lookup returns an email address that doesn't match any Coralswarm user, the email is added to an outreach queue. Coralswarm sends that address a value-proposition email — "you've been in N meetings / M threads where colleagues are documenting context. Sign up for a 7-day free trial to access them." The email contains no captured content; the actual material surfaces only after authenticated signup. Cadence: one email on first co-presence event per recipient, weekly digests after, auto-stop at 4 weeks without conversion. See Open Questions for the full pricing decision.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Backfill on signup</span>
+            <span class="row-value">When a new user signs up — whether from a Coralswarm outreach email or organically — the system queries the co-presence inbox for all events where colleagues have already ingested content they were part of. User sees a consent screen during onboarding: "You were in 12 meetings and 4 email threads your colleagues ingested. Import?" Accepts per-item or in bulk. New signups get 7 days of full paid-tier access (cloud sync + mobile + web) so they experience the backfill on the surfaces it's most valuable on. At trial end, account converts to paid or drops to the free tier with an export option.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Privacy boundary</span>
+            <span class="row-value">Co-presence is based on who was <strong>present</strong>, not who was <strong>mentioned</strong>. If a meeting discusses Bob but Bob wasn't on the invite, Bob receives nothing. Subjects ≠ participants.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout privacy">
+        <span class="callout-icon">🔒</span>
+        <div class="callout-body"><strong>Security model:</strong> Co-presence routing happens entirely server-side under v1's cloud-primary architecture. The cloud backend matches event participants against the Coralswarm user directory, queues the resulting nodes against each recipient's encrypted reef, and serves them on the recipient's next query. The encryption posture is the same as any other reef content (see Privacy and Data Use). Co-presence under Local Mode (future) shifts to the recipient's device decrypting bundles delivered from the cloud.</div>
+      </div>
+    </section>
+
+    <!-- SECTION: QUERY & RETRIEVAL -->
+    <section class="section" id="query">
+      <div class="section-header">
+        <span class="section-num">10</span>
+        <h2>Query &amp; <em>Retrieval</em></h2>
+      </div>
+
+      <p>Coralswarm exposes three query surfaces: the web app's query bar, the MCP server (for AI tools), and the CLI. All three pathways flow through the same retrieval engine in the cloud backend.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Retrieval engine</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">Takes a natural language query. Returns a synthesized answer with citations linking to the source nodes and atoms. Uses a hybrid retrieval strategy: vector similarity search + keyword search + graph traversal.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Where it runs</span>
+            <span class="row-value">Cloud backend (Rust). All v1 clients submit queries over an authenticated session and the backend handles the pipeline end-to-end. Decryption of the relevant graph chunks happens in working memory for the duration of the query and is discarded afterward — see Privacy and Data Use in Architecture Overview. Local Mode (future) re-localizes the same pipeline to user devices.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Retrieval steps</span>
+            <span class="row-value">
+              1. <strong>Embed the query</strong> using the embedding model in the cloud backend.<br>
+              2. <strong>Vector search</strong> against atom embeddings (pgvector / sqlite-vec). Returns top-K atoms by cosine similarity.<br>
+              3. <strong>Keyword search</strong> (BM25) against atom content for exact-match boost.<br>
+              4. <strong>Graph expansion</strong>: for each returned atom, fetch its parent node and sibling atoms (same thread, same entity). This surfaces context the vector search alone would miss.<br>
+              5. <strong>Contradiction detection</strong>: look for pairs of retrieved nodes that share an entity, have substantively different content on the same point, and aren't already linked by a <code>supersession_edge</code> or <code>non_supersession_pair</code>. Pass flagged pairs to the synthesizer. See section 08 for full design.<br>
+              6. <strong>Rerank</strong> the expanded context by relevance + recency.<br>
+              7. <strong>Synthesize</strong> using the LLM: prompt includes the top context chunks + the original query + any flagged contradictions. Returns an answer with in-line citations to source nodes, inline timestamps on substantive claims, and structured <code>contradiction_suggestions</code> when applicable.
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Scope control</span>
+            <span class="row-value">Queries run against the user's personal reef by default. User can specify <code>scope: team</code> or <code>scope: all</code>. Team-reef access is enforced server-side against the user's team membership — only authorized members can trigger team-reef decryption + retrieval.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Citation format</span>
+            <span class="row-value">Every claim in the synthesized answer is linked to its source node (decision / thread / entity) and the specific atom it came from. Users can click through to see the original content in context.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">CLI interface</span>
+          <div class="feature-tags"><span class="tag v1">v1</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Command</span>
+            <span class="row-value"><code>coralswarm</code> with alias <code>cs</code></span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Core commands</span>
+            <span class="row-value">
+              <code>cs query "what did we decide about auth?"</code> — natural language query<br>
+              <code>cs context --project henderson</code> — entity context dump<br>
+              <code>cs share &lt;node-id&gt; --to team</code> — promote node to team graph<br>
+              <code>cs ingest --source slack --channel #eng</code> — trigger manual ingestion<br>
+              <code>cs status</code> — show recent activity, queue depth, last ingestion time
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Implementation</span>
+            <span class="row-value">Standalone Rust binary. Authenticates with the cloud backend and sends commands over HTTPS. Requires connectivity in v1; Local Mode users will get a CLI variant that runs against their local Rust core.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: MCP SERVER -->
+    <section class="section" id="mcp">
+      <div class="section-header">
+        <span class="section-num">11</span>
+        <h2>MCP <em>Server</em></h2>
+      </div>
+
+      <p>The MCP server connects Coralswarm to AI tools (Claude Code, Cursor, custom agents). The cloud backend serves it at <code>/mcp</code> (<code>backend/src/mcp/</code>); nothing runs on the user's machine. Every read or write call runs the same retrieval or ingestion logic the web app uses. Before ADR 0015 (<code>docs/decisions/0015-retire-desktop-app.md</code>) this was a local sidecar of the desktop client.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">MCP tool surface</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Implementation</span>
+            <span class="row-value">Rust module in the cloud backend (<code>backend/src/mcp/</code>), built on <code>rmcp</code>'s streamable HTTP service in stateless mode. Tool calls run directly against the backend's store and retrieval code.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Read tools</span>
+            <span class="row-value">
+              <code>search_context(query, scope?)</code> — hybrid search, returns synthesized answer + citations<br>
+              <code>get_node(node_id)</code> — fetch a specific node by ID<br>
+              <code>get_entity(name)</code> — pull everything about a named entity<br>
+              <code>get_recent_decisions(scope?, days?)</code> — recent decision nodes<br>
+              <code>get_thread(thread_id)</code> — full thread with all atoms<br>
+              <code>list_nodes(type?, scope?)</code> — paginated node listing
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Write tools</span>
+            <span class="row-value">
+              <code>write_context(content, type, metadata)</code> — ingest content from AI tool session<br>
+              <code>suggest_decision(title, rationale, alternatives)</code> — queue a decision candidate for user review<br>
+              <code>append_to_thread(thread_id, content)</code> — extend an existing thread with new context
+            </span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Transport</span>
+            <span class="row-value">MCP streamable HTTP at the backend's <code>/mcp</code> route. Requests over 2 MiB are rejected.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Lifecycle</span>
+            <span class="row-value">Available whenever the backend is up. There is no local process or app to keep open.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Auth</span>
+            <span class="row-value">OAuth, with Clerk as the authorization server; the backend publishes RFC 9728 protected-resource metadata. A token carries <code>coralswarm:read</code> and, if granted, <code>coralswarm:write</code>; write tools refuse a read-only token. Removing the connector in the AI tool revokes access without losing previously-written content.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Connectivity required</span>
+            <span class="row-value">The MCP server is part of the cloud backend, so AI tools using Coralswarm via MCP require connectivity. Local Mode users will get a fully local MCP backend (the existing v2 work to bring retrieval client-side serves this directly).</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Compatible tools</span>
+            <span class="row-value">Any tool that supports MCP: Claude Code, Claude Desktop, Cursor, Cowork, custom agents. Standard MCP means zero integration work beyond registering the server address.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: LLM LAYER -->
+    <section class="section" id="llm">
+      <div class="section-header">
+        <span class="section-num">12</span>
+        <h2>LLM <em>Layer</em></h2>
+      </div>
+
+      <p>Coralswarm uses LLMs for three tasks: extraction (building nodes from atoms), synthesis (answering queries), and the in-app conversational interface. The LLM layer is configurable — users can query Coralswarm directly through the app, or connect their own API keys.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">LLM configuration</span>
+          <div class="feature-tags"><span class="tag v1">v1</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Managed mode</span>
+            <span class="row-value">Default. User queries Coralswarm directly through the app interface. Coralswarm makes LLM API calls on the user's behalf using a managed key. Billed as part of the subscription. Simplest onboarding — no API key required.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">BYOK mode</span>
+            <span class="row-value">User connects their own Anthropic, OpenAI, or compatible API key. Stored in OS keychain. All LLM calls route through the user's key. Useful for power users with existing API contracts or who want full cost visibility.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Local model mode</span>
+            <span class="row-value">(v1.1) Power users running a local LLM via Ollama on a machine the cloud backend can reach (or via a future Local Mode build that runs the entire pipeline on-device). v1 default sends LLM calls from the cloud backend to whichever provider the user has configured.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Model defaults</span>
+            <span class="row-value"><strong>Extraction:</strong> Claude Haiku (fast, cheap, structured output). <strong>Synthesis:</strong> Claude Sonnet (better reasoning, worth the cost for query answers). <strong>Embeddings:</strong> bge-small-en running server-side in the cloud backend's Rust core (v1). Local Mode users will run embeddings on-device.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Cost estimate</span>
+            <span class="row-value">~$0.002/meeting hour for extraction (Haiku). ~$0.01–0.05/query for synthesis (Sonnet, depending on context size). An active user ingesting 5 meetings/week and running 20 queries/week costs approximately $0.30–0.60/week in LLM costs at current pricing.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: TEAM GRAPH SYNC -->
+    <section class="section" id="sync">
+      <div class="section-header">
+        <span class="section-num">13</span>
+        <h2>Team Graph <em>Sync</em></h2>
+      </div>
+
+      <p>The team graph is shared context across team members. Under v1's cloud-primary architecture, the team graph lives in the cloud backend as the canonical store; clients (web, CLI, MCP) query it through the same retrieval API they use for personal reefs, with team scope. There is no client-to-client peer sync — every read or write goes through the backend.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Team graph architecture</span>
+          <div class="feature-tags"><span class="tag v1">v1</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">What it does</span>
+            <span class="row-value">When a user promotes a node to the team reef, or when co-presence distribution creates team-scoped atoms, the cloud backend writes the content to team-scoped storage (encrypted with the team key) and broadcasts an update event to connected team members' clients. Team members querying the team reef hit the same backend retrieval engine, scoped to their team's data.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Encryption model</span>
+            <span class="row-value">Team has a per-team symmetric key (AES-256-GCM) generated by the cloud backend on team creation. The key is stored encrypted at rest, wrapped in an envelope key tied to team-member authentication. When an authorized team member queries the team reef, the backend unwraps the team key in working memory, decrypts the relevant atoms, runs retrieval, and discards the unwrapped key. The honest framing: the backend has the <em>capability</em> to decrypt team content; access control governs <em>when</em> it does. Not strict E2E — see Privacy and Data Use in Architecture Overview.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Access control</span>
+            <span class="row-value">Team membership is checked server-side on every team-reef query and write. A user removed from a team loses access immediately on next request — no propagation lag, no possibility of stale client cache letting them in. Team admins manage membership in the web app.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Conflict resolution</span>
+            <span class="row-value">Backend-mediated. Atoms are append-only (no conflict possible). For node metadata edits, the backend serializes writes — last write wins at the record level, with full version history kept. If two users edit the same decision node within seconds, both versions are preserved and the second user sees a "this was just edited by [name]" prompt before their change is applied.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Real-time updates</span>
+            <span class="row-value">WebSocket push from the cloud backend to connected clients on team-reef changes (new nodes, edits, co-presence arrivals). When a client is offline, updates accumulate server-side and are surfaced on reconnect.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Offboarding</span>
+            <span class="row-value">When a team member is marked as departed: their personal reef stays theirs (exportable on request via the cloud backend, then deletable). Their contributions to the team reef remain — provenance is preserved. They lose access to team-reef queries immediately. The team key is rotated by the backend automatically; clients of remaining members never see the rotation.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Local Mode interaction (future)</span>
+            <span class="row-value">Local Mode users running fully on-device will receive team-reef content as encrypted bundles synced from the cloud backend, decrypted client-side. Effectively the v1-era E2E team-sync model, only enabled for users who opt into Local Mode. Mixed teams (some members on Local Mode, some not) work: the cloud backend serves both query paths from the same canonical store.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: CONNECTORS -->
+    <section class="section" id="connectors">
+      <div class="section-header">
+        <span class="section-num">14</span>
+        <h2><em>Connectors</em></h2>
+      </div>
+
+      <p>"Connectors" in Coralswarm v1 are not a unified abstraction — they are platform-specific integrations falling into three categories that match the three ingestion modes (section 06): <strong>platform add-ins</strong> (meeting + email clients), <strong>chat bots</strong> (team chat platforms), and <strong>AI tool integrations</strong> (MCP servers + hooks). Each category has different installation, authorization, and event-flow mechanics. Listing them per-category rather than under a single interface reflects the reality of the integration surface.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Why no unified connector interface</span>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Add-ins</span>
+            <span class="row-value">Live inside the source platform's UI (Zoom App Marketplace, Office.js, Workspace add-on). Distribution and review go through the platform's app store. Authorization is platform-mediated. Event flow is user-triggered API calls. No polling.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Chat bots</span>
+            <span class="row-value">Live as a workspace-installed app + bot user. OAuth at install time, scoped to message events on invited channels. Event flow is webhook/socket subscriptions to channel messages.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">AI tool integrations</span>
+            <span class="row-value">Coralswarm exposes an MCP server; AI tools connect to it. Event flow is programmatic — the AI tool calls Coralswarm's MCP write tools when its own configured hooks fire.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Why these don't share an interface</span>
+            <span class="row-value">An add-in is a UI extension; a bot is a server-side event subscriber; an MCP integration is a peer-to-peer protocol. Forcing them under one <code>ConnectorInterface</code> abstraction would add code complexity without simplifying anything — the user-facing concepts and the integration mechanics genuinely differ.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="version-timeline">
+        <div class="version-item">
+          <div class="version-label"><span class="ver v1">v1</span></div>
+          <div class="version-content">
+            <h4>Launch surface</h4>
+            <ul>
+              <li><strong>Zoom add-in</strong> — Marketplace app; uses Zoom's recording + transcript APIs. User clicks Ingest in the in-meeting Coralswarm panel.</li>
+              <li><strong>Gmail add-on</strong> — Workspace Marketplace; uses Gmail API to fetch the active thread and watch it for replies. Click Ingest in the side panel.</li>
+              <li><strong>Slack app</strong> — workspace install; bot ingests messages from channels it's invited to.</li>
+              <li><strong>Claude Code MCP integration</strong> — connect Coralswarm's MCP server in Claude Code settings; configure session-end and Stop hooks to auto-dump.</li>
+            </ul>
+            <p style="color: var(--ink-3); font-size: 0.85rem; margin-top: 0.75rem;">v1 launch covers the highest-leverage path: a knowledge worker who lives in Zoom + Gmail + Slack + Claude Code. Other platforms follow shortly.</p>
+          </div>
+        </div>
+        <div class="version-item">
+          <div class="version-label"><span class="ver v1-1">v1.1</span></div>
+          <div class="version-content">
+            <h4>+60 days — Microsoft stack</h4>
+            <ul>
+              <li><strong>Microsoft Teams add-in (meetings)</strong> — Teams app; uses Microsoft Graph for meeting transcripts.</li>
+              <li><strong>Microsoft Teams bot (chat)</strong> — workspace bot for Teams channel ingestion. Same model as Slack.</li>
+              <li><strong>Outlook add-in</strong> — Microsoft 365 add-in via Office.js + Graph API. Same model as Gmail add-on.</li>
+              <li><strong>Cursor MCP integration</strong> — Cursor rules file hooks for commit-time and session-end context dumps.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="version-item">
+          <div class="version-label"><span class="ver v1-1">v1.2</span></div>
+          <div class="version-content">
+            <h4>+90 days — Google stack &amp; document sources</h4>
+            <ul>
+              <li><strong>Google Meet add-on</strong> — Workspace add-on; uses the Meet transcript API (requires Workspace Business Standard+ on the user's side).</li>
+              <li><strong>Notion integration</strong> — page-level "Add to Coralswarm" button via Notion connection. User selects which pages to ingest; future edits to those pages flow in.</li>
+              <li><strong>Linear / Jira / GitHub</strong> — issue/PR-level integrations following the same explicit-trigger model. Likely shipped via official apps in each platform's marketplace.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="version-item">
+          <div class="version-label"><span class="ver v2">v2+</span></div>
+          <div class="version-content">
+            <h4>Longer-horizon</h4>
+            <ul>
+              <li><strong>Discord</strong> — different consent norms in Discord communities; needs its own design pass.</li>
+              <li><strong>Local screen-recording + Whisper capture</strong> — universal fallback for in-person and non-API platforms. See the v2 Roadmap section for the full design — committed for v1.x.</li>
+              <li><strong>Voice memo / mobile capture</strong> — paired with the mobile app.</li>
+              <li><strong>SDK for third-party integrations</strong> — once the three integration categories are stable, expose them as templates so other tools can ingest into Coralswarm without first-party work.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: OFFBOARDING MODE -->
+    <section class="section" id="offboarding">
+      <div class="section-header">
+        <span class="section-num">15</span>
+        <h2>Offboarding <em>Mode</em></h2>
+      </div>
+
+      <p>Offboarding mode is the killer feature. It surfaces a departing team member's shared context in a structured, queryable form so their successor can get up to speed in days, not months.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Offboarding workflow</span>
+          <div class="feature-tags"><span class="tag v1">v1</span><span class="tag core">core</span></div>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Trigger</span>
+            <span class="row-value">Team admin marks a member as "departing." Can be done by the admin or self-initiated by the departing member. Triggers the offboarding workflow on all team members' clients.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Transition brief</span>
+            <span class="row-value">Auto-generated document from the departing member's team graph contributions. Structured by project/entity: all decisions they were involved in, all threads they led or participated in, all entities in their network. LLM-synthesized, not just a dump. Every claim cited.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Query surface</span>
+            <span class="row-value">Team members can query the departing member's contributions directly: "What was Alex's take on the Henderson client?" "What decisions did Alex make about the auth system?" Answers come from the team graph and are cited to the source node.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Successor handoff</span>
+            <span class="row-value">When a new team member joins to replace the departing one, the onboarding flow includes: "Alex contributed X decisions, Y threads, Z entities to this team's graph. These are available in your team graph." No action required — they're already there.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Data retention</span>
+            <span class="row-value">Departing member's personal graph is exported to them on departure. Their team graph contributions are retained by the team indefinitely (configurable in team settings). No content is deleted on departure.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr />
+
+    <!-- SECTION: V2 ROADMAP -->
+    <section class="section" id="v2-roadmap">
+      <div class="section-header">
+        <span class="section-num">16</span>
+        <h2>v2 <em>Roadmap</em></h2>
+      </div>
+
+      <div class="callout v2">
+        <span class="callout-icon">⚡</span>
+        <div class="callout-body"><strong>v1.5 + v2 scope:</strong> v1.5 features (mobile, cloud app, paid tier) ship shortly after v1. v2 features (Org Graph, Conflict Detection, Enterprise) are documented to show product direction. None require changing the v1 architecture — they extend it.</div>
+      </div>
+
+      <div class="subsection" id="local-capture">
+        <h3>Local Screen Recording + Whisper Capture (v1.x)</h3>
+        <p>A universal meeting capture path independent of any platform's transcript API. Targets the gap the v1 platform-API model leaves: in-person meetings, audio-only calls, platforms without transcript APIs (Webex, GoToMeeting, smaller tools), users on platform tiers that don't include API access, and users who want their meeting audio never to touch a third-party cloud.</p>
+        <p><strong>What it does:</strong> User hits Ingest in the Coralswarm app (not in a platform add-in). A local client captures system audio via the OS audio API — <code>ScreenCaptureKit</code> on Mac, <code>WASAPI loopback</code> on Windows. No such client exists since ADR 0015 retired the desktop client, so this path needs a new host before it can ship. Audio is then transcribed via Whisper, with two viable design options under v1's cloud-primary architecture (see Open Questions): <strong>(a)</strong> stream audio to the cloud backend over an authenticated channel, transcribe server-side. <strong>(b)</strong> Transcribe on-device with whisper.cpp (Metal acceleration on Mac, ONNX on Windows); only the transcript leaves the device. Option (b) is the stronger privacy story; option (a) is the simpler install and works well on weaker user hardware. Transcript chunked into atoms the same way as the API path.</p>
+        <p><strong>Trade-offs vs the v1 platform-API path:</strong> Hardware-dependent (Whisper Small on an M2 Mac runs near real-time; on a 5-year-old i5 with no GPU it can run 5–10x slower than real-time). Speaker attribution is worse — no platform metadata, so attribution comes from diarization in Whisper which is rougher. Privacy is stronger — audio never leaves the user's machine. Two-party consent burden shifts to Coralswarm: the app must send a visible recording notice (in-app banner + optional bot-posted Slack/Teams message) before capturing, since the platforms aren't doing it.</p>
+        <p><strong>Open implementation question:</strong> bundle the Whisper model with that client (~100–500MB depending on size) or download on first use? Bundled is faster on first capture and works offline; lazy-download keeps the v1 binary small. Leaning toward lazy-download with a "warm up" prompt when the user first enables this capture mode.</p>
+      </div>
+
+      <div class="subsection" id="mobile">
+        <h3>Mobile Apps (Native iOS + Android)</h3>
+        <p>Two native mobile apps shipping in the v1.5 / v1.6 window as paid-tier features. iOS first in v1.5 (Swift + SwiftUI), Android in v1.6 (Kotlin + Jetpack Compose). Native — not React Native, not Flutter. Full query and node browsing parity with the web app from the user's perspective. No ingestion from mobile in v1.5/1.6 — meeting capture and connector ingestion stay off mobile until v2.</p>
+
+        <p>The earlier React Native plan was replaced because native iOS Swift builds toward the eventual Mac native app at meaningful code-reuse (UI components, data layer), and native gives better UX on Mac-heavy beachhead markets. Trade-off: two mobile codebases instead of one — significantly mitigated by the thin-client architecture, which keeps both apps small.</p>
+
+        <p><strong>Both apps are thin native clients backed by the cloud query engine — the same architecture as the web app.</strong> Retrieval, embedding, and synthesis happen server-side on the Rust cloud backend. The mobile apps own UI, navigation, auth, biometric unlock, push handling, and a small local cache for recently-viewed nodes. They do not embed the Rust core. See the Privacy and Data Use callout in the Architecture Overview for the privacy posture and the Local Mode subsection for the future on-device option.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">iOS app architecture</span>
+            <div class="feature-tags"><span class="tag v1">v1.5</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Stack</span>
+              <span class="row-value">Swift + SwiftUI, iOS 17+ target. Native UI calling the cloud backend's query API. No Rust core embedded for retrieval.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Local storage</span>
+              <span class="row-value">Small cache of recently-viewed nodes (last ~100 nodes, ~10 queries) via Core Data or SQLite for fast re-open. Cache is encrypted with a key in the Keychain. No full graph cache.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Security</span>
+              <span class="row-value">CryptoKit, Keychain Services, Secure Enclave for biometric-protected unlock. Face ID / Touch ID required to open the app.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Push</span>
+              <span class="row-value">APNs routed through the cloud backend. Notifications for co-presence arrivals, team-reef updates, decision candidates awaiting review.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Distribution</span>
+              <span class="row-value">App Store.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Android app architecture</span>
+            <div class="feature-tags"><span class="tag v1">v1.6</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Stack</span>
+              <span class="row-value">Kotlin + Jetpack Compose, Android 13+ target. Native UI calling the cloud backend's query API. Symmetric to iOS.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Local storage</span>
+              <span class="row-value">Small cache of recently-viewed nodes via Room (SQLite) for fast re-open. Cache encrypted with an Android Keystore-protected key.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Security</span>
+              <span class="row-value">Android Keystore for keys, BiometricPrompt for unlock.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Push</span>
+              <span class="row-value">FCM routed through the cloud backend.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Distribution</span>
+              <span class="row-value">Play Store.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Shared behavior across iOS and Android</span>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">What users can do</span>
+              <span class="row-value">
+                <strong>Query:</strong> Natural language query against personal + team graph, served by the cloud query engine. Same retrieval and synthesis logic as the web app.<br>
+                <strong>Browse nodes:</strong> Full node graph browsing — entity pages, decision history, thread summaries.<br>
+                <strong>Decision review:</strong> Accept/reject decision candidates queued by the cloud extraction pipeline.<br>
+                <strong>Share nodes:</strong> Promote personal nodes to team graph from mobile.<br>
+                <strong>Receive notifications:</strong> Co-presence arrivals, team-reef updates.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">What users can't do (v1.5/1.6)</span>
+              <span class="row-value">
+                Ingest meetings (no audio capture on mobile in v1.5/1.6).<br>
+                Manage connector OAuth (the trigger model lives in platform add-ins).<br>
+                Use the CLI (a terminal tool).<br>
+                Query while fully offline (the cache supports browsing recently-viewed nodes but not running new queries — those require a network round-trip to the cloud query engine).
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Offline behavior</span>
+              <span class="row-value">Recently-viewed nodes available for read-only browsing. New queries return an "offline" indicator and queue for retry on reconnect. Decision review queue is read-only while offline. The full query path requires connectivity because retrieval runs server-side.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout v2">
+          <span class="callout-icon">⚡</span>
+          <div class="callout-body"><strong>v2 mobile additions:</strong> Meeting capture from phone (record in-person meetings), email forwarding ingestion (forward an email to person@example.com), voice query (speak a question, get a spoken answer). These are v2 because they require additional permissions, review flows, and significantly more engineering.</div>
+        </div>
+      </div>
+
+      <div class="subsection" id="cloud-app">
+        <h3>Cloud App (Web)</h3>
+        <p>A Next.js web app at <code>app.coralswarm.example</code> that gives users access to their reefs from any browser, with nothing to install. It is the main client.</p>
+
+        <p><strong>Architecturally identical to the other v1 clients.</strong> Under cloud-primary architecture, the web app is a thin client over the same query API the CLI, the MCP server, and the planned mobile apps use. Every surface is server-backed. The web app needs no install and no native shell, and its query path is the same.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Web app architecture</span>
+            <div class="feature-tags"><span class="tag v1">v1.5</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Framework</span>
+              <span class="row-value">Next.js 15+ with App Router + TypeScript. React Server Components for landing, auth, settings, and most pages. Client Components only where genuinely interactive (live query input, streaming answer rendering, real-time activity feed). Deployed on Cloudflare Pages or Vercel.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">What the browser does</span>
+              <span class="row-value">UI rendering, query input, answer display, node browsing, auth (magic link). That's it. No embedding inference, no vector search, no in-browser SQLite, no WASM bundle. First-load weight is the Next.js bundle (~200–500KB).</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">What the cloud does</span>
+              <span class="row-value">
+                On each query (identical to the CLI and MCP paths):<br>
+                1. Client sends the query string over an authenticated session.<br>
+                2. Cloud fetches the user's encrypted graph chunks from R2, decrypts them in working memory.<br>
+                3. Cloud runs embedding inference on the query.<br>
+                4. Cloud runs vector + keyword + graph-expansion retrieval.<br>
+                5. Cloud sends retrieved context to the LLM API (Sonnet, BYOK, etc.) for synthesis.<br>
+                6. Cloud returns the synthesized answer with citations.<br>
+                Decrypted state is discarded after the query. Persistent storage stays encrypted.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Why no in-browser retrieval</span>
+              <span class="row-value">An earlier pre-Option-C plan had the web app run a WASM-compiled Rust core in the browser for E2E retrieval. That path was abandoned along with local retrieval on every other v1 surface — see Architecture Overview. The web app might revisit a WASM Local Mode build if there's demand from privacy-maximalist users who want a browser surface, but that's not on the v1 roadmap.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Key promise</span>
+              <span class="row-value"><strong>Coralswarm does not use any user content — atoms, nodes, queries, or retrieved context — to train, fine-tune, or improve any AI model.</strong> See Privacy and Data Use.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Ingestion from web</span>
+              <span class="row-value">Limited in v1.5: web users can manually paste content or upload files into a reef, and can trigger ingestion from existing connectors (Slack, Gmail, etc.) which run cloud-side regardless of which client started them. Local meeting capture has no client since ADR 0015 (see Local Screen Recording). AI tools capture through the remote MCP server, independent of the web app.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection" id="pricing-tiers">
+        <h3>Free vs Paid Tiers</h3>
+        <p>Under v1's cloud-primary architecture the previous "free = local-only, paid = cloud sync" split no longer maps to the product. Every user runs against the cloud backend regardless of tier. The new split is volume-based: a free tier with hard caps that's a real product but obviously capped, and paid tiers that unlock the full surface. Local Mode (see below) is a future premium option for users whose threat model requires strict E2E — not a tier in itself.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Tier comparison</span>
+            <div class="feature-tags"><span class="tag v1">v1.5</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">Free</span>
+              <span class="row-value">
+                Personal reef capped at ~2,000 atoms total (rolling cap — oldest atoms drop off when the cap is hit, or user can manually choose which to keep).<br>
+                Capped at ~50 queries / month in managed mode (or unlimited with BYOK key).<br>
+                Single user; no team features.<br>
+                All clients (web, CLI, and mobile once shipped) supported — Coralswarm's architecture doesn't artificially gate surfaces.<br>
+                MCP server + CLI included.<br>
+                Intended as a real-product trial, not a forever-free workhorse.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Paid Personal</span>
+              <span class="row-value">
+                Likely $10–15/month. Unlimited personal-reef atoms (subject to fair-use thresholds at multi-100K-atom levels). Unlimited managed-mode queries (with soft caps to flag heavy users for BYOK migration). Priority extraction queue. Full retention and tiering as documented.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Paid Team</span>
+              <span class="row-value">
+                Likely $20–25/seat/month. Everything in Paid Personal plus team reefs, co-presence distribution, team admin console, decision review queues across the team, offboarding workflow. Team plans are the primary commercial path for Coralswarm.
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Enterprise</span>
+              <span class="row-value">Custom pricing. SSO/SAML/OIDC, SOC 2, audit logs, data residency, admin console, DLP. See Enterprise Layer. Likely $50K+ annual contracts.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">7-day free trial</span>
+              <span class="row-value">New users get 7 days of full Paid-tier access on signup — no atom caps, no query caps, full team-reef participation, mobile + web access, co-presence backfill of events colleagues have already ingested. Primary conversion mechanic from the co-presence outreach emails (see Co-presence section): non-users invited via outreach experience the full product before deciding. At trial end, account converts to paid or drops to free tier (capped). Users can export their data at any time.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Local Mode add-on (future)</span>
+              <span class="row-value">When Local Mode ships, it's offered as a feature add-on across Paid tiers (or possibly Enterprise-only depending on demand). See Local Mode subsection below.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Honest framing</span>
+              <span class="row-value">This is a more standard SaaS pricing model than the previous local-first design supported. The free tier is no longer "use the whole product forever, just on one machine" — it's "try the whole product, but capped." This is the tradeoff that came with moving to cloud-primary architecture. The compensating clarity: free users get every surface (web, CLI, MCP) without artificial gating, and the cap is volume-based (not feature-based), so users hit conversion when they outgrow the cap on their own terms.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection" id="org-graph">
+        <h3>Org Graph</h3>
+        <p>A third scope layer above Team. Nodes promoted to the Org graph are accessible to all members of the organization. Requires an admin console for governance, an IT-friendly deployment model, and stricter audit logging. This is the enterprise play — but it's built on top of the individual-first architecture, not replacing it.</p>
+        <p><strong>Key design question:</strong> Who can promote to the Org graph? Only admins? Any team? Any user? This is a policy decision that will depend on what enterprise buyers ask for in v1 design partner conversations.</p>
+      </div>
+
+      <div class="subsection" id="conflict-detection">
+        <h3>Conflict Detection</h3>
+        <p>When the same entity or topic has conflicting decisions across time ("we chose Postgres in March, Redis in October"), the system surfaces the conflict and shows both decisions with their timestamps and provenance. Requires a semantic similarity pass across decision nodes — a scheduled job that runs weekly and flags conflicts for user review.</p>
+      </div>
+
+      <div class="subsection" id="freshness">
+        <h3>Freshness Signals</h3>
+        <p>Nodes decay in relevance over time. A decision made 3 years ago in a fast-moving domain may no longer be current. Freshness signals add a staleness indicator to nodes based on: time since creation, time since any related atom was added, and explicit user "this is still current" confirmations. Surfaces stale nodes for review before they're surfaced in query answers.</p>
+      </div>
+
+      <div class="subsection" id="enterprise">
+        <h3>Enterprise Layer</h3>
+        <p>SSO (SAML / OIDC), SOC 2 Type II, audit logs, data residency options, admin console, DLP controls, API for HR system integration (auto-trigger offboarding on termination). This is what unlocks $50K+ annual contracts. Estimated 6-9 months after v1 GA given the certification timeline for SOC 2.</p>
+      </div>
+
+      <div class="subsection" id="local-mode">
+        <h3>Local Mode</h3>
+        <p>Local Mode is the future premium feature that restores strict end-to-end encryption by running the full retrieval pipeline on-device. It's the answer to "what about users whose threat model can't accept any server-side decryption capability." Not a v1 feature — but the v1 architecture is structured so Local Mode is an addition, not a rewrite.</p>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="feature-name">Local Mode</span>
+            <div class="feature-tags"><span class="tag v2">v2+</span><span class="tag privacy">privacy</span></div>
+          </div>
+          <div class="feature-card-body">
+            <div class="feature-row">
+              <span class="row-label">What it does</span>
+              <span class="row-value">Personal-reef storage, embedding inference, and retrieval all run on the user's device. The cloud backend stores ciphertext only for that user's personal reef and never holds the decryption key. Team-reef content is delivered as encrypted bundles, decrypted on-device with team keys held client-side. The on-device pipeline produces identical retrieval results to the cloud pipeline — it's the same Rust core, just re-targeted.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Privacy posture</span>
+              <span class="row-value"><strong>Strict end-to-end.</strong> The cloud backend has zero capability to decrypt a Local Mode user's content. A compromised cloud operator, a subpoena to Coralswarm, a backend breach — none of these expose Local Mode user data, because the keys live only on the user's device(s). The no-training commitment applies to managed-LLM-mode synthesis the same way as elsewhere; users wanting full air-gap also configure Local Model mode (Ollama or similar) to eliminate LLM-API egress entirely.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Engineering shape</span>
+              <span class="row-value">
+                The Rust core re-targets to client devices:<br>
+                — Native Mac: static library + C header via <code>cbindgen</code>, consumed by Swift.<br>
+                — iOS: same SPM package as Native Mac.<br>
+                — Android: Kotlin bindings via Mozilla's <code>UniFFI</code>.<br>
+                Web: not supported in Local Mode (WASM build is the v1.x-considered-and-deferred path; revisit only if web demand is strong).<br>
+                Storage moves to per-device SQLite + sqlite-vec; embedding model bundles with the install (~30MB for bge-small).
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Trade-offs the user accepts</span>
+              <span class="row-value">
+                Larger install size (~200–300MB on Mac, ~50–100MB on mobile after embedding model).<br>
+                Higher hardware floor (Apple Silicon Mac, modern flagship phones — older hardware may run embedding inference too slowly to feel good).<br>
+                Cross-device sync becomes the user's problem: a Local Mode user with two laptops needs to sync between them via the cloud (encrypted bundle exchange) — slower than the cloud-primary instant cross-device experience.<br>
+                Embedding model upgrades require client re-embed work on each device (vs one backend re-embed in cloud mode).
+              </span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Mixed-mode teams</span>
+              <span class="row-value">A team can have both cloud-mode and Local Mode members. The cloud backend serves both: cloud-mode members query the backend directly; Local Mode members receive encrypted bundles and query their on-device copy. Co-presence works for both — for Local Mode recipients, the cloud queues encrypted bundles addressed to their device, decrypted on-device on next sync.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">When it ships</span>
+              <span class="row-value">Demand-driven, not roadmap-driven. v1 ships in cloud-primary form. If a meaningful segment of paying users — particularly in regulated industries (legal, healthcare, finance, defense) — surfaces during early adoption asking for strict E2E, Local Mode becomes a priority for v2 or earlier. If nobody asks, it sits as a designed but unbuilt option until the case forces it.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Pricing positioning</span>
+              <span class="row-value">Likely an Enterprise-tier feature, possibly an add-on to Paid Team. Local Mode's natural audience overlaps strongly with enterprise buyers who need SOC 2 + SSO + audit anyway — bundling them is clean. Pricing TBD until customer conversations clarify what the segment will pay.</span>
+            </div>
+            <div class="feature-row">
+              <span class="row-label">Mac native as the launch surface</span>
+              <span class="row-value">If Local Mode ships, Mac native is the strongest first surface: Mac users in privacy-sensitive professions are well-represented in Coralswarm's beachhead market, Apple Silicon has the hardware for on-device embedding inference, and the Swift code path for the Rust core is the most mature among the client targets. iOS Local Mode follows once Mac native is stable.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection" id="native-mac">
+        <h3>Native Mac App (Swift)</h3>
+        <p>There is no desktop client today: ADR 0015 (<code>docs/decisions/0015-retire-desktop-app.md</code>) retired it on 2026-10-28. A native Mac app would be a new decision on top of that ADR; this subsection records the case for one.</p>
+        <p>A Mac app would warrant a dedicated native Swift / SwiftUI build. Mac is a disproportionately important platform for Coralswarm's target users — software teams, design teams, creative studios, parts of professional services — and Mac users have higher native-feel expectations than other platforms. A Swift Mac app unlocks: deeper system integration (Spotlight indexing, Quick Look previews, Services menu, native menu-bar presence, vibrancy effects), tighter command-bar UX, native TCC permission flows, and the option to lean on Apple Silicon's Neural Engine for local embedding inference.</p>
+        <p><strong>Mac native would run the Rust core locally for E2E retrieval.</strong> This is different from iOS, which is a thin client calling the cloud query engine. So the code-share story with iOS is more modest than originally projected: substantial SwiftUI UI overlap, partial overlap on the data and navigation layer, but the FFI-to-Rust-core code is Mac-only. Realistic Swift code reuse with iOS: maybe 40–50%, not 60–80%.</p>
+        <p><strong>Timing.</strong> The iOS Swift investment in v1.5 still helps — Swift team expertise carries over, SwiftUI components carry over, design language carries over. The Rust FFI work is the bigger Mac-native-specific lift. Realistic landing point: v1.7–v1.8.</p>
+      </div>
+    </section>
+
+    <!-- SECTION: PERMISSIONS MODEL -->
+    <section class="section" id="permissions">
+      <div class="section-header">
+        <span class="section-num">17</span>
+        <h2>Permissions <em>Model</em></h2>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Action</th><th>Personal graph</th><th>Team graph</th><th>Org graph</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Query</td><td>Owner only</td><td>All team members</td><td>All org members (v2)</td></tr>
+          <tr><td>Ingest atom</td><td>Owner only</td><td>Via co-presence or promotion</td><td>Via promotion (v2)</td></tr>
+          <tr><td>Create node</td><td>Owner only</td><td>Any team member</td><td>Any org member (v2)</td></tr>
+          <tr><td>Edit node</td><td>Owner only</td><td>Any team member (versioned)</td><td>Any org member (v2)</td></tr>
+          <tr><td>Delete node</td><td>Owner only</td><td>Node creator or admin</td><td>Admin only (v2)</td></tr>
+          <tr><td>Promote to team</td><td>Owner only</td><td>N/A</td><td>Team admin (v2)</td></tr>
+          <tr><td>Export graph</td><td>Owner only</td><td>Admin only</td><td>Admin only (v2)</td></tr>
+          <tr><td>MCP read</td><td>Per-tool grant</td><td>Per-tool grant</td><td>Per-tool grant (v2)</td></tr>
+          <tr><td>MCP write</td><td>Per-tool grant (explicit)</td><td>Per-tool grant (explicit)</td><td>Not in v2</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- SECTION: OPEN QUESTIONS -->
+    <section class="section" id="open-questions">
+      <div class="section-header">
+        <span class="section-num">18</span>
+        <h2>Open <em>Questions</em></h2>
+      </div>
+
+      <p>These are the decisions that are not yet made. Documenting them explicitly so they don't get decided by default.</p>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Technical open questions</span>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Cross-device sync</span>
+            <span class="row-value"><strong>Resolved by the cloud-primary architecture.</strong> A user's personal reef lives in the cloud, so all their devices see the same graph in real time without a sync layer between them. The previous open question — how to move a personal reef between work and personal machines — became moot when the architecture moved to cloud-primary. Local Mode users will face this question (a Local Mode personal reef is per-device by default), and it's a real Local Mode design issue when that ships.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">In-person and non-API meeting capture (v1.x)</span>
+            <span class="row-value"><strong>Committed for v1.x:</strong> screen recording + Whisper as a capture path independent of meeting platform APIs. Under v1's cloud-primary architecture, the question of where Whisper runs becomes a real design decision: <strong>(a)</strong> Audio captured on-device via OS audio APIs (ScreenCaptureKit / WASAPI loopback), streamed to the cloud backend over an authenticated channel, transcribed server-side with Whisper. Cleaner privacy story than sending the audio outside Coralswarm's stack, but audio briefly leaves the device. <strong>(b)</strong> Audio captured AND transcribed on-device via local Whisper (whisper.cpp), only the transcript is sent up. Audio never leaves the user's machine — strongest privacy. Trade-off: bundles Whisper with a local capture client (~100–500MB depending on model size) or downloads it lazily on first capture; cold-machine transcription performance is hardware-dependent. Leaning toward (b) for the privacy story; needs a real call before building.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Meeting platform API rate limits and costs</span>
+            <span class="row-value">Zoom transcript API has rate limits and tiered access (some endpoints are Pro/Business+ only). Microsoft Graph for Teams transcripts requires admin consent at the tenant level for some operations. Google Meet transcript API requires Workspace Business Standard+ on the user's side. Need a clear matrix of which Coralswarm features require which platform tier, surfaced honestly at signup so users know if their plan unlocks meeting capture.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Email future-reply mechanics</span>
+            <span class="row-value"><strong>Decided: polling, not webhooks. Triggered on a periodic cadence and on demand — not on app open.</strong> Webhooks require an HTTPS endpoint to receive callbacks. Under cloud-primary architecture, the backend has one — so webhook receive is technically possible — but it brings expiring watches (7d Gmail, 3d Graph), renewal cron jobs, and a per-user subscription registry into the architecture. The latency cost of polling (~10–15 min while the app is running, instant on manual Sync) is invisible at the use-case level: email auto-capture is not a notification system. Two triggers in v1: <strong>(1)</strong> periodic poll on a fixed cadence (run by the cloud backend using the user's stored OAuth tokens), <strong>(2)</strong> on-demand "Sync this thread now" from the email add-in. App-open is deliberately not a trigger — opening the app is not, by itself, an ingestion intent. Manual Sync is one click away for users who want immediate freshness. Webhooks remain an option for v1.x if a real workflow demands near-real-time ingestion.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Embedding model</span>
+            <span class="row-value">bge-small (384d) vs nomic-embed-text (768d). bge-small is faster and smaller; nomic is higher quality. Run evaluation on sample data before shipping. Decision needed before building the atom store schema (vector dimension is fixed at schema creation).</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Team key rotation</span>
+            <span class="row-value">Under v1's server-held team key model, rotation is a backend job: the backend generates a new key, re-encrypts the team reef under the new key, and updates each remaining member's authorization envelope. No client involvement, no waiting for "the next active member to open the app." Rotation triggers: member offboarding, periodic policy (e.g. annually), explicit admin request. Open detail: do we re-encrypt the full reef on every rotation, or use a forward-secrecy scheme where new content uses the new key and old content keeps its original key? Trade-off is between simplicity (full re-encrypt) and rotation cost on large team reefs (multi-GB re-encrypt is expensive). Need to decide before offboarding workflow ships.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Decision quality</span>
+            <span class="row-value">How noisy will extracted decision candidates be? Unknown until we have real data. May need a quality threshold (only surface candidates above a confidence score) or a per-user tuning model. Reserve capacity in the extraction pipeline for this.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Drift threshold</span>
+            <span class="row-value">Cosine distance threshold for the entity drift indicator (section 08). Too sensitive &rarr; drift flag on every entity, ignored as noise. Too lax &rarr; real drift never surfaces. Needs empirical tuning on real data. Affects whether the drift feature is useful or invisible.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Decided_at override UX</span>
+            <span class="row-value">When the auto-extracted <code>decided_at</code> is wrong (the meeting happened on May 3 but the actual decision was made over Slack on May 5), how does the user correct it? Inline edit on the decision node? A separate "this decision was actually made on..." prompt during decision review? Affects how trustworthy <code>decided_at</code> becomes as the foundation of the whole temporal layer.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-header">
+          <span class="feature-name">Product / business open questions</span>
+        </div>
+        <div class="feature-card-body">
+          <div class="feature-row">
+            <span class="row-label">Co-presence pricing</span>
+            <span class="row-value"><strong>Decided: email summary + 7-day free trial.</strong> When a paying Coralswarm user ingests an event with non-user participants (their emails are in the event metadata), Coralswarm sends those non-users an email summarizing the value proposition — "you've been in N meetings / M email threads where colleagues are documenting context with Coralswarm. Sign up to access them." The email is a value pitch, not a content sample (no snippets from captured meetings — keeps the email surface clean and avoids cross-team data leakage). On signup, the new user gets a 7-day free trial with full Paid-tier access: unlimited atoms, mobile + web access, and the full co-presence backfill of events colleagues have already ingested. At trial end, the user converts to paid or drops to the free tier (capped — see Pricing Tiers), with a "download your data" option for anything beyond the free cap. Email cadence and dedup details are implementation: sensible default is one email on first co-presence event per recipient, weekly digest after, auto-stop after 4 weeks without signup.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Personal graph ownership at termination</span>
+            <span class="row-value">If a user stops paying, what happens to their personal graph? Read-only for 90 days → export → delete? This needs to be in the ToS before launch.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Legal review</span>
+            <span class="row-value">Meeting consent flow needs legal review before GA. Two-party consent jurisdictions (CA, FL, MD, IL) and GDPR are the critical ones. The announcement model likely satisfies most — but needs a real lawyer to confirm, not a founder's read.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Web query model</span>
+            <span class="row-value"><strong>Decided: server-side retrieval on every v1 surface, including web.</strong> Under v1's cloud-primary architecture every client (web, CLI, MCP, and the planned mobile apps) calls the same cloud query API. No client runs the Rust core locally for retrieval in v1. The substantive privacy promise — no training on user data, encrypted at rest, decrypted only during the active session — applies uniformly across surfaces. Strict E2E returns as Local Mode (see v2 Roadmap). See Privacy and Data Use in Architecture Overview.</span>
+          </div>
+          <div class="feature-row">
+            <span class="row-label">Offline mobile query</span>
+            <span class="row-value"><strong>Decided: thin-client mobile apps. Offline behavior is read-only browsing of cached recently-viewed nodes; new queries require connectivity.</strong> Mobile shares the v1 architecture of every other client — only Local Mode (future) restores fully on-device retrieval. If "I want to query my reef on a flight with no wifi" becomes a meaningful user complaint, it's a Local Mode argument, not a separate mobile-specific build.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <div class="doc-footer">
+      <span>Coralswarm System Design · v1 · May 2026</span>
+      <span>coralswarm.example · person@example.com</span>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Active nav highlighting on scroll
+  const sections = document.querySelectorAll('section[id], div[id]');
+  const navLinks = document.querySelectorAll('.nav-link');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(link => {
+          link.classList.remove('active');
+          if (link.getAttribute('href') === '#' + entry.target.id) {
+            link.classList.add('active');
+          }
+        });
+      }
+    });
+  }, { threshold: 0.15, rootMargin: '-80px 0px -60% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

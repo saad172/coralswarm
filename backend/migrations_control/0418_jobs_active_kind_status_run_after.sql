@@ -1,0 +1,53 @@
+-- no-transaction
+-- Idle worker polls on `jobs`: every poller filters on kind and status and
+-- most bound or order on run_after. Nothing indexed (kind, status) before
+-- this, so each poll was a full scan of a 1.3 GB table, or a bitmap over the
+-- whole pending part of `idx_jobs_idem_pending` (about 21,500 buffers).
+-- Serves: the generic claim (`jobs::queue::dequeue`, status='pending' AND
+-- run_after<=now() AND kind=ANY), the digest lane (`workers/digest.rs`), the
+-- source-atom lane (`workers/source_atoms.rs`), the title-backfill in-flight
+-- check (`workers/atom_title_backfill.rs`), the active half of the OceanHealth
+-- scheduler (`workers/ocean_health.rs`) and the statement-embed sweep once its
+-- status cast goes.
+-- `status` is an index column, not only a predicate: the claim queries filter
+-- status='pending', which the predicate status IN ('pending','running') does
+-- not imply. With status outside the index the planner ANDed this index with
+-- `idx_jobs_idem_pending` (188,000 entries, 1,372 buffers) whenever a row was
+-- due. With status in the key that clause is an index condition and no
+-- second index is consulted.
+-- Measured on a copy of tenant-coralswarm (2026-11-02, PostgreSQL 18.6),
+-- shared buffers per run, trunk -> this index + 0419 + 0420, idle / with ten
+-- due rows per kind: generic dequeue 115 -> 8 / 122 -> 8, digest claim
+-- 21,552 -> 16 / 21,594 -> 47 to 61, source-atom claim 21,521 -> 14 /
+-- 21,553 -> 46, in-flight check 11..3,003 -> 4, statement sweep without the
+-- cast 143,000 -> 2.
+-- The digest claim's count with ten due rows depends on page layout: 47 to
+-- 54 on a reused connection (the ten rows on 5 or 10 heap pages), 61 on the
+-- first run of a new connection. 40 of
+-- those buffers are the join to `nodes`, 4 per due row, which no `jobs`
+-- index changes. While the daily digest backlog is due (about 72,000 rows
+-- after 00:01 UTC) the same claim reads about 285,600 buffers, the same as
+-- trunk, because its ORDER BY joins every due row to `nodes` before the
+-- LIMIT. Tracked in #1669.
+-- Partial on the two live states, about 72,000 of 1.7 million rows, 520 kB.
+-- `idx_jobs_pending` and `idx_jobs_idem_pending` stay: a drop needs a later
+-- release and a `-- contract: safe-after` marker.
+--
+-- `CREATE INDEX CONCURRENTLY` cannot run in a transaction, so it is alone in
+-- a `-- no-transaction` file. Under `apply_tree`'s session lock_timeout of
+-- 5 s the build fails with 55P03 whenever any transaction in the database
+-- stays open longer than that, and leaves an INVALID index. `apply_tree`'s
+-- own 55P03 retry then re-runs this file, `IF NOT EXISTS` skips the
+-- leftover with a notice, and sqlx records the migration as applied with
+-- the index still INVALID (#1668). Recover by hand, with no lock timeout:
+--   SET lock_timeout = 0;
+--   DROP INDEX CONCURRENTLY IF EXISTS jobs_active_kind_status_run_after;
+--   CREATE INDEX CONCURRENTLY jobs_active_kind_status_run_after ON jobs (kind, status, run_after) WHERE status IN ('pending', 'running');
+--   SELECT indisvalid FROM pg_index WHERE indexrelid = 'jobs_active_kind_status_run_after'::regclass;
+-- Run each statement on its own, outside a transaction. The CREATE has no
+-- IF NOT EXISTS, so it fails loudly if the DROP did not finish.
+-- PAIRED WITH: tenant 0229 (DDL byte-identical). `jobs` is a shared table
+-- and `check_schema_parity.sh` diffs its schema.
+-- Down: DROP INDEX CONCURRENTLY IF EXISTS jobs_active_kind_status_run_after;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_active_kind_status_run_after ON jobs (kind, status, run_after) WHERE status IN ('pending', 'running');

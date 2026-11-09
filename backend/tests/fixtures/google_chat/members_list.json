@@ -1,0 +1,89 @@
+{
+  "memberships": [
+    {
+      "name": "spaces/AAAAAAAAAAA/members/1001",
+      "state": "JOINED",
+      "role": "ROLE_MEMBER",
+      "member": {
+        "name": "users/1001",
+        "displayName": "Alice Ng",
+        "type": "HUMAN",
+        "isAnonymous": false
+      },
+      "affiliation": "INTERNAL",
+      "createTime": "2026-06-01T09:00:00Z"
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/members/1002",
+      "state": "JOINED",
+      "role": "ROLE_MANAGER",
+      "member": {
+        "name": "users/1002",
+        "displayName": "Bob Chen",
+        "type": "HUMAN",
+        "isAnonymous": false
+      },
+      "affiliation": "INTERNAL",
+      "createTime": "2026-06-01T09:00:00Z"
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/members/1003",
+      "state": "JOINED",
+      "role": "ROLE_MEMBER",
+      "member": {
+        "name": "users/1003",
+        "displayName": "Dana Osei",
+        "type": "HUMAN",
+        "isAnonymous": false
+      },
+      "affiliation": "INTERNAL",
+      "createTime": "2026-06-03T09:00:00Z"
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/members/1004",
+      "state": "JOINED",
+      "role": "ROLE_MEMBER",
+      "member": {
+        "name": "users/1004",
+        "displayName": "Priya Raman",
+        "type": "HUMAN",
+        "isAnonymous": false
+      },
+      "affiliation": "INTERNAL",
+      "createTime": "2026-06-04T09:00:00Z"
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/members/1005-bot",
+      "state": "JOINED",
+      "role": "ROLE_MEMBER",
+      "member": {
+        "name": "users/1005-bot",
+        "displayName": "CI Bot",
+        "type": "BOT",
+        "isAnonymous": false
+      },
+      "createTime": "2026-06-05T09:00:00Z"
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/members/1006",
+      "state": "INVITED",
+      "role": "ROLE_MEMBER",
+      "member": {
+        "name": "users/1006",
+        "displayName": "Marco Silva",
+        "type": "HUMAN",
+        "isAnonymous": false
+      },
+      "createTime": "2026-08-20T09:00:00Z"
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/members/group-1007",
+      "state": "JOINED",
+      "role": "ROLE_MEMBER",
+      "groupMember": {
+        "name": "groups/1007"
+      },
+      "createTime": "2026-06-01T09:00:00Z"
+    }
+  ]
+}

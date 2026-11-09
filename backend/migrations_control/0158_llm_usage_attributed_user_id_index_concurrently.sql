@@ -1,0 +1,55 @@
+-- no-transaction
+-- Migration: 0158_llm_usage_attributed_user_id_index_concurrently
+-- Description: Build the partial index backing billing Phase 2's per-seat
+--   usage lookups (`SELECT ... FROM llm_usage WHERE account_id = $1 AND
+--   attributed_user_id = $2 AND created_at >= $3`, e.g. "how much has this
+--   member used this billing period" — the read a per-seat enforcement gate
+--   or a per-member cost breakdown UI issues) WITHOUT blocking writes on
+--   `llm_usage` while it builds. Split out of
+--   `0157_llm_usage_attributed_user_id.sql` (which adds the
+--   `attributed_user_id` column) for the same reason `0142`/`0059` were split
+--   out of their respective column-add migrations — see `0142`'s header for
+--   the full explanation of why `CREATE INDEX CONCURRENTLY` must be alone in
+--   a `-- no-transaction` file (sqlx sends a migration's SQL as one
+--   wire-protocol Query message, and Postgres implicitly wraps multiple
+--   statements in such a message in a transaction, which `CONCURRENTLY`
+--   refuses to run inside).
+--
+--   Column order `(account_id, attributed_user_id, created_at)`: the
+--   anticipated Phase 2 query shape is an EQUALITY lookup on both
+--   `account_id` and `attributed_user_id` (one member, within one account)
+--   plus a RANGE filter on `created_at` (one billing period) — the textbook
+--   "equality, equality, range" btree column order, so all three predicates
+--   are satisfied by a single index range scan with no residual filter. This
+--   column order also serves the account-wide per-member ROLLUP shape
+--   (`WHERE account_id = $1 AND created_at >= $2 GROUP BY attributed_user_id`)
+--   reasonably well despite `attributed_user_id` leading `created_at` in the
+--   index: an index scan restricted to the `account_id` prefix returns rows
+--   pre-grouped by `attributed_user_id`, so the aggregate can stream a
+--   `GroupAggregate` without a separate sort step.
+--
+--   Partial (`WHERE attributed_user_id IS NOT NULL`): the column is NULL on
+--   every row until this PR's Rust starts populating it, stays NULL forever
+--   on every pre-epoch row, and stays NULL by design on every background job
+--   worker call site that has no member in scope (`llm::usage`'s module doc
+--   — extract/extract_relationships/entity_resolution/infer_expertise/
+--   conflict_detection/summary/digest/atom_title_backfill/extract_batch, all
+--   deferred to a later phase) — indexing that NULL majority would waste
+--   space for a predicate a per-seat lookup never issues (it always wants a
+--   REAL member id).
+--
+--   `IF NOT EXISTS` + `CONCURRENTLY`: a failed concurrent build leaves an
+--   INVALID index behind, and `IF NOT EXISTS` will then happily skip it
+--   forever. If this migration errors, drop `idx_llm_usage_attributed_user`
+--   before re-running rather than assuming the skip means success — the same
+--   operational caveat every `CONCURRENTLY` migration in this tree carries
+--   (0059/0074/0075/0099/0142/0143/0144/0146/0147/0152).
+--
+-- PAIRED WITH: backend/migrations_tenant/0058_llm_usage_attributed_user_id_index_concurrently.sql
+-- Depends on: 0157_llm_usage_attributed_user_id.sql (creates attributed_user_id).
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_llm_usage_attributed_user;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_llm_usage_attributed_user
+    ON llm_usage (account_id, attributed_user_id, created_at)
+    WHERE attributed_user_id IS NOT NULL;

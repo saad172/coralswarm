@@ -1,0 +1,200 @@
+{
+  "atlas": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/graphs/{graph_id}/atlas",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "capture_detail": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/captures",
+    "version": 2,
+    "worker_base_poll_ms": 5000
+  },
+  "chat_empty": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/chats/empty",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "connector_detail": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/connectors/{provider}",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "connector_status": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/connectors/status",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "connectors_list": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/connectors",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "conversation_detail": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/conversations/{id}",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "conversation_list": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/conversations",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "coral_detail": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/corals/{atom}",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "home_metrics": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/home/metrics",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "journal_activities": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/journal/activities",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "journal_gist": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/journal/gist",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "journal_rollups": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/journal",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "journal_strip": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/journal/strip",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "members_admin": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/org/members",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "oceans_index": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/oceans/component",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "reef_page": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/reefs",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "teams_transcript_captures": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/connectors/microsoft/teams/transcripts/captures",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "topic_page": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/load/topics/{node}",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "usage_summary": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/usage/summary",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "workspace_activity": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/home/workspace-activity",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  },
+  "workspace_counts": {
+    "compute_timeout_ms": 30000,
+    "compute_total_timeout_ms": 35000,
+    "debounce_seconds": 30,
+    "max_delay_seconds": 60,
+    "path": "/graphs/{graph_id}/stats",
+    "version": 1,
+    "worker_base_poll_ms": 5000
+  }
+}

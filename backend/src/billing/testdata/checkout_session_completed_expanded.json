@@ -1,0 +1,39 @@
+{
+  "id": "cs_test_TEST0000000002",
+  "object": "checkout.session",
+  "mode": "payment",
+  "status": "complete",
+  "payment_status": "paid",
+  "customer": "cus_TEST0000000001",
+  "client_reference_id": "00000000-0000-0000-0000-000000000001",
+  "payment_intent": "pi_TEST0000000001",
+  "livemode": false,
+  "line_items": {
+    "object": "list",
+    "has_more": false,
+    "data": [
+      {
+        "id": "li_TEST0000000001",
+        "object": "item",
+        "quantity": 1,
+        "price": {
+          "id": "price_pack_500_test",
+          "object": "price",
+          "unit_amount": 1100,
+          "currency": "usd"
+        }
+      },
+      {
+        "id": "li_TEST0000000002",
+        "object": "item",
+        "quantity": 2,
+        "price": {
+          "id": "price_pack_2000_test",
+          "object": "price",
+          "unit_amount": 4400,
+          "currency": "usd"
+        }
+      }
+    ]
+  }
+}

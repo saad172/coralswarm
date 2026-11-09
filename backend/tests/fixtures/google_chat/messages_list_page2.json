@@ -1,0 +1,47 @@
+{
+  "messages": [
+    {
+      "name": "spaces/AAAAAAAAAAA/messages/msg-0004",
+      "sender": {
+        "name": "users/1005-bot",
+        "displayName": "CI Bot",
+        "type": "BOT"
+      },
+      "createTime": "2026-08-01T10:02:00Z",
+      "cardsV2": [
+        {
+          "cardId": "deploy-status-card",
+          "card": {
+            "header": { "title": "Deploy finished" },
+            "sections": [
+              {
+                "widgets": [
+                  { "textParagraph": { "text": "eng-platform deployed to prod in 4m12s." } }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/messages/msg-0005",
+      "sender": {
+        "name": "users/1003",
+        "displayName": "Dana Osei",
+        "type": "HUMAN"
+      },
+      "createTime": "2026-08-01T10:15:00Z",
+      "text": "attaching the rollback runbook just in case",
+      "formattedText": "attaching the rollback runbook just in case",
+      "attachment": [
+        {
+          "name": "spaces/AAAAAAAAAAA/messages/msg-0005/attachments/att-0001",
+          "contentName": "rollback-runbook.pdf",
+          "contentType": "application/pdf",
+          "source": "DRIVE_FILE"
+        }
+      ]
+    }
+  ]
+}

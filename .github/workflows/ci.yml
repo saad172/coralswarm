@@ -1,0 +1,524 @@
+name: CI
+
+# Manual full-guard run. This is NOT the PR gate: `.github/workflows/pr.yml`
+# (jobs `guards` + `e2e`) is. The nightly schedule and every Postgres/compile
+# job that used to live here were retired by the CI redesign
+# (.scratch/ci-redesign/plan.md, decisions 1, 8 and 16); their invariants now
+# run as e2e scenarios and boot-time DB assertions (e2e/README.md).
+#
+# What remains is the seconds-long, database-free grep-guard jobs. They stay
+# because scripts/ci_local.py (the local receipt `deploy_local.sh` demands) and
+# scripts/ci_guards.sh (shellcheck file list) still read this file.
+# scripts/check_ci_guards_complete.sh fails if a guard added here is missing
+# from scripts/ci_guards.sh.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Guard the split migration trees: no duplicate numbers, no un-allowlisted
+  # gaps, and no post-merge edits to already-committed migrations (which would
+  # break the _sqlx_migrations ledger on every deployed DB). Fast, bash-only,
+  # always runs — once the trees split into per-org tenant DBs a renumbered or
+  # edited migration is an N-way ledger incident, so this is cheap insurance.
+  migration-guard:
+    name: Migration numbering + checksum guard
+    runs-on: ubuntu-latest
+    # DELIBERATELY has no `services:` block. This job is bash-only and runs on
+    # every pull request, and Linux minutes are the dominant CI spend here, so
+    # a service container on it is paid for by every PR. The evacuation
+    # guard's self-test needs a real Postgres and therefore lives in
+    # `tenant-migrate` instead, which already has one. Do not add a service
+    # here to move it back.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # full history so the guard can diff merged migrations against the PR
+          # base (append-only enforcement).
+          fetch-depth: 0
+      - name: Run migration guard
+        env:
+          # The base commit the append-only migration diff is taken against.
+          #
+          # Empty on a manual dispatch (no base to diff against), so
+          # `check_migrations.sh` skips the append-only check and runs the
+          # numbering + manifest checks only. The PR gate (pr.yml's `guards`
+          # job) passes the real PR / merge-group base.
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/check_migrations.sh
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Shellcheck concierge tenant scripts + guards
+        run: shellcheck scripts/prepare_ci_pg_roles.sh scripts/check_schema_parity.sh scripts/check_definer_search_path.sh scripts/check_provisioning_privileges.sh scripts/lib/orgt_tenant_lib.sh scripts/onboard_tenant.sh scripts/offboard_tenant.sh scripts/migrate_shared_db_org.sh scripts/export_member_ocean.sh scripts/verify_tenant_isolation.sh scripts/check_no_ambient_pool.sh scripts/check_startup_parameters.sh scripts/check_no_unbounded_fanout.sh scripts/check_rls_coverage.sh scripts/check_scoped_shape_ratchet.sh scripts/check_history_floor_boundary.sh scripts/backup_control_plane.sh scripts/backup_tenants.sh scripts/deploy_local.sh scripts/provision_stripe.sh scripts/provision_google_workspace.sh backend/release.sh scripts/rehearse_tenant_restore.sh scripts/tenant_restore_drill.sh scripts/escrow_backup_key.sh scripts/check_tenant_rls_coverage.sh scripts/check_org_arm_scope.sh scripts/check_connectors_do_not_answer.sh scripts/check_ensure_org_membership_callers.sh scripts/check_embedding_gateway.sh scripts/check_managed_front_door.sh scripts/requeue_held_managed_work.sh
+      # Pure-bash unit tests for the control-plane backup script's DSN parser
+      # and retention algorithm — no database, no network, no secrets. See
+      # that script's --self-test block for what's asserted.
+      - name: Control-plane backup script self-test
+        run: bash scripts/backup_control_plane.sh --self-test
+
+      # Tenant backup: asserts the slug -> secret-name / artifact-name /
+      # object-prefix mappings and the routing-row parser. The artifact name
+      # feeds backup_control_plane.sh's key_month(), which retention pruning
+      # depends on, so a break here would silently delete the wrong objects.
+      - name: Tenant backup script self-test
+        run: bash scripts/backup_tenants.sh --self-test
+
+      # Tenant RESTORE drill. The drill itself is operator-run and never runs
+      # here — this self-test is the part that can. It pins the three DIFFERENT
+      # AES-256-GCM envelope layouts a restore has to read back
+      # (account_keys.dek_wrapped is nonce||tag||ciphertext;
+      # oauth_tokens.access_token is nonce||ciphertext||tag; the R2 coral object
+      # is a JSON EncryptedBlob), asserting each round-trips, that a wrong key
+      # REFUSES rather than returning plausible bytes, and that each parser
+      # rejects the other's layout. Two envelopes differing only in field order
+      # look exactly like a corrupt backup when confused, and the confusion
+      # would otherwise be discovered mid-incident.
+      #
+      # It also pins the two fail-closed guards: the pg_restore >= 18 floor
+      # (tenant artifacts are pg_dump 18) and the empty-target check, including
+      # the negative control that an emptiness query returning NOTHING refuses
+      # rather than reading as "zero rows, go ahead".
+      #
+      # Pure bash + node's built-in crypto. No network, no database, no secrets,
+      # no npm install. See docs/runbooks/tenant-restore.md.
+      - name: Tenant restore drill self-test
+        run: bash scripts/rehearse_tenant_restore.sh --self-test
+
+      # The automated drill's guards (tenant-restore-drill.yml): pg_restore
+      # error allow-list, migration-ledger decision, policy-role extraction,
+      # and the restore-drill-* branch-name gate on Neon branch deletion.
+      - name: Automated restore drill self-test
+        run: bash scripts/tenant_restore_drill.sh --self-test
+
+  # "No ambient pool" grep-guard (org-tenancy PR 1.6): a CI LINT that forbids
+  # the common ambient-pool pattern (`state.db`/`state.store` in CODE) under
+  # backend/src/routes/ outside the explicit control/consumer allowlist in
+  # the script — route handlers must resolve content-plane access through the
+  # `Tenant` extractor so an org request can never silently read/write the
+  # shared consumer plane. Not a proof: the script header documents its
+  # escape hatches (control_db()/control_store() are control-table-only by
+  # convention; rebinds/destructuring evade the pattern; scope is routes/
+  # only). Fast, bash+perl only, always runs.
+  no-ambient-pool:
+    name: No ambient pool under routes/ (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # This job only greps checked-out source; it never needs
+          # GITHUB_TOKEN after checkout (zizmor static-analysis flag).
+          persist-credentials: false
+      - name: Run no-ambient-pool guard
+        run: bash scripts/check_no_ambient_pool.sh
+
+  # "Promotion never crosses a database" grep-guard. Forbids a consumer-plane
+  # pool/store handle in CODE under backend/src/routes/ and backend/src/
+  # services/ — the two trees that serve requests. A handle there means one
+  # request can touch two databases, which is how content leaves a tenant.
+  #
+  # This one has a concrete precedent rather than a hypothetical: the deleted
+  # `services::promotion` read a caller's personal ocean off the consumer pool,
+  # re-encrypted it from the personal DEK to the org DEK, and wrote it into an
+  # org's tenant DB. It was reviewed, tested, and shipped — nothing about it
+  # looked wrong locally, only once you asked how many databases one request
+  # touches. The guard is on that SHAPE, not on any function name, so the next
+  # feature can't reintroduce it innocently. Not a proof: the script header
+  # documents what evades it (rebinds, opaque &PgPool params) and why
+  # backend/src/workers/ is deliberately out of scope. Fast, bash+perl only.
+  no-cross-plane-promotion:
+    name: Promotion never crosses a database (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run no-cross-plane-promotion guard
+        run: bash scripts/check_no_cross_plane_promotion.sh
+
+  # "No unsupported Postgres startup parameter" guard. Neon's pooler accepts
+  # exactly five (client_encoding, datestyle, timezone,
+  # standard_conforming_strings, application_name) and REJECTS anything else,
+  # so the pool fails to BUILD and every query against that tenant fails.
+  #
+  # This has cost production once already: app.tenant_actor=system was set that
+  # way on the worker pool, Neon refused it, and every org tenant's background
+  # work was dead — visible only as a log line (#388). W2 then nearly repeated
+  # it on the REQUEST pool with statement_timeout. Caught in review, not by
+  # anything automated; this is the automated thing. Fast, bash+perl only.
+  no-unsupported-startup-parameters:
+    name: No unsupported Postgres startup parameter (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run startup-parameter guard
+        run: bash scripts/check_startup_parameters.sh
+
+  # "Every embedding goes through the gateway" grep-guard. The compiler
+  # already refuses a provider call outside packages/core (every provider
+  # method takes a ProviderPermit only the core gateway can make); this is the
+  # cross-crate backstop: nothing but backend/src/embedding.rs may use the core
+  # gateway, and no permit or provider call may appear anywhere else. A call
+  # around the gateway skips its size bound, classification and metering,
+  # which is how an over-limit atom's provider 400 was retried forever (prod,
+  # 2026-10-23). The self-test proves each rule fires. Fast, bash+perl only.
+  embedding-gateway:
+    name: Every embedding goes through the gateway (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Self-test the embedding-gateway guard
+        run: bash scripts/check_embedding_gateway.sh --self-test
+      - name: Run embedding-gateway guard
+        run: bash scripts/check_embedding_gateway.sh
+      - name: Self-test the managed front-door guard
+        run: bash scripts/check_managed_front_door.sh --self-test
+      - name: Run managed front-door guard
+        run: bash scripts/check_managed_front_door.sh
+
+  # "A silently-dropping state must be alertable" grep-guard. Requires every
+  # `graphs.is_empty()` fan-out branch — the branches that deliberately drop
+  # user content rather than fabricate a destination — to carry a
+  # `connector_health` marker.
+  #
+  # Concrete precedent, not hypothetical: on 2026-08-03 testorg captured ZERO
+  # Slack content for hours while every signal we watch stayed green — webhook
+  # 200, job `status = done` with no error, atom count 0. The empty-destination
+  # branch was logged at `debug!`, under the production filter, so the ONLY
+  # report went to the Slack channel itself via the in-channel notice. The
+  # product diagnosed itself to the end user hours before our telemetry could
+  # have. Detection was never the gap; the signal just lived nowhere an
+  # operator looks.
+  #
+  # The guard is on that SHAPE, so a future third drop-branch cannot be added
+  # without an alertable signal, and the existing two cannot quietly regress to
+  # `debug!`. Not a proof: the script header documents what evades it (other
+  # spellings of the emptiness check, `connector_health` on a non-warn level).
+  # Fast, bash+perl only.
+  silent-drop-is-alertable:
+    name: A silently-dropping state must be alertable (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # The guard's OWN fixtures run first. Its first cut matched raw source
+      # text, so a `connector_health` mention in a COMMENT inside one of these
+      # branches satisfied it — deleting the real `warn!` beside that comment
+      # still passed. A guard that can be defeated by its own explanatory
+      # comment is worse than none, because it reports safety it isn't
+      # providing. These fixtures pin that case and the others.
+      - name: Self-test the guard
+        run: bash scripts/check_silent_drop_is_alertable.sh --self-test
+      - name: Run silent-drop alertability guard
+        run: bash scripts/check_silent_drop_is_alertable.sh
+
+  # "No O(rows) request fan-out" grep-guard (W7,
+  # docs/plans/request-reliability-and-scale.md §6.7). THE regression gate for
+  # the incident that motivated that plan: the Reefs workbench issued one
+  # request per reef, and at 3,440 reefs the browser answered with
+  # ERR_INSUFFICIENT_RESOURCES. Review did not catch it and CI could not —
+  # CI proved correctness and said nothing about cost. This forbids the literal
+  # shape that shipped it (`Promise.all(<collection>.map(... api.* ...))`)
+  # outside a reviewed allowlist, and additionally fails on a STALE allowlist
+  # entry, so an exception cannot outlive the reasoning it was granted on.
+  # Not a proof — the script header documents what evades it (indirect
+  # assembly, loops, serial paging). The complementary check on TOTAL request
+  # count is web/lib/requestBudget.test.ts, which the `web` job already runs.
+  # Fast, bash+perl only, always runs.
+  no-unbounded-fanout:
+    name: No O(rows) request fan-out (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Greps checked-out source only; never needs GITHUB_TOKEN after
+          # checkout (zizmor static-analysis flag). Same rationale as the
+          # no-ambient-pool job above.
+          persist-credentials: false
+      - name: Run no-unbounded-fanout guard
+        run: bash scripts/check_no_unbounded_fanout.sh
+      - name: Self-test the verdict-once guard
+        run: python3 scripts/check_verdict_once.py --self-test
+      - name: Run verdict-once guard
+        run: python3 scripts/check_verdict_once.py
+
+  # Contract invariant I11 — "a connector captures; it does not answer"
+  # (docs/connectors/CONNECTOR_CONTRACT.md §2, conformance item 10). A chat
+  # platform's bot API cannot prove per request WHICH PERSON is asking; it
+  # vouches (capability C16). So an in-platform ask would make the
+  # private-ocean boundary exactly as strong as the customer's own
+  # workspace-admin model. The risk is not a deliberate build — it is
+  # somebody adding "just a quick /ask slash command" years from now in a
+  # file nobody thought of as a security boundary, so this guards a surface
+  # that does not exist yet, which no behavioural test can do.
+  #
+  # Starts GREEN: as of the commit that added it, no connector surface
+  # references the answer engine at all. Its entire value is the day it goes
+  # red. The self-test runs first and plants a real violation, because a
+  # guard nobody has watched fail is indistinguishable from one that matches
+  # nothing. Fast, bash only, always runs.
+  connectors-do-not-answer:
+    name: Connectors do not answer (I11 grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Greps checked-out source only; never needs GITHUB_TOKEN after
+          # checkout (zizmor static-analysis flag). Same rationale as the
+          # no-unbounded-fanout job above.
+          persist-credentials: false
+      - name: Self-test the guard
+        run: bash scripts/check_connectors_do_not_answer.sh --self-test
+      - name: Run connectors-do-not-answer guard
+        run: bash scripts/check_connectors_do_not_answer.sh
+
+  # D3 (org-onboarding plan §3 item 31, CS-434) — only the Clerk webhook
+  # (backend/src/routes/clerk_webhook.rs) and routes::org_invites may call
+  # clerk_provision::ensure_org_membership. Founder at review: "this needs
+  # to be impossible." Not a convention — a guard.
+  #
+  # ensure_org_membership is the AUTHORITATIVE membership writer: once its
+  # transaction commits it also purchases a billing seat via
+  # crate::billing::seat_lifecycle::acquire_seat. A caller outside the two
+  # trusted paths writes a local membership row with no matching Clerk
+  # membership — a phantom member, billed for a seat, who can never enter
+  # the org, because org context is derived from the Clerk JWT org_id
+  # claim, not from this table. The self-test runs first for the same
+  # reason as the I11 guard above: a guard nobody has watched fail is
+  # indistinguishable from one that matches nothing.
+  membership-writer-guard:
+    name: ensure_org_membership caller guard (D3, CS-434)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Greps checked-out source only; never needs GITHUB_TOKEN after
+          # checkout (zizmor static-analysis flag). Same rationale as the
+          # connectors-do-not-answer job above.
+          persist-credentials: false
+      - name: Self-test the guard
+        run: bash scripts/check_ensure_org_membership_callers.sh --self-test
+      - name: Run membership-writer-guard
+        run: bash scripts/check_ensure_org_membership_callers.sh
+
+  # The `_scoped` SHAPE ratchet (#552, under the restructure map #549). Freezes
+  # the three shapes the Scope/Db restructure exists to delete: the count of
+  # `_scoped` methods on the `Store` trait, the set of files defining
+  # `macro_rules! scoped_store`, and the set of files under backend/src holding
+  # a `PgPool`. Features ship freely; they just cannot ship more of the thing
+  # that is about to be removed.
+  #
+  # This is not a style rule, it is cost control. Execution of the restructure
+  # is deliberately deferred behind the gate in #550, and the plan is priced
+  # per method and per call site — so it decays every day the gate stays shut.
+  # Measured on one definition: `_scoped` methods went 145 (2026-07-27) -> 183
+  # (2026-08-06) -> 202 (2026-08-24), and PgPool files 72 -> 88 -> 129. That is
+  # the bill growing while nobody is working on it.
+  #
+  # Not a proof: it counts text, not semantics — a re-export, a type alias for
+  # PgPool, or a macro-generated method name evades it, and a new unscoped
+  # query inside an already-frozen file is invisible here (that is #561/#564's
+  # ground, not this guard's). The script header lists the rest.
+  #
+  # The guard's OWN fixtures run first, and they are load-bearing: the first
+  # cut of the scanner leaked perl's `$/` into the per-file read, so `^\s*//`
+  # tested only each file's FIRST line. Nearly every file in this tree opens
+  # with a `//!` header, so it reported 2 PgPool files where there are 129 —
+  # and exited 0. A shape guard that silently measures nothing is worse than no
+  # guard, because it reports a freeze it is not enforcing.
+  #
+  # Fast, bash+perl only, always runs.
+  scoped-shape-ratchet:
+    name: _scoped shape ratchet (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Greps checked-out source only; never needs GITHUB_TOKEN after
+          # checkout (zizmor static-analysis flag). Same rationale as the
+          # no-ambient-pool job above.
+          persist-credentials: false
+      - name: Self-test the guard
+        run: bash scripts/check_scoped_shape_ratchet.sh --self-test
+      - name: Run _scoped shape ratchet
+        run: bash scripts/check_scoped_shape_ratchet.sh
+      # #1545: a new SQL read of floored content (atoms, semantic atoms,
+      # sources, transcripts, journal rollups) must go through the one
+      # history-floor boundary, crate::history_floor. Same per-file ratchet
+      # shape as the guard above.
+      - name: Self-test the history-floor boundary guard
+        run: bash scripts/check_history_floor_boundary.sh --self-test
+      - name: Run the history-floor boundary guard (#1545)
+        run: bash scripts/check_history_floor_boundary.sh
+
+  # RLS-scope coverage gate (org-tenancy Phase P.1): makes "every query path
+  # that touches an RLS-covered consumer table runs via begin_account_scoped"
+  # machine-checked instead of a manual claim, ahead of the OPS-4 cutover to
+  # the non-BYPASSRLS `coralswarm_app` role. The script derives the 36-table
+  # roster from migration 0083's own CREATE POLICY lines at runtime (so the
+  # roster can never drift), greps backend/src (store/ excluded — it receives
+  # already-scoped transactions) for files whose CODE references those tables
+  # in SQL keyword position, and requires each such file to be listed in
+  # scripts/rls_coverage.manifest as `pending` or `converted` — failing on
+  # unlisted new query surface and on `converted` files that no longer call
+  # begin_account_scoped (regression). `pending` entries pass but are counted:
+  # the printed X/Y summary makes conversion progress visible on every run.
+  # Grep-strength only (dynamic SQL is invisible; the staging soak under the
+  # real app role is the backstop) — see the script header. Fast, bash-only,
+  # always runs, same as `no-ambient-pool`.
+  rls-coverage:
+    name: RLS scope coverage gate (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Grep-only job; never needs GITHUB_TOKEN after checkout (same
+          # zizmor rationale — and same ubuntu-only caveat — as the
+          # `no-ambient-pool` job above).
+          persist-credentials: false
+      - name: Run RLS coverage gate
+        run: bash scripts/check_rls_coverage.sh
+
+  # Tenant-plane sibling of `rls-coverage` above. That job gates the CONSUMER
+  # plane (migration 0083, `app.account_id`); this one gates the ORG TENANT
+  # plane (migrations_tenant/0009_tenant_rls, `app.user_id` /
+  # `app.tenant_actor`), which is a different question with a different
+  # detection strategy — see the script's own header for why it greps five
+  # literal Rust primitive names rather than reconstructing a table roster.
+  #
+  # It requires every backend/src file that calls begin_account_scoped /
+  # begin_member_scoped / begin_tenant_scoped / begin_tenant_system_scoped /
+  # begin_tenant_system_scoped_without_account to
+  # be listed in scripts/tenant_rls_coverage.manifest as pending | converted |
+  # exempt, fails on unlisted new scope surface, fails a `converted` file that
+  # still contains a residual begin_account_scoped( call, and fails an `exempt`
+  # entry with no `# exempt: <why>` rationale line above it.
+  #
+  # WHY THIS IS BEING WIRED NOW: the script has existed since tenant RLS
+  # Phase 2 and was in NO workflow, so nothing ever ran it — a guard that is
+  # not in a job is decorative, and this one was red on a file that had drifted
+  # in unreviewed. It is Precondition 1 of docs/plans/database-architecture.md.
+  # Grep-strength only, exactly like `rls-coverage`: it cannot see a call
+  # reached through a local alias, and it cannot judge whether a `converted`
+  # file picked begin_tenant_scoped vs begin_tenant_system_scoped correctly —
+  # that stays a reviewer call, recorded in docs/tenant-rls-cutover-runbook.md
+  # §2. Fast, bash-only, no Postgres service, always runs.
+  tenant-rls-coverage:
+    name: Tenant RLS scope coverage gate (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Grep-only job; never needs GITHUB_TOKEN after checkout (same
+          # zizmor rationale — and same ubuntu-only caveat — as the
+          # `no-ambient-pool` job above).
+          persist-credentials: false
+      - name: Run tenant RLS coverage gate
+        run: bash scripts/check_tenant_rls_coverage.sh
+
+  # Org-arm scope guard. Third sibling of `rls-coverage` /
+  # `tenant-rls-coverage` above, and the one that answers a question neither of
+  # them can ask.
+  #
+  # THE DEFECT: a worker function matches on a scope-discriminating enum, the
+  # Consumer arm opens a scoped transaction, and the Org arm issues its query
+  # with no scope at all. Under the OPS-4-T role those reads return nothing and
+  # those writes affect zero rows — and return Ok. Silent, not loud. PRs #840
+  # and #843 fixed 88 instances.
+  #
+  # WHY THE OTHER TWO GATES CANNOT SEE IT, demonstrated rather than assumed:
+  # reverting `workers/summary.rs::scoped_set_summary_status` to the ambient
+  # form left `cargo check` green, `check_tenant_rls_coverage.sh` green and the
+  # `workers_maintenance_rls_pg` suite green. That gate asks a per-FILE
+  # question — "does this file still contain residual `begin_account_scoped(`
+  # calls, given its manifest status" — and this defect is an arm that calls NO
+  # scope primitive, in a file the manifest already classifies `exempt` or
+  # `converted`. There is nothing for it to grep.
+  #
+  # The script extracts each `JobScope::Org(..) =>` / `TenantId::Org(..) =>`
+  # arm body by BALANCED DELIMITERS, not by line: the arms come in four
+  # syntactic shapes and a line-anchored `=> store\.` pattern sees one of them.
+  # Allowed exceptions live in scripts/org_arm_scope.baseline, one per line
+  # with a `# reason:` above it; the file may shrink and may not grow without a
+  # reviewer, and a STALE entry fails too.
+  #
+  # Never put this behind a path filter: a guard whose filter does not name
+  # `scripts/` goes dead and stays green, and `ci-gate` counts a SKIPPED job
+  # as a pass. Fast, bash-only, no Postgres service.
+  org-arm-scope:
+    name: Org-arm scope guard (grep-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Grep-only job; never needs GITHUB_TOKEN after checkout (same
+          # zizmor rationale — and same ubuntu-only caveat — as the
+          # `no-ambient-pool` job above).
+          persist-credentials: false
+      # The guard's own fixtures, first. A scanner that silently matches
+      # nothing prints OK forever; these pin the ways that can happen (comment
+      # and string masking, lifetimes vs char literals, block-bodied arms, an
+      # unparseable Store trait). If the self-test is red the gate result below
+      # means nothing, so it runs before it.
+      - name: Org-arm scope guard self-test
+        run: bash scripts/check_org_arm_scope.sh --self-test
+      - name: Run org-arm scope guard
+        run: bash scripts/check_org_arm_scope.sh
+
+  # ===========================================================================
+  # CI gate — one status that aggregates every job above: a job that FAILED
+  # or was CANCELLED turns the gate red; a SKIPPED job counts as green.
+  # No ruleset requires this check (the PR gate is pr.yml's `guards` + `e2e`).
+  # Adding a job to this workflow means adding it to the `needs:` list below
+  # — a job missing here is silently un-gated, so keep the list complete.
+  # ===========================================================================
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - migration-guard
+      - no-ambient-pool
+      - no-cross-plane-promotion
+      - no-unsupported-startup-parameters
+      - embedding-gateway
+      - silent-drop-is-alertable
+      - no-unbounded-fanout
+      - connectors-do-not-answer
+      - membership-writer-guard
+      - scoped-shape-ratchet
+      - rls-coverage
+      - tenant-rls-coverage
+      - org-arm-scope
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job green or skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"' | sort
+          bad=$(echo "$NEEDS" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key')
+          if [ -n "$bad" ]; then
+            echo "::error::CI gate: these jobs did not pass: $(echo "$bad" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "CI gate: all $(echo "$NEEDS" | jq 'length') jobs passed or were skipped"
+
+  page-read-routes:
+    name: Page read declaration coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Page read route fixtures
+        run: bash scripts/check_page_read_routes.sh --self-test
+      - name: Page read route coverage
+        run: bash scripts/check_page_read_routes.sh

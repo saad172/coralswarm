@@ -1,0 +1,1648 @@
+name: Deploy
+
+# Production deploys a `server-YYYY.MM.DD.N` release that `release.yml` (the
+# Release button) prepared, verified and published; a merge to `main` deploys
+# nothing.
+# docs/runbooks/release.md is the runbook.
+#
+# One file, four modes, chosen by the `gate` job:
+#
+#   build     `-f target=release-build` dispatched on a `server-*` tag (what
+#             release.yml does), or a push of such a tag. Pre-deploy guards,
+#             then the release build of the tagged commit, uploaded as the
+#             `backend-release-<sha>` artifact. NOTHING is deployed. release.yml
+#             prepares the financial images from that artifact before the
+#             release is published.
+#   release   `-f target=release` dispatched on a `server-*` tag (what
+#             release.yml does once the release is final), or `release:
+#             published`. Guards -> prove the recorded tag build succeeded ->
+#             deploy STAGING (backend, then web) -> staging smoke (real
+#             providers) -> AUTO-PROMOTE to production (backend, web,
+#             marketing). No approval gate; the smoke is the gate. The BACKEND
+#             images are the ones release.yml prepared and independently
+#             verified: nothing is rebuilt between staging and production. Web is
+#             built per environment from the same commit (NEXT_PUBLIC_* values
+#             are baked in and differ), so staging smokes the web code.
+#   rollback  `gh workflow run Deploy --ref main -f release=server-...`
+#             Redeploys that release's already-built images (evidence on the
+#             release, recorded in its `release-images.json`). No build, no CI,
+#             no guards, no staging; production only.
+#   staging   `gh workflow run Deploy --ref <branch> -f target=staging`.
+#             Staging from any branch, prepared in this run. Never production.
+#
+# Production is reachable ONLY through `release` and `rollback`. Both require
+# the tagged commit to be an ancestor of `main` and a final (not draft, not
+# pre-release) GitHub Release: there is no branch-to-production path.
+#
+# Tags and releases that release.yml writes with GITHUB_TOKEN start no workflow,
+# which is why `build` and `release` are also dispatch targets.
+#
+# Every `flyctl deploy` / `wrangler deploy` is idempotent against unchanged
+# source. The workflow has its own non-cancelling concurrency group; a second
+# run queues behind a running one and never cancels it mid-rollout.
+on:
+  # A tag push still runs the release BUILD (mode `build`) for a hand-pushed tag.
+  push:
+    tags: ['server-*']
+  # A published release still deploys (mode `release`). The event cannot be
+  # filtered by tag, so `gate` turns every non-`server-*` release into a no-op.
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: >-
+          Build the backend release artifact (build-backend-release) and
+          upload it without deploying — all deployment jobs are skipped.
+          Lets a branch prove the build/artifact step without shipping anything.
+        type: boolean
+        default: false
+      target:
+        description: >-
+          staging deploys coralswarm-backend-staging from WHATEVER branch you
+          dispatch against (so a fix branch can be proven on staging before
+          merging); staging web ships only from `develop`. release-build and
+          release are what release.yml dispatches on a server-* tag: the
+          release build, then the deploy of the final release. Use the
+          `release` input for a rollback.
+        type: choice
+        options:
+          - staging
+          - release-build
+          - release
+        default: staging
+      release:
+        description: >-
+          ROLLBACK. A published `server-YYYY.MM.DD.N` tag whose already-built
+          images are redeployed to production, with no rebuild, no CI and no
+          guards (the evidence comes from that release's assets). Must be
+          dispatched on `main`. Leave empty for any other dispatch.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  # `require-release-build` reads the recorded build run, and the staging
+  # dispatch downloads its own preparation artifact.
+  actions: read
+
+# Anything that can reach production (a release deploy or a rollback) shares
+# ONE group, so a rollback queues behind a running release rather than racing
+# it, whatever tag each names. Tag builds and staging dispatches keep a per-ref
+# group so they never sit in front of a production run. Non-cancelling: a
+# second run queues (GitHub keeps one pending per group) and never cancels a
+# rollout mid-flight.
+concurrency:
+  group: ${{ (github.event_name == 'release' || inputs.release != '' || inputs.target == 'release') && 'deploy-production' || format('deploy-{0}', github.ref_name) }}
+  cancel-in-progress: false
+
+jobs:
+  # Resolves the mode (see the header), the commit to act on and which targets
+  # this run may reach. Every other job depends on it.
+  gate:
+    name: Resolve deploy target
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      branch: ${{ steps.resolve.outputs.branch }}
+      mode: ${{ steps.resolve.outputs.mode }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      # 'true'/'false' strings (GITHUB_OUTPUT has no native bool), computed
+      # once here so every downstream `if:` is a single equality check.
+      build: ${{ steps.resolve.outputs.build }}
+      deploy_production: ${{ steps.resolve.outputs.deploy_production }}
+      deploy_staging: ${{ steps.resolve.outputs.deploy_staging }}
+      deploy_web_staging: ${{ steps.resolve.outputs.deploy_web_staging }}
+      rollback: ${{ steps.resolve.outputs.rollback }}
+    steps:
+      - name: Resolve mode, commit and targets
+        id: resolve
+        # Values come in via `env:`, not inline ${{ }} interpolation: git ref
+        # names are not shell-safe.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME_IN: ${{ github.ref_name }}
+          GITHUB_REF_TYPE_IN: ${{ github.ref_type }}
+          EVENT_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          RELEASE_DRAFT: ${{ github.event.release.draft }}
+          DISPATCH_TARGET: ${{ inputs.target }}
+          DISPATCH_RELEASE: ${{ inputs.release }}
+          DISPATCH_DRY_RUN: ${{ inputs.dry_run }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          TAG_RE='^server-[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$'
+          mode=none; build=false; production=false; staging=false
+          web_staging=false; rollback=false; tag=""; sha="$EVENT_SHA"
+          branch="$GITHUB_REF_NAME_IN"
+
+          # The tagged commit must be `main` or an ancestor of it: a release
+          # (or rollback) can never ship code that was not merged. Pins the
+          # sha from the tag itself rather than trusting the event's.
+          resolve_tag() {
+            if [[ ! "$1" =~ $TAG_RE ]]; then
+              echo "::error::'$1' is not a server-YYYY.MM.DD.N release tag"
+              exit 1
+            fi
+            sha="$(gh api "repos/$REPO/commits/$1" --jq .sha)"
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::could not resolve tag $1 to a commit"
+              exit 1
+            fi
+            status="$(gh api "repos/$REPO/compare/main...$sha" --jq .status)"
+            case "$status" in
+              identical|behind) ;;
+              *)
+                echo "::error::$1 ($sha) is not on main (compare status: $status). Releases ship only merged code."
+                exit 1
+                ;;
+            esac
+          }
+
+          # Production ships only a final release: release.yml keeps it a
+          # pre-release until the independent verification passed.
+          require_final_release() {
+            state="$(gh api "repos/$REPO/releases/tags/$1" --jq '"\(.draft) \(.prerelease)"' 2>/dev/null || echo missing)"
+            if [ "$state" != "false false" ]; then
+              echo "::error::$1 is not a final GitHub Release (draft/prerelease: $state). Run the Release workflow; it publishes only after verification."
+              exit 1
+            fi
+          }
+
+          case "$EVENT_NAME" in
+            push)
+              # Tag push (the workflow's only push trigger): release build.
+              tag="$GITHUB_REF_NAME_IN"
+              if [ "$GITHUB_REF_TYPE_IN" != "tag" ]; then
+                echo "::error::unexpected non-tag push"; exit 1
+              fi
+              resolve_tag "$tag"
+              mode=build; build=true
+              ;;
+            release)
+              if [[ "$RELEASE_TAG" != server-* ]]; then
+                echo "::notice::release '$RELEASE_TAG' is not a server release (server-*); nothing to deploy."
+              else
+                if [ "$RELEASE_PRERELEASE" = "true" ] || [ "$RELEASE_DRAFT" = "true" ]; then
+                  echo "::error::server releases must not be drafts or pre-releases"; exit 1
+                fi
+                tag="$RELEASE_TAG"
+                resolve_tag "$tag"
+                mode=release; production=true; staging=true; web_staging=true
+              fi
+              ;;
+            workflow_dispatch)
+              if [ -n "$DISPATCH_RELEASE" ]; then
+                # Rollback: production only, from main only.
+                if [ "$GITHUB_REF_NAME_IN" != "main" ] || [ "$GITHUB_REF_TYPE_IN" != "branch" ]; then
+                  echo "::error::rollback must be dispatched on main (production is never reachable from another ref)"; exit 1
+                fi
+                if [ "$DISPATCH_DRY_RUN" = "true" ]; then
+                  echo "::error::dry_run has no meaning for a rollback"; exit 1
+                fi
+                tag="$DISPATCH_RELEASE"
+                resolve_tag "$tag"
+                require_final_release "$tag"
+                mode=rollback; rollback=true
+              else
+                case "$DISPATCH_TARGET" in
+                  staging|"")
+                    mode=staging; staging=true; build=true
+                    if [ "$branch" = "develop" ]; then web_staging=true; fi
+                    ;;
+                  release-build|release)
+                    if [ "$GITHUB_REF_TYPE_IN" != "tag" ]; then
+                      echo "::error::target=$DISPATCH_TARGET must be dispatched on a server-* tag (--ref server-...)"; exit 1
+                    fi
+                    tag="$GITHUB_REF_NAME_IN"
+                    resolve_tag "$tag"
+                    if [ "$DISPATCH_TARGET" = release-build ]; then
+                      mode=build; build=true
+                    else
+                      if [ "$DISPATCH_DRY_RUN" = "true" ]; then
+                        echo "::error::dry_run has no meaning for a release deploy"; exit 1
+                      fi
+                      require_final_release "$tag"
+                      mode=release; production=true; staging=true; web_staging=true
+                    fi
+                    ;;
+                  *)
+                    echo "::error::unknown workflow_dispatch target '$DISPATCH_TARGET' (expected staging, release-build or release)"
+                    exit 1
+                    ;;
+                esac
+                if [ "$DISPATCH_DRY_RUN" = "true" ]; then build=true; fi
+              fi
+              ;;
+            *)
+              echo "::error::unexpected event $EVENT_NAME"; exit 1
+              ;;
+          esac
+
+          emit sha "$sha"; emit branch "$branch"; emit mode "$mode"; emit tag "$tag"
+          emit build "$build"; emit deploy_production "$production"
+          emit deploy_staging "$staging"; emit deploy_web_staging "$web_staging"
+          emit rollback "$rollback"
+
+  # Pre-deploy invariant guard. The last check a commit passes before it
+  # ships. Runs on the tag build AND again on the release publish (seconds), so
+  # a release is guarded at both the build and the deploy. Skipped for a
+  # rollback: redeploying a known-good image must not depend on today's guards.
+  #
+  # Not a second CI. It re-runs only the checks that are (a) cheap enough to
+  # sit in front of a deploy (bash/perl over the checked-out tree, no
+  # Postgres, no compile) and (b) guard an invariant whose violation is a
+  # production incident rather than a failing test: ci.yml's "(grep-guard)"
+  # jobs plus migration numbering/manifest. Each step invokes the SAME script
+  # as the corresponding ci.yml job, so the two cannot drift apart.
+  pre-deploy-invariant-guard:
+    name: Pre-deploy invariant guard
+    needs: gate
+    if: >-
+      needs.gate.result == 'success' &&
+      (needs.gate.outputs.mode == 'build' || needs.gate.outputs.mode == 'release' ||
+       needs.gate.outputs.mode == 'staging')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          # Greps the checked-out tree only; never needs GITHUB_TOKEN after
+          # checkout. Tags are needed by the migration contract guard (it
+          # compares against the latest `server-*` release).
+          persist-credentials: false
+          # Full history, so ALL tags arrive. `fetch-tags: true` is not enough
+          # with a shallow SHA checkout (actions/checkout#1471) and the
+          # contract guard would silently see no `server-*` release.
+          fetch-depth: 0
+
+      - name: Deployment admission and verification tests
+        run: python3 -m unittest discover -s scripts/tests -p test_deployment.py
+
+      - name: No ambient pool under routes/
+        run: bash scripts/check_no_ambient_pool.sh
+      - name: Promotion never crosses a database
+        run: bash scripts/check_no_cross_plane_promotion.sh
+      - name: No unsupported Postgres startup parameter
+        run: bash scripts/check_startup_parameters.sh
+      - name: Self-test the embedding-gateway guard
+        run: bash scripts/check_embedding_gateway.sh --self-test
+      - name: Every embedding goes through the gateway
+        run: bash scripts/check_embedding_gateway.sh
+      - name: Self-test the managed front-door guard
+        run: bash scripts/check_managed_front_door.sh --self-test
+      - name: One plane resolver for managed admission and billing
+        run: bash scripts/check_managed_front_door.sh
+      - name: Self-test the silent-drop guard
+        run: bash scripts/check_silent_drop_is_alertable.sh --self-test
+      - name: A silently-dropping state must be alertable
+        run: bash scripts/check_silent_drop_is_alertable.sh
+      - name: No O(rows) request fan-out
+        run: bash scripts/check_no_unbounded_fanout.sh
+      - name: Self-test the verdict-once guard
+        run: python3 scripts/check_verdict_once.py --self-test
+      - name: Each per-row verdict runs once
+        run: python3 scripts/check_verdict_once.py
+      - name: Self-test the _scoped shape ratchet
+        run: bash scripts/check_scoped_shape_ratchet.sh --self-test
+      - name: _scoped shape ratchet
+        run: bash scripts/check_scoped_shape_ratchet.sh
+      - name: RLS scope coverage gate
+        run: bash scripts/check_rls_coverage.sh
+
+      # Numbering + checksum manifest only. Without BASE_REF the append-only
+      # base diff in `check_migrations.sh` no-ops, which is what is wanted:
+      # a deploy depends on the tree's own numbering and manifest agreeing
+      # with the files about to be applied, and needs no git history.
+      - name: Migration numbering + checksum manifest
+        run: bash scripts/check_migrations.sh
+
+      # Rollback is "redeploy the previous image", so a release may only ADD
+      # schema: DROP COLUMN / DROP TABLE / RENAME needs a `-- contract:
+      # safe-after server-...` marker naming an already-superseded release.
+      - name: Self-test the migration contract guard
+        run: bash scripts/check_migration_contract.sh --self-test
+      - name: Migrations are rollback-safe (expand/contract)
+        run: bash scripts/check_migration_contract.sh
+
+  # Pre-deploy definer search_path guard. The one pre-deploy check that needs
+  # a database, so it is a sibling of `pre-deploy-invariant-guard` (which stays
+  # bash/perl only) rather than a step inside it; the two run in parallel and
+  # every backend-shipping job requires both.
+  #
+  # Applies the control and tenant migration trees to fresh databases and fails
+  # if any SECURITY DEFINER routine's search_path does not end in pg_temp
+  # (control 0376 / tenant 0198 pinned the existing ones; a later CREATE OR
+  # REPLACE FUNCTION resets the clause). Same script as ci.yml's
+  # `definer-search-path` job. Migrations ship only with the backend, so web
+  # and marketing deploys do not wait on it.
+  #
+  # The same job runs `check_provisioning_privileges.sh` on the control tree:
+  # no role but the owner writes `tenant_databases`, `tenant_provisioning_jobs`
+  # or `tenant_db_credentials` (table or column grants, membership and PUBLIC
+  # included; control 0088's slug-reconcile column grant is the one
+  # allowlisted exception), and only `coralswarm_provisioner` executes the
+  # routing-writing definers (control 0381). It checks a fresh database built
+  # from the tree, never prod: the live provisioner role is checked by the
+  # worker's boot self-check.
+  pre-deploy-definer-guard:
+    name: Pre-deploy definer search_path guard
+    needs: gate
+    if: >-
+      needs.gate.result == 'success' &&
+      (needs.gate.outputs.mode == 'build' || needs.gate.outputs.mode == 'release' ||
+       needs.gate.outputs.mode == 'staging')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --shm-size=1g
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Install postgresql-client
+        run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache sqlx-cli
+        id: cache-sqlx
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/sqlx
+          key: sqlx-cli-0.8-${{ runner.os }}
+      - name: Install sqlx-cli
+        if: steps.cache-sqlx.outputs.cache-hit != 'true'
+        run: cargo install sqlx-cli --version '^0.8' --no-default-features --features postgres,rustls --locked
+      - name: Self-test the definer search_path guard
+        run: SQLX=~/.cargo/bin/sqlx bash scripts/check_definer_search_path.sh --self-test
+      - name: Every SECURITY DEFINER search_path ends in pg_temp
+        run: SQLX=~/.cargo/bin/sqlx bash scripts/check_definer_search_path.sh
+      - name: Self-test the provisioning privilege guard
+        run: SQLX=~/.cargo/bin/sqlx bash scripts/check_provisioning_privileges.sh --self-test
+      # Control 0381's role split: only the owner writes the provisioning
+      # tables (column grants included), and only coralswarm_provisioner
+      # executes the routing-writing definers.
+      - name: Provisioning tables and definers grant no more than 0381 allows
+        run: SQLX=~/.cargo/bin/sqlx bash scripts/check_provisioning_privileges.sh
+
+  # Compiles the release backend binaries in GitHub Actions instead of on
+  # Fly's remote (depot.dev) builder, and stages them into a `dist/` artifact
+  # that `backend/Dockerfile.prebuilt` COPYs from. RCA (2026-09-04, deploy run
+  # 33896893283, job "Deploy backend (Fly)", step `flyctl deploy --remote-only
+  # --config fly.toml`): inside the depot builder, `RUN cargo build --release
+  # -p coralswarm-backend` (the old `backend/Dockerfile`'s builder stage,
+  # `FROM rust:1-trixie`) had rustc SIGKILLed (signal 9, out of memory) at
+  # ~348s compiling the `coralswarm-backend` lib; flyctl then hit "error
+  # releasing builder: deadline_exceeded", the retry loop below re-ran it, and
+  # the job died on its 30-minute timeout with production still on release
+  # v397 (2026-08-25). depot's remote builder has a memory ceiling this crate
+  # has grown past — a GitHub-hosted runner (4-core/16GB RAM as of this
+  # writing) gives straightforward headroom without touching Cargo.toml
+  # profiles or trimming the crate.
+  #
+  # Runs in mode `build` (release.yml's `target=release-build` dispatch on a
+  # `server-*` tag, or a tag push) and on a staging / dry-run dispatch (`gate`
+  # sets `build=true`). NOT in mode `release`: the artifact it uploads is what
+  # release.yml turns into the prepared, verified images BEFORE the release is
+  # published, so the release run
+  # proves this build succeeded (`require-release-build`) instead of repeating
+  # it. A dry run is what lets a branch prove this step without touching any
+  # deploy job.
+  #
+  # `pre-deploy-invariant-guard` and `pre-deploy-definer-guard` are in `needs:` to fail FAST — a broken
+  # invariant should not cost ~20 minutes of release compile before
+  # `deploy-backend` declines to ship it. The guards run on every path, so a
+  # broken invariant stops a staging build too.
+  build-backend-release:
+    name: Build backend release binaries
+    needs: [gate, pre-deploy-invariant-guard, pre-deploy-definer-guard]
+    if: >-
+      needs.gate.result == 'success' &&
+      needs.pre-deploy-invariant-guard.result == 'success' &&
+      needs.pre-deploy-definer-guard.result == 'success' &&
+      needs.gate.outputs.build == 'true'
+    # 8 GB ubuntu-latest kills the release build with exit 143 when one rustc
+    # outgrows RAM (2026-10-20: d891fe86, 93e99d26); same fix as ci.yml.
+    runs-on: ubuntu-4core-16gb
+    # The build runs INSIDE a Debian trixie container, not on the runner's
+    # own OS. The binaries link against whatever glibc they are built on, and
+    # `backend/Dockerfile.prebuilt` runs them on `debian:trixie-slim` (glibc
+    # 2.41). A host build silently inherits the runner image's glibc: on
+    # 2026-10-23 GitHub moved "Ubuntu Latest" from 24.04 to 26.04 (glibc
+    # 2.43), and the binary built for a1e58617 died in the runtime image with
+    # `libm.so.6: version GLIBC_2.43 not found`. The release gate caught it
+    # before it shipped. Building on the runtime's own Debian release makes
+    # the glibc floor a property of this file, whatever image the runner
+    # carries. Keep this tag's Debian codename equal to the runtime's FROM;
+    # the "Check glibc floor" step below fails the job if they drift the
+    # dangerous way. `rust:1-trixie` is also `backend/Dockerfile`'s builder.
+    #
+    # `volumes:` exposes the host's /usr and /opt so "Free runner disk space"
+    # can still delete the preinstalled SDKs on the HOST disk, where the
+    # checkout and target/ live. Steps of a container job cannot run on the
+    # host directly. The runner itself mounts /var/run/docker.sock into job
+    # containers, which the glibc check uses to run the runtime image.
+    container:
+      image: rust:1-trixie
+      volumes:
+        - /usr:/host/usr
+        - /opt:/host/opt
+    # A container job's `run:` steps default to `sh -e`, not the host's
+    # `bash -e`, and the steps below need bash (`shopt -s nullglob` and an
+    # array in "Assemble dist/"; the first container dry run died there with
+    # exit 127). Pinning bash keeps the `set -e` reasoning in "Verify
+    # stripped binaries run" true as written.
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 45
+    env:
+      # More headroom on the runner without touching the checked-in release
+      # profile (there isn't one — the workspace Cargo.toml has no
+      # `[profile.release]`, so this is cargo's default codegen-units=16):
+      # fewer codegen units per crate lowers rustc's peak memory at a small
+      # compile-time cost — the same lever depot's OOM ran out of room for.
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      # What the Ubuntu runner image used to provide implicitly. `rust:1-trixie`
+      # already has gcc, make, libssl-dev, git, binutils and `file`. Missing:
+      # pkg-config (openssl-sys, onig_sys), cmake (aws-lc-sys),
+      # clang + libclang-dev (bindgen, tree-sitter grammars),
+      # and docker-cli for the glibc check and the image prune below.
+      - name: Install build packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            pkg-config cmake clang libclang-dev docker-cli python3
+      # Same deletions as before the build moved into a container, through the
+      # `/host` mounts declared on `container:`. `apt-get clean` is gone: it
+      # only cleaned the host's apt cache, which the runner image ships empty.
+      - name: Free runner disk space
+        run: |
+          df -h /host/usr
+          rm -rf /host/usr/share/dotnet /host/usr/local/lib/android /host/opt/ghc \
+                 /host/opt/hostedtoolcache /host/usr/local/share/boost \
+                 /host/usr/share/swift /host/usr/local/julia* /host/usr/lib/jvm \
+                 /host/usr/local/.ghcup /host/usr/local/share/powershell \
+                 /host/usr/local/share/chromium /host/usr/local/lib/node_modules || true &
+          docker image prune -af >/dev/null 2>&1 || true &
+          wait
+          df -h /host/usr
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          # OWN shared-key, never `backend-pg`: that key is the dev-profile
+          # cache the CI test suites share (CARGO_PROFILE_DEV_DEBUG=line-
+          # tables-only, no CODEGEN_UNITS override) — mixing a release-profile
+          # build into it would just thrash both caches on every push. The
+          # `-trixie` suffix retires the old `backend-release` cache, which
+          # holds build-script outputs and objects compiled against the
+          # runner's glibc; restoring those into the container could link
+          # host-glibc objects back into the release.
+          shared-key: backend-release-trixie
+      - name: Build release binaries
+        # `--features code-chunking`: GitHub connector PR B's tree-sitter code
+        # chunker. Backend-only;
+        # without it a deployed backend silently falls back to line windows.
+        run: cargo build --release -p coralswarm-backend --bin coralswarm-backend --bin migrate_control --bin migrate_tenants --bin backfill_provenance_links --bin fold_subtopics --bin backfill_chunk_links --bin backfill_node_atoms_bridge --bin dedupe_reefs --bin retry_failed_extractions_v2 --bin backfill_fact_supersession --bin backfill_co_occurrence --bin quality_eval_ask --bin org_deletion_admin --bin purge_desktop_data --bin library_read_model_diff --features code-chunking
+      # The cheap preflight cannot inspect assembled Rust SQL. This required
+      # build-stage gate checks the actual source-stamped executable's twelve
+      # programs / thirty-six bodies before any release artifact is uploaded.
+      # The proof CLI and Python stay in the builder, outside dist/runtime.
+      - name: Validate generated Library verdicts
+        run: |
+          target/release/library_read_model_diff --export-sql > "$RUNNER_TEMP/library-reader-programs.jsonl"
+          python3 scripts/check_verdict_once.py --reader-programs "$RUNNER_TEMP/library-reader-programs.jsonl" --source-sha "$GITHUB_SHA"
+      # Strip symbols — the workspace Cargo.toml deliberately has no
+      # `[profile.release]` (left alone so local dev builds are unaffected;
+      # this strips only the CI-built artifact). `--strip-debug` was tried
+      # first and measured almost useless here (2026-09-04 dry run 33918200500:
+      # coralswarm-backend 119264592 -> 116654800 bytes, ~2.2%; the two
+      # migrate binaries similarly ~2-3%) — cargo's own release profile
+      # default is already `debug = false`, so there was very little DWARF
+      # debug info to remove in the first place. `file` confirmed why:
+      # `--strip-debug` leaves `.symtab` (the full local/global symbol table
+      # — every mangled Rust generic-instantiation symbol across the crate
+      # graph plus statically-linked `libonnxruntime`) untouched, and that
+      # symbol table is the actual bulk of the binary. Full `strip` (equivalent
+      # to `--strip-all`) removes `.symtab` too while still preserving
+      # `.dynsym` (the DYNAMIC symbol table used for actual runtime linking
+      # against glibc/libgcc/libssl) — GNU strip does not remove `.dynsym`
+      # from a dynamically-linked ELF, since the loader needs it to run the
+      # binary at all, so this is safe for `ort`'s statically-linked
+      # onnxruntime (compiled into this same object, not a separate `.so`
+      # loaded via `dlsym`-by-name — nothing here does symbol lookups on
+      # its own binary at runtime). "Verify stripped binaries run" below
+      # confirms this empirically rather than by assertion. `strip`, not a
+      # Cargo/rustc profile flag, so the size drop is visible right here in
+      # the job log rather than folded invisibly into the compile step.
+      - name: Strip release binaries
+        run: |
+          echo "before strip:"
+          ls -la target/release/coralswarm-backend target/release/migrate_control target/release/migrate_tenants \
+            target/release/backfill_provenance_links target/release/fold_subtopics \
+            target/release/backfill_chunk_links target/release/backfill_node_atoms_bridge \
+            target/release/dedupe_reefs target/release/retry_failed_extractions_v2 \
+            target/release/backfill_fact_supersession target/release/backfill_co_occurrence target/release/quality_eval_ask \
+            target/release/org_deletion_admin target/release/purge_desktop_data
+          strip \
+            target/release/coralswarm-backend \
+            target/release/migrate_control \
+            target/release/migrate_tenants \
+            target/release/backfill_provenance_links \
+            target/release/fold_subtopics \
+            target/release/backfill_chunk_links \
+            target/release/backfill_node_atoms_bridge \
+            target/release/dedupe_reefs \
+            target/release/retry_failed_extractions_v2 \
+            target/release/backfill_fact_supersession \
+            target/release/backfill_co_occurrence \
+            target/release/quality_eval_ask \
+            target/release/org_deletion_admin target/release/purge_desktop_data
+          echo "after strip:"
+          ls -la target/release/coralswarm-backend target/release/migrate_control target/release/migrate_tenants \
+            target/release/backfill_provenance_links target/release/fold_subtopics \
+            target/release/backfill_chunk_links target/release/backfill_node_atoms_bridge \
+            target/release/dedupe_reefs target/release/retry_failed_extractions_v2 \
+            target/release/backfill_fact_supersession target/release/backfill_co_occurrence target/release/quality_eval_ask \
+            target/release/org_deletion_admin target/release/purge_desktop_data
+      # A bad `strip` invocation (wrong section stripped, corrupted ELF)
+      # shows up as the binary dying to a signal on invocation — `file`
+      # confirms the ELF header is still sane and reports "stripped" now
+      # (contrast the `--strip-debug` dry run above, which still reported
+      # "not stripped" — `file`'s check is `.symtab` presence, not DWARF), and
+      # a signal-exit (128+N, e.g. 139 = SIGSEGV, 134 = SIGABRT) on a bare
+      # invocation catches the corruption case. Neither binary has a
+      # `--help`/`--version` flag (no `clap`, no arg parser at all in
+      # `main.rs` / `migrate_control.rs` / `migrate_tenants.rs` — checked),
+      # so this is deliberately just "does it start and either exit cleanly
+      # or keep running", not a functional test: `migrate_control`/
+      # `migrate_tenants` fail closed with exit 2 (no
+      # MIGRATOR_DATABASE_URL/DATABASE_URL in this job's env, per their own
+      # doc comments) almost immediately; `coralswarm-backend` either exits
+      # non-zero quickly (EMBED_MODEL_PATH unset — the model is no longer
+      # fetched in this job, see the "Assemble dist/" step below) or keeps
+      # serving past the 5s window, both acceptable — `timeout` reports that
+      # case as 124, not a signal.
+      #
+      # `timeout ...; ec=$?` alone would NOT work here: GitHub Actions runs
+      # `run:` blocks under `bash -e`, and the expected non-zero exits above
+      # (2 from the migrate binaries, etc.) would abort the step right at the
+      # `timeout` line, before `ec=$?` ever captured anything — confirmed the
+      # hard way in the same dry run (the step died with "exit code 2" and
+      # never printed a size-based diagnosis). Wrapping the invocation in an
+      # `if` is the standard `set -e`-safe way to capture a command's exit
+      # code without letting an expected failure kill the step.
+      - name: Verify stripped binaries run
+        run: |
+          file target/release/coralswarm-backend target/release/migrate_control target/release/migrate_tenants \
+            target/release/backfill_provenance_links target/release/fold_subtopics \
+            target/release/backfill_chunk_links target/release/backfill_node_atoms_bridge \
+            target/release/dedupe_reefs target/release/retry_failed_extractions_v2 \
+            target/release/backfill_fact_supersession target/release/backfill_co_occurrence target/release/quality_eval_ask \
+            target/release/org_deletion_admin target/release/purge_desktop_data
+          for bin in migrate_control migrate_tenants coralswarm-backend backfill_provenance_links fold_subtopics backfill_chunk_links backfill_node_atoms_bridge dedupe_reefs retry_failed_extractions_v2 backfill_fact_supersession backfill_co_occurrence quality_eval_ask org_deletion_admin purge_desktop_data; do
+            if timeout 5 "target/release/$bin"; then
+              ec=0
+            else
+              ec=$?
+            fi
+            echo "$bin exit code: $ec"
+            if [ "$ec" -ge 128 ]; then
+              echo "::error::$bin died to a signal ($((ec - 128))) after stripping — strip likely corrupted the binary"
+              exit 1
+            fi
+          done
+      # Everything `backend/Dockerfile.prebuilt` COPYs, staged under `dist/`:
+      # the serving + migrate binaries, G1/G4 one-shots, `release.sh` (the Fly `release_command`
+      # — see fly.toml), and any ONNX Runtime shared lib next to the binary.
+      # The embedding model is deliberately NOT staged here any more — see
+      # `backend/Dockerfile.prebuilt`, which now fetches it itself in a `RUN
+      # curl` layer (same URLs, same `--retry 3`, same `/app/models/...`
+      # target paths as `backend/Dockerfile`'s builder stage). That both
+      # drops ~133 MB from every deploy's upload and lets the model layer
+      # cache across deploys — it never changes, so Docker/BuildKit's layer
+      # cache skips re-fetching it once any deploy has built it once.
+      #
+      # That last one is currently ALWAYS EMPTY, verified while debugging this
+      # job's first dry run (2026-09-04): `ort`'s current build (pinned in
+      # `packages/core/Cargo.toml`) statically links onnxruntime
+      # (`cargo:rustc-link-lib=static=onnxruntime`, confirmed by inspecting
+      # the `ort-sys` build script's own log for both aarch64 and x86_64
+      # targets) rather than producing a `.so`. `backend/Dockerfile`'s
+      # `COPY --from=builder .../*.so*` has therefore been a silent no-op for
+      # a while — Docker's COPY does not fail on a zero-match glob (verified
+      # empirically), so this was invisible there. `cp` DOES fail on a
+      # zero-match glob, which is what failed this step on the first dry run;
+      # `nullglob` below makes it match `COPY`'s tolerant behavior instead of
+      # the wrong (this-job-only) failure mode, while still copying any
+      # dylib that does appear — e.g. if `ort`/its feature set ever goes back
+      # to dynamic linking. The now-inert `ENV LD_LIBRARY_PATH=/app` in both
+      # Dockerfiles is left alone — out of scope for this PR, and harmless.
+      - name: Assemble dist/
+        run: |
+          # `dist/` used to come into existence as a side effect of the (now
+          # removed) "Fetch embedding model" step's `mkdir -p dist/models` —
+          # nothing else in this job creates it any more, so do so explicitly.
+          # Confirmed the hard way (dry run 33919473707): GNU `cp`'s error for
+          # `cp file nonexistent-dir/` is the deeply misleading "cannot create
+          # regular file 'dist/': Not a directory", not "no such directory".
+          mkdir -p dist
+          cp target/release/coralswarm-backend dist/
+          cp target/release/migrate_control dist/
+          cp target/release/migrate_tenants dist/
+          cp target/release/backfill_provenance_links dist/
+          cp target/release/fold_subtopics dist/
+          cp target/release/backfill_chunk_links dist/
+          cp target/release/backfill_node_atoms_bridge dist/
+          cp target/release/dedupe_reefs dist/
+          cp target/release/retry_failed_extractions_v2 dist/
+          cp target/release/backfill_fact_supersession dist/
+          cp target/release/backfill_co_occurrence dist/
+          cp target/release/quality_eval_ask dist/
+          cp target/release/org_deletion_admin dist/
+          cp target/release/purge_desktop_data dist/
+          shopt -s nullglob
+          so_files=(target/release/*.so*)
+          if [ "${#so_files[@]}" -gt 0 ]; then
+            cp "${so_files[@]}" dist/
+          fi
+          cp backend/release.sh dist/
+          chmod 0755 dist/release.sh dist/coralswarm-backend dist/migrate_control dist/migrate_tenants \
+            dist/backfill_provenance_links dist/fold_subtopics \
+            dist/backfill_chunk_links dist/backfill_node_atoms_bridge \
+            dist/dedupe_reefs dist/retry_failed_extractions_v2 dist/backfill_fact_supersession dist/backfill_co_occurrence dist/quality_eval_ask dist/org_deletion_admin dist/purge_desktop_data
+      # Every ELF in dist/ against the glibc of the image that will run it.
+      # The script reads that image from `backend/Dockerfile.prebuilt`'s FROM
+      # and runs `ldd --version` in it, so a runtime bump moves the floor with
+      # it. The container build above should make this pass by construction;
+      # this step is what proves it on every release, and it names the binary
+      # and the GLIBC_x.y it needs if a toolchain or base-image change ever
+      # breaks that (the 2026-10-23 GLIBC_2.43 failure surfaced only at the
+      # release gate).
+      - name: Check glibc floor against the runtime image
+        run: scripts/check_glibc_floor.sh backend/Dockerfile.prebuilt dist
+      - name: Report dist/ contents
+        run: |
+          du -sh dist/
+          ls -la dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-release-${{ needs.gate.outputs.sha }}
+          path: dist/
+          # release.yml (or this run's staging prepare) builds the image from this, then
+          # the image (not this artifact) is what every deploy and rollback uses.
+          retention-days: 14
+          if-no-files-found: error
+
+  # Release mode only. The release run does not rebuild; it requires that the
+  # build run the release recorded (`build_run_id` in release-images.json)
+  # built this exact tag and commit, which also passed both guards. This fails
+  # early with the actual reason when a release names no successful build.
+  require-release-build:
+    name: Require a successful tag build
+    needs: gate
+    if: needs.gate.result == 'success' && needs.gate.outputs.mode == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Read the release record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          # Read-only: select compares every asset with its locked R2 copy.
+          RELEASE_EVIDENCE_BUCKET: coralswarm-release-evidence
+          R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY }}
+        run: >-
+          python3 scripts/release_evidence.py select --tag "$TAG" --sha "$RELEASE_SHA"
+          --side staging --dir "$RUNNER_TEMP/release"
+      - name: Require the recorded build of this tag and commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          # The run id comes from the verified release record; the gate already bound the tag to RELEASE_SHA.
+          read -r path head status < <(gh api "repos/$REPO/actions/runs/$BUILD_RUN_ID" \
+            --jq '"\(.path) \(.head_sha) \(.status)"')
+          build="$(gh api "repos/$REPO/actions/runs/$BUILD_RUN_ID/jobs?filter=latest&per_page=100" \
+            --jq '[.jobs[] | select(.name == "Build backend release binaries")] | last | .conclusion // "none"')"
+          if [ "$path $head $status $build" != ".github/workflows/deploy.yml $RELEASE_SHA completed success" ]; then
+            echo "::error::recorded build run $BUILD_RUN_ID is not a successful build of $TAG at $RELEASE_SHA ($path $head $status build=$build). Run the Release workflow again."
+            exit 1
+          fi
+          echo "build run $BUILD_RUN_ID built $TAG at $RELEASE_SHA"
+
+  # ---- Production deploys: release / rollback only ----
+
+  # Every production-shipping job names `pre-deploy-invariant-guard` in BOTH
+  # `needs:` and its `if:`, and states every required `needs.X.result ==
+  # 'success'` explicitly (the file's convention: it fails closed however the
+  # condition composes with `needs:`). Production is promoted only after the
+  # real-provider `smoke-staging` passed on the SAME release.
+  #
+  # Every job in the release chain below `build-backend-release` carries
+  # `!cancelled()`. Without a status function GitHub adds an implicit
+  # `success()`, which skips a job when an ancestor was skipped, and in release
+  # mode `build-backend-release` is skipped by design (the tag push built it).
+  # Production would then never promote. The explicit result checks replace it.
+  deploy-backend:
+    name: Deploy backend (Fly)
+    needs: [gate, pre-deploy-invariant-guard, pre-deploy-definer-guard, require-release-build, smoke-staging]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.pre-deploy-invariant-guard.result == 'success' &&
+      needs.pre-deploy-definer-guard.result == 'success' &&
+      needs.require-release-build.result == 'success' &&
+      needs.smoke-staging.result == 'success' &&
+      needs.gate.outputs.deploy_production == 'true' &&
+      inputs.dry_run != true
+    runs-on: ubuntu-latest
+    # A hung deploy should fail fast, not occupy a runner for six hours. Was
+    # 30 — raised 2026-09-04 after two same-day timeouts (deploy runs
+    # 33896893283 and 33912443160), both of which needed the FULL budget for
+    # legitimate reasons the original 30 never accounted for: this step now
+    # ships a remote image build PLUS `/app/release.sh` (migrate_control +
+    # migrate_tenants, run to completion before traffic routes — see
+    # fly.toml's `[deploy]` comment) PLUS the rolling restart, not just a
+    # bare `flyctl deploy` against an already-built image. 30 minutes assumed
+    # the old fast path; 45 gives that real headroom.
+    timeout-minutes: 45
+    concurrency:
+      group: deploy-backend
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      # No release artifact is downloaded: release.yml built the image from the
+      # tag build's `dist/`, and it is deployed by digest from the evidence on
+      # the release. Nothing here builds or consumes `dist/`.
+      # Pinned to a commit SHA, not @master: this action tracks an
+      # actively-mutable branch with zero version stability, and this job
+      # runs with FLY_API_TOKEN — a force-push or compromise of upstream
+      # master could otherwise execute attacker code holding that secret.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      # The receipt, retained-store sidecar and capability output are the
+      # release's own assets; release-images.json names the preparation run.
+      - name: Select the prepared release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          # Read-only: select compares every asset with its locked R2 copy.
+          RELEASE_EVIDENCE_BUCKET: coralswarm-release-evidence
+          R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY }}
+        run: >-
+          python3 scripts/release_evidence.py select --tag "$TAG" --sha "$RELEASE_SHA"
+          --side production --dir "$RUNNER_TEMP/financial-production"
+      - name: Deploy retained financial image
+        id: rollout
+        run: >-
+          python3 scripts/deploy_financial_backend.py deploy --config fly.toml
+          --receipt "$RECEIPT" --store-evidence "$STORE_EVIDENCE" --capability "$CAPABILITY"
+          --expected-sha256 "$RECEIPT_SHA256" --expected-source "$RELEASE_SOURCE"
+          --prepare-run-id "$PREPARE_RUN_ID"
+          --candidate-receipt "$RUNNER_TEMP/release-backend/candidate.json"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Verify serving image and public routes
+        if: ${{ always() && steps.rollout.outcome != 'skipped' }}
+        run: >-
+          python3 scripts/deployment.py verify
+          --app coralswarm-backend --sha "$EXPECTED_SHA"
+          --candidate "$RUNNER_TEMP/release-backend/candidate.json"
+          --receipt "$RUNNER_TEMP/release-backend/verification.json"
+        env:
+          EXPECTED_SHA: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Retain backend release receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-backend/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # The web bundle is built per environment, NOT promoted from staging:
+  # `NEXT_PUBLIC_API_BASE`, the Clerk publishable key and the web apex are baked
+  # in at build time and differ between staging and production, so the same
+  # artifact cannot serve both. What staging smokes is this commit's web code
+  # built with staging values; production gets the same commit built with
+  # production values. Backend images (the part that migrates data) are the ones
+  # that are promoted unrebuilt. Closing the gap means runtime-injected public
+  # config (see docs/runbooks/release.md).
+  build-web-release:
+    name: Build web standalone bundle
+    needs: [gate, pre-deploy-invariant-guard]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.pre-deploy-invariant-guard.result == 'success' &&
+      needs.gate.outputs.deploy_production == 'true' && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      # The web/ Dockerfile is serve-only: it COPYs a prebuilt .next/standalone +
+      # .next/static. Build them here (the monorepo tsconfig.base.json lives above
+      # web/, so the build must run in the workspace, not the Docker context).
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build standalone bundle
+        run: npm run build
+        env:
+          NEXT_OUTPUT_MODE: standalone
+          # FALLBACK base (org tenancy, topology T1). Used verbatim whenever the
+          # browser's host is not the apex or one of its subdomains — which is
+          # every host prod serves today (coralswarm-web.example). See
+          # web/lib/apiBase.ts.
+          NEXT_PUBLIC_CONNECTORS_V2: "true"
+          NEXT_PUBLIC_API_BASE: https://coralswarm-backend.example
+          # Apex the web UI is served from. Enables host-derived bases:
+          #   <slug>.coralswarm.example  → https://<slug>.api.coralswarm.example
+          #   coralswarm.example|app.|www. → https://api.coralswarm.example
+          # INERT until those hostnames exist: neither app.coralswarm.example nor
+          # api.coralswarm.example resolves today, so every prod request still uses
+          # the fallback above. BEFORE pointing any coralswarm.example hostname at
+          # this app, `api.coralswarm.example` must resolve to coralswarm-backend
+          # and the backend must run with TENANT_APEX_DOMAIN=api.coralswarm.example
+          # (its gate accepts only ONE label above its apex). No separate kill
+          # switch: removing this var (or leaving it blank) is the only way to
+          # disable apex-based derivation and fall back to NEXT_PUBLIC_API_BASE.
+          NEXT_PUBLIC_WEB_APEX: coralswarm.example
+          # Inlined at build time; without it ClerkProvider gets "" and the
+          # deployed app 500s on every authenticated route.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # Renders the GitHub tile on /connectors and the org Connectors
+          # settings page, and un-gates the /connectors/github body itself
+          # (the page ships either way and renders <NotEnabled /> when this is
+          # off — see web/app/(app)/connectors/github/page.tsx). Rollout step
+          # from docs/connectors/github.md §3.12: "enabled first for the
+          # founder's own org".
+          #
+          # MUST be the exact string "true". `githubConnectorTileEnabled` in
+          # web/components/settings/providerMeta.ts is a strict `=== "true"`,
+          # NOT the fail-closed `"1" | case-insensitive "true"` parse the
+          # BACKEND flag uses (backend/src/connector_flags.rs::github_enabled).
+          # The two disagree on purpose-by-accident, so "1" here would deploy a
+          # tile that never renders and look like a broken build instead of a
+          # typo.
+          #
+          # Mirrored into scripts/deploy_local.sh in this same commit.
+          NEXT_PUBLIC_GITHUB_CONNECTOR_TILE: "true"
+          # Clerk OAuth client for the Outlook/Teams add-in panes (prod app
+          # "CoralSwarm for Outlook & Teams"). Set = the panes sign in with Clerk
+          # instead of the pairing code. Public client id, not a secret.
+          # Mirrored into scripts/deploy_local.sh in this same commit.
+          NEXT_PUBLIC_ADDIN_CLERK_OAUTH_CLIENT_ID: "example_18"
+          # Clerk OAuth client for the Google Meet side panel (/meet/sidepanel;
+          # prod app "CoralSwarm for Google Meet"). Unset = the panel says
+          # sign-in is unavailable. Public client id, not a secret. The backend
+          # half is the Fly secret MEET_ADDIN_CLERK_OAUTH_CLIENT_ID (same value).
+          # Mirrored into scripts/deploy_local.sh in this same commit.
+          NEXT_PUBLIC_MEET_ADDIN_CLERK_OAUTH_CLIENT_ID: "example_18"
+      - name: Archive standalone bundle
+        run: tar -czf "$RUNNER_TEMP/web-release.tar.gz" .next/standalone .next/static
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-release-${{ needs.gate.outputs.sha }}
+          path: ${{ runner.temp }}/web-release.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy-web:
+    name: Deploy web (Fly)
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+    needs: [gate, pre-deploy-invariant-guard, deploy-backend, build-web-release]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.pre-deploy-invariant-guard.result == 'success' &&
+      needs.deploy-backend.result == 'success' &&
+      needs.build-web-release.result == 'success' &&
+      needs.gate.outputs.deploy_production == 'true' &&
+      inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Download web standalone bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: web-release-${{ needs.gate.outputs.sha }}
+          path: ${{ runner.temp }}/web-release
+      - name: Restore standalone bundle
+        run: tar -xzf "$RUNNER_TEMP/web-release/web-release.tar.gz"
+      # Pinned to a commit SHA, not @master — see deploy-backend above for rationale.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      - name: Deploy web and preserve candidate digest
+        id: rollout
+        run: bash ../scripts/fly_deploy_with_receipt.sh coralswarm-web "$RUNNER_TEMP/release-web" --remote-only --config fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Verify serving image and public routes
+        if: ${{ always() && steps.rollout.outcome != 'skipped' }}
+        run: >-
+          python3 ../scripts/deployment.py verify
+          --app coralswarm-web --sha "$EXPECTED_SHA"
+          --candidate "$RUNNER_TEMP/release-web/candidate.json"
+          --receipt "$RUNNER_TEMP/release-web/verification.json"
+        env:
+          EXPECTED_SHA: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DEPLOY_SMOKE_TOKEN: ${{ secrets.DEPLOY_SMOKE_TOKEN }}
+          DEPLOY_SMOKE_GRAPH_ID: ${{ vars.DEPLOY_SMOKE_GRAPH_ID }}
+          DEPLOY_REQUIRE_APP_SMOKE: ${{ vars.DEPLOY_REQUIRE_APP_SMOKE }}
+      - name: Export the deployed web image digest
+        id: digest
+        run: echo "digest=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['digest'])" "$RUNNER_TEMP/release-web/candidate.json")" >> "$GITHUB_OUTPUT"
+      - name: Retain web release receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-web-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-web/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  deploy-marketing:
+    name: Deploy marketing (Cloudflare)
+    needs: [gate, pre-deploy-invariant-guard, smoke-staging]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.pre-deploy-invariant-guard.result == 'success' &&
+      needs.smoke-staging.result == 'success' &&
+      needs.gate.outputs.deploy_production == 'true' &&
+      inputs.dry_run != true
+    runs-on: ubuntu-latest
+    # A hung deploy should fail fast, not occupy a runner for six hours.
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-marketing
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: marketing-web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      # Node 22+ is required by wrangler 4; on Node 20 the action silently
+      # downgrades to wrangler 3, which doesn't understand the assets-only
+      # (keyless) Worker config and fails with "Missing entry-point".
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      # A missing site key doesn't fail the build — it silently bakes in
+      # Cloudflare's documented always-passes TEST key (SectionContact.tsx's
+      # fallback), which ships to prod and makes every real form submission
+      # fail against real siteverify (the Worker independently fails closed
+      # on ITS OWN missing secret, but has no way to know the key the
+      # browser was given is a test key). Catch that before it becomes a
+      # deployed site with a permanently-broken contact form.
+      - name: Require Turnstile site key
+        run: |
+          # Trim so a whitespace-only secret (which `-z` doesn't catch)
+          # doesn't slip past this check and get baked into the build.
+          site_key="$(printf '%s' "${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          if [ -z "$site_key" ]; then
+            echo "::error::NEXT_PUBLIC_TURNSTILE_SITE_KEY is unset — this build would ship the Turnstile TEST key to prod and every contact-form submission would fail verification. Set the repository secret before deploying." >&2
+            exit 1
+          fi
+          # Reject Cloudflare's documented Turnstile test sitekeys too — a
+          # secret accidentally set to one of these always passes/fails
+          # client-side regardless of the real siteverify response, so it's
+          # just as broken in prod as an unset key.
+          # https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+          case "$site_key" in
+            1x00000000000000000000AA|2x00000000000000000000AB|1x00000000000000000000BB|2x00000000000000000000BB|3x00000000000000000000FF)
+              echo "::error::NEXT_PUBLIC_TURNSTILE_SITE_KEY is set to a Cloudflare Turnstile TEST sitekey ($site_key) — this must never ship to prod. Set the repository secret to the real production sitekey." >&2
+              exit 1
+              ;;
+          esac
+          if [ -z "${NEXT_PUBLIC_CF_BEACON_TOKEN:-}" ]; then
+            echo "::warning::NEXT_PUBLIC_CF_BEACON_TOKEN is unset — Cloudflare Web Analytics beacon will not ship (optional; see app/layout.tsx)."
+          fi
+        env:
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_CF_BEACON_TOKEN: ${{ secrets.NEXT_PUBLIC_CF_BEACON_TOKEN }}
+      - name: Build (static export → out/)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          # Optional — Cloudflare Web Analytics stays off until this secret
+          # is set (see app/layout.tsx). No repo secret exists for it yet.
+          NEXT_PUBLIC_CF_BEACON_TOKEN: ${{ secrets.NEXT_PUBLIC_CF_BEACON_TOKEN }}
+      - name: Apply D1 migrations (waitlist)
+        uses: cloudflare/wrangler-action@v3
+        env:
+          # wrangler 4 reads the token from the environment in non-interactive
+          # CI; the action's apiToken input alone isn't always exported.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          workingDirectory: marketing-web
+          command: d1 migrations apply coralswarm-waitlist --remote
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        env:
+          # wrangler 4 reads the token from the environment in non-interactive
+          # CI; the action's apiToken input alone isn't always exported.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          workingDirectory: marketing-web
+          command: deploy
+
+  # ---- Staging deploys: every release (before production), or a staging dispatch ----
+  # (no marketing staging)
+
+  # Staging dispatch only. A branch is not a release, so it has no release
+  # evidence: this run prepares the staging image from its own build and hands
+  # the receipt to `deploy-backend-staging` as a run artifact. Its job name is
+  # the admission gate scripts/deploy_financial_backend.py checks (STORE_GATES).
+  prepare-backend-staging:
+    name: Prepare backend image (staging)
+    needs: [gate, build-backend-release]
+    if: >-
+      needs.gate.result == 'success' &&
+      needs.build-backend-release.result == 'success' &&
+      needs.gate.outputs.mode == 'staging' &&
+      inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      receipt_sha256: ${{ steps.prepare.outputs.receipt_sha256 }}
+      # Named for the attempt that prepared it, so re-running only the deploy finds it.
+      artifact: financial-staging-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      # Pinned to a commit SHA, not @master — see deploy-backend above for rationale.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-release-${{ needs.gate.outputs.sha }}
+          path: dist
+      - name: Build, admit and describe the staging financial image
+        id: prepare
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          python3 scripts/deploy_financial_backend.py prepare --config fly.staging.toml \
+            --generation "staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --store-dir "$RUNNER_TEMP/store" | tee "$RUNNER_TEMP/prepared.json"
+          # prepare streams the build and pull output before its one JSON summary line.
+          receipt_sha256="$(tail -n 1 "$RUNNER_TEMP/prepared.json" | python3 -c 'import json, sys; print(json.load(sys.stdin)["receipt_sha256"])')"
+          echo "receipt_sha256=$receipt_sha256" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: financial-staging-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/store/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy-backend-staging:
+    name: Deploy backend (Fly · staging)
+    needs: [gate, pre-deploy-invariant-guard, pre-deploy-definer-guard, prepare-backend-staging, require-release-build]
+    # Release mode: `require-release-build` proves the tag build and the
+    # evidence comes from the release. Staging dispatch: this run prepared it.
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.pre-deploy-invariant-guard.result == 'success' &&
+      needs.pre-deploy-definer-guard.result == 'success' &&
+      needs.gate.outputs.deploy_staging == 'true' &&
+      inputs.dry_run != true &&
+      (needs.prepare-backend-staging.result == 'success' || needs.require-release-build.result == 'success')
+    runs-on: ubuntu-latest
+    # A hung deploy should fail fast, not occupy a runner for six hours. Was
+    # 30 — raised 2026-09-04 in step with deploy-backend above (same
+    # remote-build + release-command + rolling-restart headroom rationale).
+    timeout-minutes: 45
+    concurrency:
+      group: deploy-backend-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      # Pinned to a commit SHA, not @master — see deploy-backend above for rationale.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      - name: Select the prepared release
+        if: needs.gate.outputs.mode == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          # Read-only: select compares every asset with its locked R2 copy.
+          RELEASE_EVIDENCE_BUCKET: coralswarm-release-evidence
+          R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY }}
+        run: >-
+          python3 scripts/release_evidence.py select --tag "$TAG" --sha "$RELEASE_SHA"
+          --side staging --dir "$RUNNER_TEMP/financial-staging"
+      - name: Download this run's staging preparation
+        if: needs.gate.outputs.mode == 'staging'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare-backend-staging.outputs.artifact }}
+          path: ${{ runner.temp }}/financial-staging
+      - name: Select this run's staging preparation
+        if: needs.gate.outputs.mode == 'staging'
+        env:
+          RECEIPT_SHA256: ${{ needs.prepare-backend-staging.outputs.receipt_sha256 }}
+        run: |
+          {
+            echo "PREPARE_RUN_ID=$GITHUB_RUN_ID"
+            echo "RECEIPT_SHA256=$RECEIPT_SHA256"
+            echo "RECEIPT=$RUNNER_TEMP/financial-staging/financial-image.json"
+            echo "STORE_EVIDENCE=$RUNNER_TEMP/financial-staging/retained-store.json"
+            echo "CAPABILITY=$RUNNER_TEMP/financial-staging/capability.json"
+          } >> "$GITHUB_ENV"
+      - name: Deploy retained financial image
+        id: rollout
+        run: >-
+          python3 scripts/deploy_financial_backend.py deploy --config fly.staging.toml
+          --receipt "$RECEIPT" --store-evidence "$STORE_EVIDENCE" --capability "$CAPABILITY"
+          --expected-sha256 "$RECEIPT_SHA256" --expected-source "$RELEASE_SOURCE"
+          --prepare-run-id "$PREPARE_RUN_ID"
+          --candidate-receipt "$RUNNER_TEMP/release-backend-staging/candidate.json"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # The same serving-image check as production, so an image whose GH_SHA
+      # label is not the release commit fails here, before smoke and promotion.
+      - name: Verify serving image and public routes
+        if: ${{ always() && steps.rollout.outcome != 'skipped' }}
+        run: >-
+          python3 scripts/deployment.py verify
+          --app coralswarm-backend-staging --sha "$EXPECTED_SHA"
+          --candidate "$RUNNER_TEMP/release-backend-staging/candidate.json"
+          --receipt "$RUNNER_TEMP/release-backend-staging/verification.json"
+        env:
+          EXPECTED_SHA: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Retain staging backend release receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-backend-staging-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-backend-staging/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  deploy-web-staging:
+    name: Deploy web (Fly · staging)
+    # ORDERED BEHIND THE BACKEND, deliberately. These jobs are otherwise
+    # independent, and on 2026-07-27 that independence produced a version skew
+    # TWICE IN ONE DAY, in both directions: first the backend deploy aborted
+    # while web shipped, then the web deploy failed while the backend shipped.
+    #
+    # The two directions are not equally safe. Web BEHIND backend is benign —
+    # an older page calls an API that still serves it. Web AHEAD of backend is
+    # not: W3 shipped `GET /v1/graphs/{graph_id}/node-atoms` together with the
+    # Reefs page that calls it, so a web-only deploy would have served a page
+    # whose primary request 404s. Making web depend on the backend removes the
+    # unsafe ordering by construction; if the backend fails, web simply doesn't
+    # ship, which is the direction we can tolerate.
+    needs: [gate, deploy-backend-staging]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.deploy-backend-staging.result == 'success' &&
+      needs.gate.outputs.deploy_web_staging == 'true' &&
+      inputs.dry_run != true
+    runs-on: ubuntu-latest
+    # A hung deploy should fail fast, not occupy a runner for six hours.
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-web-staging
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build standalone bundle
+        run: npm run build
+        env:
+          NEXT_OUTPUT_MODE: standalone
+          NEXT_PUBLIC_CONNECTORS_V2: "true"
+          NEXT_PUBLIC_API_BASE: https://coralswarm-backend-staging.example
+          # NEXT_PUBLIC_WEB_APEX is deliberately UNSET here: staging is served
+          # only from coralswarm-web-staging.example and its backend is a
+          # different Fly app, so there is no apex whose `api.` / `<slug>.api.`
+          # hosts point at staging. Unset ⇒ web/lib/apiBase.ts does no host
+          # derivation at all and always uses the base above (today's behavior).
+          # Staging web must keep the Clerk DEV instance (pk_test_): the e2e
+          # smoke signs in with Clerk Testing Tokens, which a live instance
+          # refuses. main read the same secret as production here, i.e. the
+          # live key; staging gets its own dev key instead.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      # Pinned to a commit SHA, not @master — see deploy-backend above for rationale.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      - name: flyctl deploy (staging)
+        # RETRIED. The remote builder is an EXTERNAL dependency, and a momentary
+        # failure to reach it used to fail the deploy permanently until a human
+        # re-ran the job. That happened on 2026-07-27: `depot.dev`'s
+        # GetBuildKitConnection timed out at the TCP level, before any build
+        # context was uploaded, and the web deploy died — the first web-deploy
+        # failure in ~25 runs, so nothing had ever forced the question.
+        #
+        # A bash loop rather than a retry ACTION on purpose: adding a
+        # third-party action to harden against a third-party outage widens the
+        # dependency surface this is meant to narrow. `flyctl deploy` is
+        # idempotent against unchanged source (the workflow header already
+        # relies on that), so re-running is safe.
+        run: |
+          for attempt in 1 2 3; do
+            if flyctl deploy --remote-only --config fly.staging.toml; then exit 0; fi
+            echo "::warning::flyctl deploy attempt $attempt failed"
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 30)); fi
+          done
+          echo "::error::deploy failed after 3 attempts"
+          exit 1
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  # Real-provider smoke against the STAGING deployment of this release. The
+  # gate between "staged" and "promoted": production deploys only if it passes.
+  # Runs the @smoke-tagged Playwright scenarios from `e2e/` at the tagged
+  # commit against the actual release binary on staging (real Clerk, real
+  # OpenRouter, real R2: this is what the ephemeral PR stack fakes).
+  smoke-staging:
+    name: Staging smoke (real providers)
+    needs: [gate, deploy-backend-staging, deploy-web-staging]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.gate.outputs.mode == 'release' &&
+      needs.deploy-backend-staging.result == 'success' &&
+      needs.deploy-web-staging.result == 'success'
+    runs-on: ubuntu-latest
+    # The @smoke ask waits on staging's 60s standing-admission sweep; the
+    # harness allows 180s per test, so leave room for several tests plus setup.
+    timeout-minutes: 45
+    concurrency:
+      group: smoke-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      # Fail with the reason, not with a Playwright "no tests found" or an npm
+      # ENOENT: a release without the smoke harness must not reach production.
+      - name: Require the e2e smoke harness
+        run: |
+          if [ ! -f e2e/package.json ]; then
+            echo "::error::e2e/ is missing at this commit. Production promotion requires the @smoke Playwright suite (e2e/package.json). A release cannot be cut from a tree without it."
+            exit 1
+          fi
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: e2e
+        run: |
+          sudo python3 ../scripts/ci_apt_setup.py
+          sudo apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout APT::Update::Error-Mode
+          sudo timeout --kill-after=10s 180s "$(command -v node)" node_modules/playwright/cli.js install-deps chromium
+          timeout --kill-after=10s 180s npx --no-install playwright install chromium
+      - name: Smoke the staging deployment
+        working-directory: e2e
+        run: npx playwright test --grep @smoke
+        env:
+          # Staging, real providers. The e2e harness env contract.
+          E2E_TARGET: staging
+          E2E_BASE_URL: https://coralswarm-web-staging.example
+          E2E_API_BASE: https://coralswarm-backend-staging.example
+          E2E_RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          # Clerk DEV instance (pk_test / sk_test). Deliberately NOT the
+          # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY secret: that is the live key prod
+          # web serves, and Clerk Testing Tokens are refused by a live instance.
+          E2E_CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+          E2E_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      - name: Retain the Playwright report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-staging-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # Adds what only exists after the production web deploy, its image digest,
+  # as a NEW asset `web-image.json`. release-images.json and the financial
+  # evidence stay byte-identical to their verified R2 copies. Backend digests
+  # need no recording here: they are in the receipt the rollback re-verifies.
+  record-release:
+    name: Record release images
+    needs: [gate, deploy-backend, deploy-web, deploy-marketing]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.gate.outputs.mode == 'release' &&
+      needs.deploy-backend.result == 'success' &&
+      needs.deploy-web.result == 'success' &&
+      needs.deploy-marketing.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Attach the production web digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          WEB_DIGEST: ${{ needs.deploy-web.outputs.digest }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          if not re.fullmatch(r"sha256:[0-9a-f]{64}", os.environ["WEB_DIGEST"]):
+              raise SystemExit("deployed web digest is not an immutable sha256")
+          doc = {"schema": "release-web-image-v1", "tag": os.environ["TAG"], "sha": os.environ["RELEASE_SHA"],
+                 "production_digest": os.environ["WEB_DIGEST"], "promoted_by_run": os.environ["RUN_URL"]}
+          (Path(os.environ["RUNNER_TEMP"]) / "release" / "web-image.json").write_text(json.dumps(doc, indent=2) + "\n")
+          PY
+          gh release upload "$TAG" --repo "$REPO" "$RUNNER_TEMP/release/web-image.json" --clobber
+
+  # ---- Rollback: redeploy a release's already-built images, no rebuild ----
+  #
+  # `gh workflow run Deploy --ref main -f release=server-...`. No guards, no CI,
+  # no staging: the point is to get a known-good image serving again fast.
+  # The backend goes through the SAME financial-image admission as a deploy
+  # (`deploy_financial_backend.py deploy`): the receipt, retained-store sidecar
+  # and capability output are read from the release's assets and must still bind
+  # the run whose independent verification passed. The checkout is the tagged
+  # commit, so the script, `fly.toml` and the receipt's config hash all agree.
+
+  rollback-backend:
+    name: Roll back backend (Fly)
+    needs: gate
+    if: >-
+      needs.gate.result == 'success' &&
+      needs.gate.outputs.rollback == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: deploy-backend
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      - name: Read the release's recorded production receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          # Read-only: select compares every asset with its locked R2 copy.
+          RELEASE_EVIDENCE_BUCKET: coralswarm-release-evidence
+          R2_ACCOUNT_ID: ${{ secrets.RELEASE_EVIDENCE_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_EVIDENCE_R2_READ_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_EVIDENCE_R2_READ_SECRET_ACCESS_KEY }}
+        run: >-
+          python3 scripts/release_evidence.py select --tag "$TAG" --sha "$RELEASE_SHA"
+          --side production --dir "$RUNNER_TEMP/financial-production"
+      - name: Redeploy the retained financial image
+        id: rollout
+        run: >-
+          python3 scripts/deploy_financial_backend.py deploy --config fly.toml
+          --receipt "$RECEIPT" --store-evidence "$STORE_EVIDENCE" --capability "$CAPABILITY"
+          --expected-sha256 "$RECEIPT_SHA256" --expected-source "$RELEASE_SOURCE"
+          --prepare-run-id "$PREPARE_RUN_ID"
+          --candidate-receipt "$RUNNER_TEMP/release-backend/candidate.json"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Verify serving image and public routes
+        if: ${{ always() && steps.rollout.outcome != 'skipped' }}
+        run: >-
+          python3 scripts/deployment.py verify
+          --app coralswarm-backend --sha "$EXPECTED_SHA"
+          --candidate "$RUNNER_TEMP/release-backend/candidate.json"
+          --receipt "$RUNNER_TEMP/release-backend/verification.json"
+        env:
+          EXPECTED_SHA: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Retain backend rollback receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-backend/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Web is ordered behind the backend, as in a deploy: web BEHIND backend is
+  # benign, web AHEAD of backend is not. The previous web image is redeployed
+  # by digest (recorded by `record-release`); marketing is a static Cloudflare
+  # site with no version coupling to the API and is left as is.
+  rollback-web:
+    name: Roll back web (Fly)
+    needs: [gate, rollback-backend]
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.gate.outputs.rollback == 'true' &&
+      needs.rollback-backend.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+      - name: Read the release's recorded web image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          if ! gh release download "$TAG" --repo "$REPO" --pattern web-image.json --dir "$RUNNER_TEMP/release" --clobber; then
+            echo "::error::$TAG has no web-image.json (it never finished promoting); the backend was rolled back, web was not"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          doc = json.loads((Path(os.environ["RUNNER_TEMP"]) / "release" / "web-image.json").read_text())
+          if doc.get("tag") != os.environ["TAG"] or doc.get("sha") != os.environ["RELEASE_SHA"]:
+              raise SystemExit("web-image.json does not describe this release")
+          digest = doc.get("production_digest", "")
+          if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+              raise SystemExit("this release has no recorded production web digest (it never finished promoting); the backend was rolled back, web was not")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"WEB_DIGEST={digest}\n")
+          PY
+      - name: Redeploy the recorded web image
+        id: rollout
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-web"
+          printf '{"digest": "%s"}\n' "$WEB_DIGEST" > "$RUNNER_TEMP/release-web/candidate.json"
+          flyctl deploy --config fly.toml --image "registry.fly.io/coralswarm-web@$WEB_DIGEST"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Verify serving image and public routes
+        if: ${{ always() && steps.rollout.outcome != 'skipped' }}
+        run: >-
+          python3 ../scripts/deployment.py verify
+          --app coralswarm-web --sha "$EXPECTED_SHA"
+          --candidate "$RUNNER_TEMP/release-web/candidate.json"
+          --receipt "$RUNNER_TEMP/release-web/verification.json"
+        env:
+          EXPECTED_SHA: ${{ needs.gate.outputs.sha }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DEPLOY_SMOKE_TOKEN: ${{ secrets.DEPLOY_SMOKE_TOKEN }}
+          DEPLOY_SMOKE_GRAPH_ID: ${{ vars.DEPLOY_SMOKE_GRAPH_ID }}
+          DEPLOY_REQUIRE_APP_SMOKE: ${{ vars.DEPLOY_REQUIRE_APP_SMOKE }}
+      - name: Retain web rollback receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-web-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-web/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  release-summary:
+    name: Record release outcome
+    if: ${{ always() }}
+    needs: [gate, build-backend-release, require-release-build, deploy-backend, deploy-web, deploy-marketing, prepare-backend-staging, deploy-backend-staging, deploy-web-staging, smoke-staging, record-release, rollback-backend, rollback-web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha || github.sha }}
+          persist-credentials: false
+      - name: Record component outcomes without claiming application acceptance
+        env:
+          RELEASE_NEEDS: ${{ toJSON(needs) }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run }}
+        run: python3 scripts/deployment.py summary --receipt release-outcome.json
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: release-outcome-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-outcome.json
+          retention-days: 30

@@ -1,0 +1,118 @@
+/* =========================================================
+   CoralSwarm — design system tokens + base
+   Single source of truth. Consuming projects load this file;
+   the compiler reads tokens + @font-face from here.
+   ========================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  /* ---- surfaces & ink ---- */
+  --bg:     #FBF7F2;
+  --bg-2:   #F2EBE0;
+  --bg-3:   #E8DCC8;
+  --ink:    #1A1410;
+  --ink-2:  #4A3F36;
+  --ink-3:  #8A7B6E;
+  --line:   #D9CCB8;
+
+  /* ---- five-hue taxonomy ---- */
+  --hue-coral: #F77764;
+  --hue-pink:  #EB7290;
+  --hue-amber: #F4B860;
+  --hue-teal:  #2A9D8F;
+  --hue-plum:  #7C5295;
+
+  /* ---- brand (coral) tints ---- */
+  --brand:    var(--hue-coral);
+  --brand-2:  #D14A38;  /* deep — text on light */
+  --brand-3:  #FFB89D;  /* soft — fills */
+  --accent:   var(--hue-teal);
+
+  /* ---- status ---- */
+  --ok:    #3F8A5B;
+  --warn:  #D89A3A;
+  --bad:   #C24A3A;
+
+  /* ---- type families ---- */
+  --display: "Instrument Serif", "Times New Roman", serif;  /* @kind font */
+  --sans:    "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;  /* @kind font */
+  --mono:    "JetBrains Mono", ui-monospace, monospace;  /* @kind font */
+
+  /* ---- type scale ---- */
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-lg:   18px;
+  --text-xl:   21px;
+  --text-2xl:  26px;
+  --text-3xl:  34px;
+  --text-4xl:  44px;
+  --text-5xl:  64px;
+
+  /* ---- spacing scale (4px base) ---- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  88px;
+
+  /* ---- radii ---- */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-pill: 999px;
+
+  /* ---- shadows ---- */
+  --shadow-sm: 0 1px 2px rgba(26,20,16,0.06);
+  --shadow-md: 0 8px 24px -8px rgba(26,20,16,0.18);
+  --shadow-lg: 0 20px 48px -16px rgba(26,20,16,0.28);
+
+  /* ---- motion ---- */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);  /* @kind other */
+  --dur:  0.15s;  /* @kind other */
+
+  /* ---- focus ring ---- */
+  --ring: 0 0 0 3px color-mix(in srgb, var(--brand) 35%, transparent);  /* @kind shadow */
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--hue-coral); color: var(--bg); }
+a { color: inherit; }
+
+/* ---- shared type primitives ---- */
+.cs-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cs-display {
+  font-family: var(--display);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+}
+.cs-display em { font-style: italic; color: var(--brand); }
+.cs-mono { font-family: var(--mono); }
+
+/* ---- dotted reef background ---- */
+.cs-dotted {
+  background-image: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0);
+  background-size: 22px 22px;
+}

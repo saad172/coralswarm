@@ -1,0 +1,51 @@
+{
+  "source_head": "5e7f1255d1f9b899025d3f4448a946732a762c40",
+  "source_sha256": "c707cc58b49f15f0ffd5c7ce119f03f8e379a7578f02ada75211c91c7b96dbb4",
+  "source_indices": [
+    31,
+    33
+  ],
+  "label": "Actual saved Node timestamps/certificate projections only. Browser proof and payloads in the tests are explicitly SYNTHETIC/MOCKED; historical hosted FAIL is not reclassified. Principals omitted.",
+  "previous": {
+    "method": "GET",
+    "address": "/v1/connectors/google",
+    "priority": "critical",
+    "started": 1793500701060.3374,
+    "finished": 1793500701272.4553,
+    "wallStarted": 1793500701061,
+    "wallFinished": 1793500701273,
+    "status": 200,
+    "failure": null,
+    "certificates": [
+      {
+        "identity": "/v1/connectors/google",
+        "model": "connector_detail",
+        "version": 1,
+        "computedAt": "2026-11-01T02:38:17.077276Z",
+        "stale": true,
+        "refreshEta": "2026-11-01T02:38:18.924218Z"
+      }
+    ]
+  },
+  "current": {
+    "method": "GET",
+    "address": "/v1/connectors/google",
+    "priority": "critical",
+    "started": 1793500703199.4248,
+    "finished": 1793500703255.9238,
+    "wallStarted": 1793500703200,
+    "wallFinished": 1793500703256,
+    "status": 200,
+    "failure": null,
+    "certificates": [
+      {
+        "identity": "/v1/connectors/google",
+        "model": "connector_detail",
+        "version": 1,
+        "computedAt": "2026-11-01T02:38:17.077276Z",
+        "stale": true,
+        "refreshEta": "2026-11-01T02:38:18.924218Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('aad-user-0001')/calendarView(microsoft.graph.event)",
+  "@odata.etag": "W/\"example_13\"",
+  "id": "AAMkAGI2TG93AAAcalendar0001=",
+  "createdDateTime": "2026-10-01T09:12:44.1234567Z",
+  "lastModifiedDateTime": "2026-10-06T16:40:02.7654321Z",
+  "changeKey": "example_13",
+  "categories": [],
+  "transactionId": null,
+  "originalStartTimeZone": "Pacific Standard Time",
+  "originalEndTimeZone": "Pacific Standard Time",
+  "iCalUId": "040000008200E00074C5B7101A82E00800000000F1A2B3C4D5E6F70700000000000000001000000012345678ABCDEF0123456789ABCDEF01",
+  "reminderMinutesBeforeStart": 15,
+  "isReminderOn": true,
+  "hasAttachments": false,
+  "subject": "Pipeline review",
+  "bodyPreview": "Agenda for the pipeline review:\r\nQ3 pipeline & forecast\r\nHiring plan through Q2\r\nPre-read: the Q3 deck (link in the channel).\r\n\r\n________________________________________________________________________________\r\nMicrosoft Teams Need help?\r\nJoin the meeting now\r\nMeeting ID: 283 462 719 05\r\nPasscode: Hq7",
+  "importance": "normal",
+  "sensitivity": "normal",
+  "isAllDay": false,
+  "isCancelled": false,
+  "isOrganizer": true,
+  "responseRequested": true,
+  "seriesMasterId": null,
+  "showAs": "busy",
+  "type": "singleInstance",
+  "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2TG93AAAcalendar0001%3D&exvsurl=1&path=/calendar/item",
+  "onlineMeetingUrl": null,
+  "isOnlineMeeting": true,
+  "onlineMeetingProvider": "teamsForBusiness",
+  "allowNewTimeProposals": true,
+  "occurrenceId": null,
+  "isDraft": false,
+  "hideAttendees": false,
+  "responseStatus": { "response": "organizer", "time": "0001-01-01T00:00:00Z" },
+  "body": {
+    "contentType": "html",
+    "content": "<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"><style type=\"text/css\" style=\"display:none\">p{margin-top:0;margin-bottom:0}</style></head><body dir=\"ltr\"><div class=\"elementToProof\" style=\"font-family:Aptos,Aptos_EmbeddedFont,Aptos_MSFontService,Calibri,Helvetica,sans-serif;font-size:12pt;color:rgb(0,0,0)\">Agenda for the pipeline review:</div><ul><li class=\"elementToProof\">Q3 pipeline &amp; forecast</li><li class=\"elementToProof\">Hiring plan through Q2</li></ul><div class=\"elementToProof\">Pre-read: the Q3 deck (link in the channel).</div><div class=\"elementToProof\"><br></div><div style=\"width:100%\"><span style=\"white-space:nowrap;color:#5F5F5F;opacity:.36\">________________________________________________________________________________</span></div><div class=\"me-email-text\" lang=\"en-US\" style=\"color:#252424;font-family:'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif\"><div style=\"margin-top:24px;margin-bottom:20px\"><span style=\"font-size:24px;color:#252424\">Microsoft Teams</span>&nbsp;<a class=\"me-email-link\" href=\"https://aka.ms/JoinTeamsMeeting?omkt=en-US\" target=\"_blank\" rel=\"noreferrer noopener\" style=\"font-size:14px;text-decoration:underline;color:#5B5FC7\">Need help?</a></div><div style=\"margin-bottom:20px\"><a class=\"me-email-headline\" href=\"https://teams.microsoft.com/l/meetup-join/19%3ameeting_NzQ2ZDk0ZmUtMjE3Zi00ZTNkLWE0ZDctOGE2YjU4ZDQxNmNh%40thread.v2/0?context=%7b%22Tid%22%3a%220f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b%22%2c%22Oid%22%3a%22aad-user-0001%22%7d\" target=\"_blank\" rel=\"noreferrer noopener\" style=\"font-size:20px;font-weight:600;text-decoration:underline;color:#5B5FC7\">Join the meeting now</a></div><div style=\"margin-bottom:20px;margin-top:20px\"><div style=\"margin-bottom:4px\"><span data-tid=\"meeting-code\" style=\"font-size:14px;color:#252424\">Meeting ID: <span style=\"font-size:16px;color:#252424\">283 462 719 05</span></span><br><span style=\"font-size:14px;color:#252424\">Passcode: </span><span style=\"font-size:16px;color:#252424\">Hq7pKx3</span></div></div><div style=\"margin-bottom:24px;margin-top:20px\"><div style=\"margin-bottom:4px\"><span style=\"font-size:14px;color:#252424\">________________________________</span></div><div style=\"margin-bottom:4px\"><span style=\"font-size:14px;font-weight:600;color:#252424\">Dial in by phone</span></div><div><a class=\"me-email-link\" href=\"tel:+13235550100,,28346271905#\" target=\"_blank\" rel=\"noreferrer noopener\" style=\"font-size:14px;text-decoration:underline;color:#5B5FC7\">+1 323-555-0100,,28346271905#</a> <span style=\"font-size:14px;color:#252424\">United States, Los Angeles</span></div><div><a class=\"me-email-link\" href=\"https://dialin.teams.microsoft.com/0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9?id=28346271905\" target=\"_blank\" rel=\"noreferrer noopener\" style=\"font-size:14px;text-decoration:underline;color:#5B5FC7\">Find a local number</a></div><div style=\"margin-top:8px\"><span data-tid=\"phone-conference-id\" style=\"font-size:14px;color:#252424\">Phone conference ID: <span style=\"font-size:16px;color:#252424\">283 462 719#</span></span></div></div><div style=\"margin-bottom:24px;margin-top:20px\"><span style=\"font-size:14px;color:#252424\">For organizers: </span><a class=\"me-email-link\" href=\"https://teams.microsoft.com/meetingOptions/?organizerId=aad-user-0001&amp;tenantId=0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b&amp;threadId=19_meeting_NzQ2ZDk0ZmUtMjE3Zi00ZTNkLWE0ZDctOGE2YjU4ZDQxNmNh@thread.v2&amp;messageId=0&amp;language=en-US\" target=\"_blank\" rel=\"noreferrer noopener\" style=\"font-size:14px;text-decoration:underline;color:#5B5FC7\">Meeting options</a><span style=\"font-size:14px;color:#252424\"> | </span><a class=\"me-email-link\" href=\"https://dialin.teams.microsoft.com/usp/pstnconferencing\" target=\"_blank\" rel=\"noreferrer noopener\" style=\"font-size:14px;text-decoration:underline;color:#5B5FC7\">Reset dial-in PIN</a></div></div><div style=\"font-size:14px;margin-bottom:4px;font-family:'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif\"></div><div style=\"font-size:12px\"></div><div></div><div style=\"width:100%\"><span style=\"white-space:nowrap;color:#5F5F5F;opacity:.36\">________________________________________________________________________________</span></div></body></html>"
+  },
+  "start": { "dateTime": "2026-10-08T15:00:00.0000000", "timeZone": "UTC" },
+  "end": { "dateTime": "2026-10-08T15:30:00.0000000", "timeZone": "UTC" },
+  "location": {
+    "displayName": "Microsoft Teams Meeting",
+    "locationType": "default",
+    "uniqueId": "Microsoft Teams Meeting",
+    "uniqueIdType": "private"
+  },
+  "locations": [
+    { "displayName": "Microsoft Teams Meeting", "locationType": "default", "uniqueId": "Microsoft Teams Meeting", "uniqueIdType": "private" }
+  ],
+  "recurrence": null,
+  "attendees": [
+    {
+      "type": "required",
+      "status": { "response": "accepted", "time": "2026-10-01T10:02:11.0000000Z" },
+      "emailAddress": { "name": "Sam Rivera", "address": "sam.rivera@acme-corp.example" }
+    },
+    {
+      "type": "optional",
+      "status": { "response": "none", "time": "0001-01-01T00:00:00Z" },
+      "emailAddress": { "name": "Eng Team", "address": "eng-team@acme-corp.example" }
+    }
+  ],
+  "organizer": {
+    "emailAddress": { "name": "Priya Nair", "address": "priya.nair@acme-corp.example" }
+  },
+  "onlineMeeting": {
+    "joinUrl": "https://teams.microsoft.com/l/meetup-join/19%3ameeting_NzQ2ZDk0ZmUtMjE3Zi00ZTNkLWE0ZDctOGE2YjU4ZDQxNmNh%40thread.v2/0?context=%7b%22Tid%22%3a%220f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b%22%2c%22Oid%22%3a%22aad-user-0001%22%7d",
+    "conferenceId": "28346271905",
+    "tollNumber": "+1 323-555-0100"
+  },
+  "calendar@odata.associationLink": "https://graph.microsoft.com/v1.0/users('aad-user-0001')/calendars('AAMkAGI2TG93AAAcal=')/$ref",
+  "calendar@odata.navigationLink": "https://graph.microsoft.com/v1.0/users('aad-user-0001')/calendars('AAMkAGI2TG93AAAcal=')"
+}

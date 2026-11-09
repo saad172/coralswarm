@@ -1,0 +1,12 @@
+/* Shadow. Flatter than the old cream system: 1px borders do the separating,
+   shadow only lifts a row or floats a surface. */
+:root {
+  --shadow-row: 0 1px 2px rgba(20, 22, 26, 0.06);
+  --shadow-card: 0 1px 2px rgba(20, 22, 26, 0.05);
+  --shadow-pop: 0 12px 28px -12px rgba(20, 22, 26, 0.16);
+  --shadow-frame: 0 28px 56px -20px rgba(20, 22, 26, 0.22);
+  --shadow-overlay: 0 22px 54px -16px rgba(0, 0, 0, 0.5);
+  --shadow-1: var(--shadow-row);
+  --shadow-2: var(--shadow-pop);
+  --shadow-3: var(--shadow-frame);
+}

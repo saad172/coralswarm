@@ -1,0 +1,256 @@
+name: Chain health check
+
+# Hourly external poll of GET /internal/admin/chain-health
+# (backend/src/routes/admin.rs, admin_chain_health) — the detector for the
+# 2026-08-04 ExtractRelationships incident: a worker that structurally could
+# not read its own input, treated that as "nothing to do", and completed
+# every job with status='done' for THREE DAYS while atoms kept being created
+# and every dashboard stayed green. See admin_chain_health's own doc comment
+# for the full incident writeup and the three invariants it checks
+# (chain-level conservation, per-worker NothingToDo outcome ratio, and
+# structural dead-letters) —
+# this workflow is deliberately dumb: it polls one endpoint and reports
+# what it says.
+#
+# WHY HOURLY, NOT FASTER: the primary invariant's window is 24h. Polling
+# more often than hourly buys nothing — it can only ever catch this
+# incident's start up to ~1h sooner than an hourly poll already does, at the
+# cost of running this workflow 24x as often for no detection benefit.
+#
+# WHY A SCHEDULED GITHUB ACTIONS WORKFLOW, NOT A FLY-INTERNAL CRON WORKER:
+# this has to be EXTERNAL to the thing it is checking. A cron worker running
+# inside the same Fly app/org would go dark in exactly the scenario that
+# matters most — a platform-wide Fly outage — and silently stop checking at
+# precisely the moment nothing else is watching either. A GitHub Actions
+# schedule survives a Fly outage, and it PUSHES (a failed scheduled run
+# emails the founder; see step 5's dead-man's-switch for the complementary
+# "the pusher itself went dark" case that a push-only design can never catch
+# on its own).
+#
+# CONNECTIVITY: fly.toml declares exactly ONE http_service, on
+# internal_port = 8080. The internal admin router (internal_app() in
+# backend/src/lib.rs) binds INTERNAL_BIND_ADDR:INTERNAL_PORT = 8081, which
+# has NO public http_service block at all — a plain curl from GitHub Actions
+# cannot reach it, by design (see routes/admin.rs's module doc: admin/
+# operator surfaces live exclusively on the internal router, never on a
+# router a plain authenticated user — or the public internet — can reach).
+# This workflow follows the EXACT precedent .github/workflows/
+# backup-control-plane.yml already uses to reach coralswarm-db (which
+# likewise has no public endpoint): a `flyctl proxy` tunnel opened with
+# FLY_API_TOKEN (the same repo secret deploy.yml/backup-control-plane.yml
+# already use), here forwarding coralswarm-backend's port 8081 to a local
+# port instead of coralswarm-db's 5432. This keeps the internal-router
+# invariant intact — port 8081 is still not routed from the public internet
+# — and adds no new public attack surface. Do NOT add a token-gated health
+# route on the public :8080 router as a shortcut around this.
+#
+# FAILS LOUDLY ON MISSING CONFIG, same discipline as backup-control-plane.yml:
+# a hard `exit 1` with `::error::` annotations BEFORE opening any tunnel or
+# making any request, so a missing secret shows up as a red check the
+# founder will see, rather than a scheduled run that silently never checked
+# anything (which would be exactly the failure mode this whole initiative
+# exists to close).
+#
+# PAGE VS. SLO BREACH (2026-10-21): the endpoint returns `page` alongside
+# `healthy`. `page: true` means an invariant is broken right now (a capture
+# nothing is moving, an unmeasured plane, conservation, outcome distribution,
+# structural dead letters, read-only rejections, the unsure rate, a route
+# answering 5xx on >=3 and >=1/5 of its requests in the last hour): every run
+# fails until it clears. `healthy: false` with `page: false` is a capture SLO
+# breach, a backlog that is draining slower than the SLO: the run fails when
+# the breach starts and then once every REMIND_HOURS while it lasts
+# (scripts/chain_health_notify.py; state carried between runs in the Actions
+# cache). Before this split, a re-extraction backlog failed every hourly run
+# for a day and emailed each time.
+#
+# DEAD-MAN'S SWITCH (step 5 of the reliability plan this workflow is part
+# of): on every run that reached the endpoint and read its verdict, healthy
+# or not, this workflow pings an external watchdog URL (HEALTHCHECK_PING_URL).
+# The ping says "the checker ran", not "production is healthy": an unhealthy
+# verdict already fails the run. It used to ping only on healthy, so every
+# unhealthy hour also tripped the watchdog, a second alarm for the same thing. That watchdog service is
+# configured to alarm when a ping FAILS TO ARRIVE within its expected
+# period — the one mechanism here where ABSENCE of a signal is itself the
+# alarm, covering "this workflow stopped running at all" (a bad cron
+# expression, a GitHub Actions platform outage, the repo/workflow getting
+# disabled), which nothing else in this file can detect from the inside.
+# See "Activating this workflow" below for exactly what the founder must
+# set up — this workflow does not sign the project up for anything itself,
+# it only consumes a URL from a secret.
+#
+# ── Activating this workflow (founder action required) ──────────────────────
+# Three repository secrets, none of which exist yet except the first:
+#   1. FLY_API_TOKEN       — already set (deploy.yml/backup-control-plane.yml
+#                             use it today). No action needed.
+#   2. INTERNAL_TOKEN      — the SAME value as the coralswarm-backend Fly app
+#                             secret of the same name (`fly secrets list -a
+#                             coralswarm-backend` to confirm it is set there;
+#                             `fly secrets set INTERNAL_TOKEN=... -a
+#                             coralswarm-backend` if it somehow is not — but
+#                             it almost certainly already is, since
+#                             check_internal_token() fails closed without it).
+#                             Set it as a GH Actions secret with:
+#                               gh secret set INTERNAL_TOKEN
+#   3. HEALTHCHECK_PING_URL — a dead-man's-switch ping URL from an external
+#                             watchdog service the founder creates an account
+#                             with (e.g. healthchecks.io, Cronitor, Dead Man's
+#                             Snitch — any service that exposes a unique
+#                             "ping this URL on success" endpoint and alarms
+#                             on a missed ping). Configure the check's
+#                             expected period at ~1h (matching this
+#                             workflow's schedule) with a grace period of a
+#                             few minutes for scheduling jitter, then:
+#                               gh secret set HEALTHCHECK_PING_URL
+#                             Until this secret is set, every scheduled run
+#                             hard-fails at the "Verify required secrets"
+#                             step (a visible red check), by design.
+# Until all three are set, this workflow cannot go green — that is
+# deliberate, per the "fails loudly on missing config" note above.
+
+on:
+  schedule:
+    # Every hour, on the hour. See "WHY HOURLY" above.
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chain-health-check
+  cancel-in-progress: false
+
+env:
+  # How often a continuing capture SLO breach is re-reported. A page is
+  # reported on every run regardless.
+  REMIND_HOURS: "6"
+
+jobs:
+  check:
+    name: Poll /internal/admin/chain-health
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Fail loudly and early — BEFORE opening any tunnel or making any
+      # request — if required configuration is missing. See this workflow's
+      # header comment; mirrors backup-control-plane.yml's identical step.
+      - name: Verify required secrets are configured
+        env:
+          HAVE_FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN != '' }}
+          HAVE_INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN != '' }}
+          HAVE_HEALTHCHECK_PING_URL: ${{ secrets.HEALTHCHECK_PING_URL != '' }}
+        run: |
+          missing=0
+          check() {
+            if [ "$1" != "true" ]; then
+              echo "::error::Required repository secret $2 is not set. See this workflow's header comment ('Activating this workflow') for how to provision and set it." >&2
+              missing=1
+            fi
+          }
+          check "$HAVE_FLY_API_TOKEN" FLY_API_TOKEN
+          check "$HAVE_INTERNAL_TOKEN" INTERNAL_TOKEN
+          check "$HAVE_HEALTHCHECK_PING_URL" HEALTHCHECK_PING_URL
+          if [ "$missing" -eq 1 ]; then
+            echo "::error::Aborting: one or more required secrets are missing. This is a hard failure, not a skip — no chain-health check ran this cycle, and no dead-man's-switch ping was sent." >&2
+            exit 1
+          fi
+
+      # Pinned to a commit SHA, not @master — same rationale as deploy.yml/
+      # backup-control-plane.yml: this job runs with FLY_API_TOKEN.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+
+      # coralswarm-backend's internal admin router has no public endpoint —
+      # only Fly's private 6PN network reaches port 8081. Tunnel it to a
+      # local port for the duration of this job. Same shape as
+      # backup-control-plane.yml's tunnel to coralswarm-db, targeting the
+      # backend app's internal port instead of the db app's Postgres port.
+      - name: Open flyctl proxy to coralswarm-backend:8081
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl proxy 18081:8081 -a coralswarm-backend > proxy.log 2>&1 &
+          echo $! > proxy.pid
+          # Poll for the tunnel instead of a fixed sleep — same reasoning as
+          # backup-control-plane.yml's identical loop.
+          for _ in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/18081) 2>/dev/null; then
+              exec 3>&-
+              echo "proxy is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::flyctl proxy to coralswarm-backend:8081 did not come up within 30s" >&2
+          cat proxy.log >&2 || true
+          exit 1
+
+      # SLO notification state from the previous run (see "PAGE VS. SLO
+      # BREACH" above). Restores the newest cache with this prefix; a miss
+      # means no breach has been reported, so the first one notifies.
+      - name: Restore notification state
+        uses: actions/cache/restore@v4
+        with:
+          path: chain-health-state.json
+          key: chain-health-state-${{ github.run_id }}
+          restore-keys: chain-health-state-
+
+      # Non-zero exit on a curl error (network/tunnel/401/500/503) or a body
+      # that is not a verdict: the check did not run, so this run fails and no
+      # dead-man's-switch ping is sent.
+      - name: Fetch chain-health verdict
+        id: fetch
+        env:
+          INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 \
+            -H "X-Internal-Token: ${INTERNAL_TOKEN}" \
+            "http://127.0.0.1:18081/internal/admin/chain-health" > response.json
+          jq . response.json
+          jq -e 'has("healthy")' response.json > /dev/null
+
+      # Dead-man's switch: the check ran. Sent before the verdict is judged,
+      # so an unhealthy verdict (which fails the run on its own) does not also
+      # trip the watchdog. See this workflow's header comment.
+      - name: Ping dead-man's-switch
+        if: always() && steps.fetch.outcome == 'success'
+        env:
+          HEALTHCHECK_PING_URL: ${{ secrets.HEALTHCHECK_PING_URL }}
+        run: |
+          curl -fsS --max-time 15 --retry 2 "$HEALTHCHECK_PING_URL" -o /dev/null
+
+      # Fails on a page (every run) or on the start of a capture SLO breach
+      # and every REMIND_HOURS after it. capture_admission.lag_violations /
+      # queued_lag_violations mean live captures took longer than the COR-71
+      # SLO (p95 10 min, p99 30, max 60) to become Atoms; capture_admission.
+      # stalled means a capture has waited past 15 minutes in a graph that
+      # completed no extraction window for 30, or sat outside the queue for 6 h,
+      # or sat queued for 48 h without its receipt changing state.
+      - name: Judge chain-health verdict
+        id: judge
+        if: always() && steps.fetch.outcome == 'success'
+        run: |
+          python3 scripts/chain_health_notify.py response.json chain-health-state.json chain-health-state.next.json \
+            --remind-hours "$REMIND_HOURS"
+
+      - name: Save notification state
+        if: always() && steps.judge.outcome != 'skipped'
+        run: mv chain-health-state.next.json chain-health-state.json
+
+      - name: Store notification state
+        if: always() && steps.judge.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: chain-health-state.json
+          key: chain-health-state-${{ github.run_id }}
+
+      - name: Close flyctl proxy
+        if: always()
+        run: |
+          if [ -f proxy.pid ]; then
+            kill "$(cat proxy.pid)" 2>/dev/null || true
+          fi

@@ -1,0 +1,35 @@
+-- Migration: 0058_atoms_workspace_provenance
+-- Description: Persist the originating Slack workspace (team id) on atoms
+--   (CodeRabbit review, PR #181 — slack-name-backfill).
+--
+--   `slack_integrations` allows MORE THAN ONE Slack workspace per account
+--   (`UNIQUE (account_id, workspace_id)`), but atoms had no column recording
+--   which workspace a given Slack atom came from. A workspace-scoped
+--   `SlackNameBackfill` sweep (backend/src/workers/slack_name_backfill.rs)
+--   could therefore only restrict *which credentials* it tried (via
+--   `slack_integrations.workspace_id`), not *which atoms* it touched — for a
+--   multi-workspace account, a sweep scoped to workspace A could resolve
+--   workspace B's raw Slack ids using workspace A's bot token/identity
+--   directory, a tenancy-adjacent correctness bug (wrong-workspace
+--   cross-resolution).
+--
+--   Nullable: historical atoms predate this column and have no recoverable
+--   workspace association — same posture as `author_id` in migration 0052.
+--   `routes::slack::ingest_slack_message` populates it going forward; the
+--   backfill worker excludes non-matching/unknown-workspace atoms from a
+--   workspace-scoped sweep rather than guessing.
+--
+--   The supporting index (`idx_atoms_graph_workspace`) is built
+--   `CONCURRENTLY` in a SEPARATE migration (0059) rather than here: Postgres
+--   refuses `CREATE INDEX CONCURRENTLY` inside a transaction block, and this
+--   file's plain `ALTER TABLE ADD COLUMN` is ordinary transactional DDL — see
+--   0059's header for why the index build needs its own no-transaction file.
+--   `ADD COLUMN ... TEXT` with no default is a fast, metadata-only change
+--   (Postgres 11+), so it stays in the normal transactional path like every
+--   other column addition in this migration history (e.g. 0034, 0052).
+--
+-- Down:
+--   ALTER TABLE atoms DROP COLUMN IF EXISTS workspace_id;
+
+ALTER TABLE atoms
+    ADD COLUMN IF NOT EXISTS workspace_id TEXT;

@@ -1,0 +1,14 @@
+{"node_id": "priya-anand", "node_type": "entity", "title": "Priya Anand", "summary": "", "atom_doc_ids": ["gm01", "gs01", "gs02", "gs03", "gs04", "gs05", "gs06", "gs07", "gs08", "gs09", "gs10"]}
+{"node_id": "nnamdi-okafor", "node_type": "entity", "title": "Nnamdi Okafor", "summary": "", "atom_doc_ids": ["al01"]}
+{"node_id": "oi-support-slack", "node_type": "entity", "title": "ExamplePortal onboarding support via Slack", "summary": "", "atom_doc_ids": ["cl01"]}
+{"node_id": "oi-support-zendesk", "node_type": "entity", "title": "ExamplePortal onboarding support via Zendesk", "summary": "", "atom_doc_ids": ["cl02"]}
+{"node_id": "marcus-webb", "node_type": "entity", "title": "Marcus Webb", "summary": "", "atom_doc_ids": ["mw01"]}
+{"node_id": "data-platform-team", "node_type": "entity", "title": "Data Platform Team", "summary": "", "atom_doc_ids": ["dpt01"]}
+{"node_id": "nightly-etl-pipeline", "node_type": "entity", "title": "Nightly ETL Pipeline", "summary": "", "atom_doc_ids": ["hop01"]}
+{"node_id": "jordan-lee", "node_type": "entity", "title": "Jordan Lee", "summary": "", "atom_doc_ids": ["jl01", "jl02"]}
+{"node_id": "kenji-sato", "node_type": "entity", "title": "Kenji Sato", "summary": "", "atom_doc_ids": ["ks01", "ks02", "ks03", "ks04"]}
+{"node_id": "q3-design-budget", "node_type": "entity", "title": "Q3 Design Budget", "summary": "", "atom_doc_ids": ["qb01", "qb02"]}
+{"node_id": "ci-pipeline-reliability", "node_type": "entity", "title": "CI Pipeline Reliability", "summary": "", "atom_doc_ids": ["cir01", "cir02"]}
+{"node_id": "beacon-hill-cafe-renovation", "node_type": "entity", "title": "Beacon Hill Cafe Renovation", "summary": "", "atom_doc_ids": ["bh01", "bh02", "bh03", "bh04"]}
+{"node_id": "legacy-incident-escalation", "node_type": "entity", "title": "Production Incident Escalation (Phone Tree)", "summary": "", "atom_doc_ids": ["d1a01", "d1a02", "d1a03", "d1a04", "d1a05", "d1a06", "d1a07", "d1a08", "d1a09", "d1a10", "d1a11", "d1a12"]}
+{"node_id": "current-incident-escalation", "node_type": "entity", "title": "Production Incident Escalation (PagerDuty)", "summary": "", "atom_doc_ids": ["d1b01"]}

@@ -1,0 +1,39 @@
+-- Migration: 0273_microsoft_calendar_delta_window_start
+-- Description: Microsoft Calendar history window (cs-mscal-body-window).
+--   The `startDateTime` the current `calendarView/delta` round's window was
+--   anchored at, next to 0272's `delta_window_end`.
+--
+--   ── The gap ──
+--   0272's window was 30 days back → 90 days ahead, so an event older than
+--   30 days was never ingested, and an edit or deletion of one never
+--   propagated (Google Calendar lists the whole calendar — no `timeMin`).
+--   `connectors::microsoft_calendar::WINDOW_PAST_DAYS` is now 365 (the
+--   Exchange calendar view that backs Graph's `calendarView` refuses a
+--   range over two years — EWS `ErrorCalendarViewRangeTooBig` — so the
+--   whole history Google has is not an option; a year plus the 90-day
+--   lookahead is 455 days).
+--
+--   ── Why the start is stored ──
+--   The window is frozen into the delta token, and 0272 recorded only its
+--   end, so `plan_round` could not tell a cursor anchored on the old narrow
+--   window from one anchored on the wide one: an existing connection would
+--   have kept its 30-day token until the next re-anchor (up to 30 days)
+--   before the older year was listed. With both ends recorded, a token
+--   whose window is NARROWER than the configured one re-anchors on the next
+--   pass — the backfill starts on the first tick after deploy, and any
+--   later widening of the constants backfills the same way. NULL here
+--   (every row anchored before this migration) reads as "unknown width"
+--   and re-anchors too. That full round is idempotent: an event already
+--   stored is judged `Unchanged` by `services::source_reingest` (or
+--   replaced once if its content changed), never duplicated.
+--
+--   Same column on the tenant twin (`migrations_tenant/0114_microsoft_
+--   calendar_delta_window_start.sql`). No policy change.
+--
+-- Depends on: 0272_microsoft_calendar_delta_cursor.
+-- Down:
+--   ALTER TABLE microsoft_calendar_sync_state
+--       DROP COLUMN IF EXISTS delta_window_start;
+
+ALTER TABLE microsoft_calendar_sync_state
+    ADD COLUMN IF NOT EXISTS delta_window_start TIMESTAMPTZ;

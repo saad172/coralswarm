@@ -1,0 +1,125 @@
+-- Migration: 0098_coding_session_source_type
+-- Description: Give coding-session corals their own `atoms.source_type`
+--   (`'coding_session'`) and backfill every historical capture that was
+--   stamped as an ordinary note.
+--
+--   The problem. Migration 0076 made a coding session a real first-class
+--   container — its own table, its own `"cc:{session_id}:{checkpoint_id}"`
+--   `source_id` convention, its own read routes and MCP tool. But the corals
+--   INSIDE it were never labelled: the harness primer told the agent to
+--   `Set source_type "note" (or "chat")`, and `add_context`'s allowlist had
+--   no coding-session value to offer, so every checkpoint landed with the
+--   same `source_type` a human typing into the Add box produces. Everything
+--   downstream that reads `source_type` — the corals list, the Sources view,
+--   ask citations, and the `corals by source` aggregate dimension
+--   (`store::dimensions`) — therefore could not tell a captured coding
+--   checkpoint from a hand-written note. The container was first-class; its
+--   contents were not.
+--
+--   Going forward the label is DERIVED, not caller-supplied:
+--   `routes::ingest::ingest_atom_impl` overwrites `source_type` with
+--   `'coding_session'` whenever `session_id` is present, at the single choke
+--   point both entry points (REST `/v1/ingest/atom`, MCP `add_context`) pass
+--   through. See `CODING_SESSION_SOURCE_TYPE` for why it is deliberately NOT
+--   on the `add_context` allowlist. This migration retrofits the same
+--   invariant onto rows written before that rule existed.
+--
+--   Why this is safe without a re-embed — the part that makes a plain UPDATE
+--   the right tool. An atom's embedded and FTS-indexed TEXT is unchanged by
+--   this migration, because neither input to that text reads `source_type`:
+--     * Chunking: `ChunkStrategy::for_source_type` maps both `'note'` and
+--       `'coding_session'` to `Generic` (the Transcript/Email/Slack arms are
+--       an explicit allowlist of other values), so the chunk boundaries these
+--       atoms were split on are exactly the boundaries they would get today.
+--     * The contextual chunk header: coding-session captures take
+--       `build_coding_session_header`, selected by `session_id.is_some()` —
+--       NOT by source type — so the header bytes prepended to
+--       `content_inline` (and counted in `atoms.header_len`) are identical
+--       either way.
+--   So no `embedding`, `content_tsv`, `chunker_version` or `header_len` value
+--   becomes stale here. This is a pure relabel.
+--
+--   Why the natural key can't collide. `atoms` is UNIQUE
+--   (graph_id, source_type, source_id). Moving a row from `'note'` to
+--   `'coding_session'` could in principle collide with an existing
+--   `('coding_session', same source_id)` row — but no such row can exist:
+--   this value has never been written by any code path before this
+--   migration's companion commit. The `WHERE NOT EXISTS` guard below encodes
+--   that reasoning rather than relying on it, so a re-run (or an
+--   out-of-order apply) degrades to a no-op instead of aborting the
+--   transaction.
+--
+--   Bonus correctness: idempotent re-ingest. `ingest_atom_impl` dedupes on
+--   that same natural key. Without this backfill, the first re-ingest of any
+--   pre-existing checkpoint would miss its `'note'`-keyed row and insert a
+--   DUPLICATE coral under the new type. Relabelling in place keeps re-ingest
+--   idempotent across the cutover.
+--
+--   KNOWN LIMITATION — desktop replicas are not updated by this migration,
+--   and deliberately so. `source_type` is not a syncable-mutable field: the
+--   libsql apply path's atom upsert (`store/libsql.rs`, `ON CONFLICT
+--   (atom_id) DO UPDATE SET …`) updates content_inline, embedding,
+--   participants, scope, fts_language, embed_model and chunker_version —
+--   `source_type` is set on INSERT only. Emitting `op_log` upsert ops here
+--   would therefore be pure noise: a desktop peer would apply them and change
+--   nothing. Already-synced corals keep their old label on desktop until the
+--   sync contract is widened (a separate change with its own LWW questions —
+--   `source_type` participates in the natural key, so making it mutable over
+--   sync needs more thought than adding a line to a COALESCE list). Corals
+--   captured AFTER this ships are correct on both planes, because they take
+--   the INSERT path, which does carry `source_type`.
+--
+--   On the shape of the backfill (CodeRabbit review, rounds 1-2). This is one
+--   unbatched UPDATE, deliberately, and the reason is SCALE — not, as an
+--   earlier draft of this comment claimed, that batching is impossible here.
+--   It isn't: marking this file `-- no-transaction` and driving the batches
+--   from a PROCEDURE that COMMITs per chunk (PG11+) would genuinely release
+--   locks between batches. That option exists; it is simply not worth its
+--   cost yet.
+--
+--   The measurement behind that (2026-07-26, via `get_ocean_stats` on the
+--   largest ocean): 3,894 atoms in TOTAL, across every source type. The rows
+--   this statement can touch are a subset of that, in a table whose local
+--   full-size restore is 32 MB. A single UPDATE over a few thousand narrow
+--   rows completes in milliseconds and holds its locks for exactly that long.
+--   Batching that is machinery without a problem, and every batched variant
+--   is strictly worse in the ways that currently matter: a maintenance script
+--   trades a bounded automatic lock for an unbounded window where prod runs
+--   half-relabelled (and, per the re-ingest note above, accrues duplicate
+--   corals the whole time), while a COMMIT-per-chunk procedure gives up the
+--   all-or-nothing rollback that makes this migration safe to retry.
+--
+--   Revisit when `atoms` reaches a scale where a single-statement rewrite of
+--   the coding-session slice stops being sub-second — order 10^6 rows is the
+--   rough threshold where the MVCC bloat and WAL volume in the review comment
+--   become real. At that point the batched form belongs in a one-shot job
+--   with its own progress ledger, not in a migration at all.
+--
+--   The partial index that backs the coding-session slice is NOT here: it
+--   lives in 0099 as a `-- no-transaction` `CREATE INDEX CONCURRENTLY`, the
+--   same split (and for the same reason) as 0058 → 0059.
+--
+-- Depends on: 0003_atoms (atoms), 0076_coding_sessions (the `cc:` convention).
+-- Down:
+--   UPDATE atoms SET source_type = 'note' WHERE source_type = 'coding_session';
+--   -- (lossy: pre-0098 captures that were explicitly stamped 'chat' rather
+--   -- than 'note' are not distinguishable after the up-migration.)
+
+-- The `cc:` prefix is the whole membership test: `ingest_atom_impl` builds
+-- `source_id` as `"cc:{session_id}:{checkpoint_id}"` and then chunk-suffixes
+-- it to `"…:chunk:{n}"`, so every coral of every session — and nothing else —
+-- matches. Restricted to the two labels the capture path could actually have
+-- produced ('note' is the primer's instruction, 'chat' its stated
+-- alternative) so that a coral deliberately ingested under some other type
+-- with a `cc:`-shaped id is left alone rather than silently reclassified.
+UPDATE atoms AS a
+   SET source_type = 'coding_session'
+ WHERE a.source_type IN ('note', 'chat')
+   AND a.source_id LIKE 'cc:%'
+   AND NOT EXISTS (
+         SELECT 1
+           FROM atoms AS clash
+          WHERE clash.graph_id    = a.graph_id
+            AND clash.source_type = 'coding_session'
+            AND clash.source_id   = a.source_id
+       );

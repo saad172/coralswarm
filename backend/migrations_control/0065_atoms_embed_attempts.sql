@@ -1,0 +1,26 @@
+-- Migration: 0065_atoms_embed_attempts
+-- Description: Add embed_attempts to atoms so a failed embed can be retried
+--   with backoff instead of being permanently skipped.
+--
+--   Before this migration, `workers::embed::bulk_mark_atoms_failed` set
+--   `embed_failed_at` once on any embed error, and
+--   `workers::embed::load_pending_atoms`'s candidate query
+--   (`WHERE embedding IS NULL AND embed_failed_at IS NULL`) then excluded that
+--   atom from every future embed pass forever — a transient failure (a 5xx
+--   from the embedding provider, a momentary DB blip on the content_tsv write,
+--   an OOM-adjacent ONNX allocation failure under load) was indistinguishable
+--   from a permanent one, and got the same fate: never embedded, never BM25
+--   re-indexed, never entity/relationship-extracted (both of those only fire
+--   after a successful embed).
+--
+--   `embed_attempts` lets the retry decision be attempts-based backoff instead
+--   of "any attempt is final": `workers::embed`'s candidate query now also
+--   admits rows where `embed_failed_at` is old enough for the current attempt
+--   count (exponential backoff, same 2^attempts * 30s shape as
+--   `jobs::queue::backoff_secs`) and `embed_attempts` is still under the cap —
+--   past the cap the failure is treated as permanent, same as before.
+--
+-- Down:
+--   DROP COLUMN IF EXISTS embed_attempts;
+
+ALTER TABLE atoms ADD COLUMN IF NOT EXISTS embed_attempts INTEGER NOT NULL DEFAULT 0;

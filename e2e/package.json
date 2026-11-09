@@ -1,0 +1,20 @@
+{
+  "name": "@coralswarm/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "node stack/build-web.mjs",
+    "stack:up": "node stack/up.mjs",
+    "stack:down": "node stack/down.mjs",
+    "test": "playwright test",
+    "test:quarantine": "playwright test --grep @quarantine",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@clerk/backend": "3.26.4",
+    "@clerk/testing": "2.2.52",
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.18.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "id": "AAMkAGI2TG93AAA=",
+  "subject": "Renewal terms for Q1",
+  "from": {
+    "emailAddress": {
+      "name": "Priya Nair",
+      "address": "priya.nair@acme-corp.example"
+    }
+  },
+  "toRecipients": [
+    {
+      "emailAddress": {
+        "name": "Sam Rivera",
+        "address": "sam.rivera@acme-corp.example"
+      }
+    }
+  ],
+  "ccRecipients": [
+    {
+      "emailAddress": {
+        "name": "Eng Team",
+        "address": "eng-team@acme-corp.example"
+      }
+    }
+  ],
+  "receivedDateTime": "2026-02-02T14:30:00Z",
+  "bodyPreview": "Hi Sam, attaching the renewal terms for review...",
+  "body": {
+    "contentType": "html",
+    "content": "<div>Hi Sam,</div><div>Attaching the renewal terms for review.</div><div>Thanks,<br>Priya</div>"
+  },
+  "conversationId": "AAQkAGI2_conv_001",
+  "categories": ["Renewals"],
+  "hasAttachments": true,
+  "parentFolderId": "AAMkAGI2_inbox_folder"
+}

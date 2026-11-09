@@ -1,0 +1,92 @@
+{
+  "toolInput": {
+    "question": "What did we decide about rate limiting on the public API?",
+    "ocean_ids": ["818ccfa2-051b-417a-96af-06335e439fac", "aff253b3-7614-4a01-bd48-a4163c7fe2f8", "36ad4a37-c345-43fd-8085-4d0948ffe894"],
+    "top_k": 20
+  },
+  "toolOutput": {
+    "mode": "synthesized",
+    "answer": "**Token bucket per API key, 600 requests a minute.** The team settled this in the Feb 12 platform sync [1] after the burst incident on Feb 9 [2]. Priya owns the rollout; the first cut ships behind an opt-in header so partners can move early [3].\n\n**Two things are still open.** Per-endpoint overrides were parked until a customer asks for them [1], and the partner usage page has no owner yet [4].\n\n**One more window note.** A three-week digest scan also touched this thread [5], though its body was never read for this answer.",
+    "citations": [
+      "ce05b4c2-cc80-4f1f-b467-64a9b4c1774f",
+      "db9161c3-55fa-44f3-b0b2-7ee17323ca28",
+      "f20d96e4-f7ef-4c80-97ff-8a533033e077",
+      "d1ce5680-741e-42cd-ac54-e7ec210daaa5",
+      "d0bc13f1-0e09-481f-95a0-3cbea71d0129"
+    ],
+    "citation_details": [
+      {
+        "atom_id": "ce05b4c2-cc80-4f1f-b467-64a9b4c1774f",
+        "source_type": "meeting",
+        "content": "Agreed: token bucket keyed on API key, 600/min with burst 100. Priya writes the ADR.",
+        "title": "Agreed: token bucket keyed on API key, 600/min with burst 100. Priya writes the ADR.",
+        "body_omitted": false,
+        "timestamp": "2026-02-12T17:00:00Z",
+        "age_days": 2,
+        "score": 0.91,
+        "score_parts": { "vector": 0.86, "keyword": 0.7, "recency": 0.95 },
+        "channel_name": null,
+        "author_name": "Priya Raman",
+        "reefs": ["Rate limiting for the public API"]
+      },
+      {
+        "atom_id": "db9161c3-55fa-44f3-b0b2-7ee17323ca28",
+        "source_type": "slack",
+        "content": "one key did 40k/min for twelve minutes and pegged the gateway, we need a real limiter",
+        "title": "one key did 40k/min for twelve minutes and pegged the gateway, we need a real limiter",
+        "body_omitted": false,
+        "timestamp": "2026-02-09T14:31:00Z",
+        "age_days": 5,
+        "score": 0.84,
+        "score_parts": { "vector": 0.75, "keyword": 0.82, "recency": 0.8 },
+        "channel_name": "#platform",
+        "author_name": "Marcus Oduya",
+        "reefs": ["Rate limiting for the public API", "Feb 9 burst incident"]
+      },
+      {
+        "atom_id": "f20d96e4-f7ef-4c80-97ff-8a533033e077",
+        "source_type": "coding_session",
+        "content": "Added X-RateLimit-Opt-In header gate; refill 10/s; burst tests at 100.",
+        "title": "Added X-RateLimit-Opt-In header gate; refill 10/s; burst tests at 100.",
+        "body_omitted": false,
+        "timestamp": "2026-02-14T09:00:00Z",
+        "age_days": 1,
+        "score": 0.79,
+        "score_parts": { "vector": 0.7, "keyword": 0.68, "recency": 0.98 },
+        "channel_name": null,
+        "project": "api-gateway",
+        "author_name": null,
+        "reefs": ["Rate limiting for the public API"]
+      },
+      {
+        "atom_id": "d1ce5680-741e-42cd-ac54-e7ec210daaa5",
+        "source_type": "document",
+        "content": "Usage page: per-key requests, 429 count, reset time. Owner: TBD.",
+        "title": "Usage page: per-key requests, 429 count, reset time. Owner: TBD.",
+        "body_omitted": false,
+        "timestamp": "2026-01-28T00:00:00Z",
+        "age_days": 18,
+        "score": 0.61,
+        "score_parts": { "vector": 0.55, "keyword": 0.5, "recency": 0.4 },
+        "channel_name": null,
+        "author_name": null,
+        "reefs": ["Partner usage dashboard"]
+      },
+      {
+        "atom_id": "d0bc13f1-0e09-481f-95a0-3cbea71d0129",
+        "source_type": "note",
+        "content": "Rate limit follow-ups — weekly notes digest",
+        "title": "Rate limit follow-ups — weekly notes digest",
+        "body_omitted": true,
+        "timestamp": "2026-01-25T00:00:00Z",
+        "age_days": 21,
+        "score": 0.42,
+        "score_parts": { "vector": 0.3, "keyword": 0.2, "recency": 0.1 },
+        "channel_name": null,
+        "author_name": null,
+        "reefs": []
+      }
+    ],
+    "unreachable_oceans": []
+  }
+}

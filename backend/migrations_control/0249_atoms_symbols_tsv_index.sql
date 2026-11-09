@@ -1,0 +1,39 @@
+-- no-transaction
+-- Migration: 0249_atoms_symbols_tsv_index
+-- Description: GIN index over `atoms.symbols`'s tsvector (migration
+--              `0247`/`0100`), the third and final candidate source for the
+--              atom keyword leg's symbol half (`store::keyword_search_pg`,
+--              fix 3b + this fix). Built `CONCURRENTLY`, in its OWN
+--              migration file, for the identical reason `0245`/`0246`
+--              needed to be — see `0247`'s own header, and
+--              `0059_atoms_workspace_index_concurrently.sql`'s header for
+--              the underlying sqlx/Postgres mechanics.
+--
+-- WHY A THIRD INDEX RATHER THAN WIDENING `idx_atoms_excerpt_tsv`
+--   `atoms.excerpt` and `atoms.symbols` are two DIFFERENT columns (0247's
+--   header), so they need two different expression indexes — there is no
+--   single expression that covers both without concatenating them into one
+--   (rejected: `symbols` outgrows `excerpt` on exactly the chunks this fix
+--   targets, a 2,975-chunk, 18% slice of the corpus measured on this
+--   repo's own ingest, so folding it into `excerpt`'s existing 280-char
+--   budget would silently re-truncate the thing this fix exists to stop
+--   truncating).
+--
+-- 'simple' (not 'english'), same as `content_tsv`/`idx_atoms_title_tsv`/
+-- `idx_atoms_excerpt_tsv`/`idx_atoms_source_path_tsv`: no stemming, so an
+-- identifier stays the token the user typed. `coalesce(symbols, '')` rather
+-- than a partial index, same reason 0244/0245 used it — a NULL `symbols`
+-- indexes an empty tsvector, which GIN stores nothing for, and
+-- `store::keyword_search_pg`'s predicate stays ONE matchable expression
+-- whether or not the atom carries a value.
+--
+-- Expected index size: small. `symbols` holds at most a few dozen short
+-- identifier spellings per chunk (`Chunk::symbols`'s doc comment), not a
+-- second copy of the body — closer in shape to `idx_atoms_title_tsv`
+-- (8,528 kB on the dev ocean) than to `idx_atoms_content_tsv` (32 MB).
+--
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_atoms_symbols_tsv;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_atoms_symbols_tsv
+    ON atoms USING GIN (to_tsvector('simple', coalesce(symbols, '')));

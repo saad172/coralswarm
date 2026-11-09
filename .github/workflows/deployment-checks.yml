@@ -1,0 +1,32 @@
+name: Deployment automation checks
+on:
+  pull_request:
+    paths:
+      - .github/workflows/deploy.yml
+      - .github/workflows/recover-web.yml
+      - .github/workflows/deployment-checks.yml
+      - scripts/deployment.py
+      - scripts/fly_deploy_with_receipt.sh
+      - scripts/tests/test_deployment.py
+      - .github/workflows/financial-recovery-prepare.yml
+      - scripts/deploy_financial_backend.py
+      - scripts/test_deploy_financial_backend.py
+      - scripts/deploy_local.sh
+      - scripts/test_deploy_local_financial.py
+      - fly.toml
+      - fly.manual.toml
+      - fly.staging.toml
+permissions:
+  contents: read
+jobs:
+  deployment-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s scripts/tests -p test_deployment.py -v
+      - run: python3 scripts/test_deploy_financial_backend.py
+      - run: python3 scripts/test_deploy_local_financial.py
+      - run: bash -n scripts/fly_deploy_with_receipt.sh scripts/deploy_local.sh

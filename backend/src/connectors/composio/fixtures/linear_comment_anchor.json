@@ -1,0 +1,10 @@
+{"LINEAR_RUN_QUERY_OR_MUTATION":[
+  {"op":"CoralSwarmIssuesChanged","when":{},"data":{"data":{"issues":{"nodes":[
+    {"id":"9f0c4c1e-6c1f-4d43-9d7a-1b2f6f1c0a65","identifier":"COR-65","title":"Knowledge pipeline quality eval","description":"Baseline the eval on real data.","createdAt":"2026-10-18T09:00:00.000Z","updatedAt":"2026-10-19T10:00:00.000Z","state":{"name":"In Progress"},"creator":{"id":"u-1","name":"Morgan"},"project":{"id":"p-1","name":"Knowledge pipeline"}}
+  ],"pageInfo":{"hasNextPage":false,"endCursor":null}}},"errors":null}},
+  {"op":"CoralSwarmCommentsChanged","when":{},"data":{"data":{"comments":{"nodes":[
+    {"id":"3b7e2a90-51d4-4c1b-8f0e-2d9a6c4e7f11","body":"Linear comments scored 0.66; anchoring them should help.","createdAt":"2026-10-19T11:00:00.000Z","updatedAt":"2026-10-19T11:00:00.000Z","user":{"id":"u-2","name":"Casey"},"issue":{"id":"9f0c4c1e-6c1f-4d43-9d7a-1b2f6f1c0a65","title":"Knowledge pipeline quality eval","identifier":"COR-65","project":{"id":"p-1","name":"Knowledge pipeline"}}},
+    {"id":"5c1d9e22-0a7b-4f3e-9c6d-8e1f2a3b4c5d","body":"Second pass looks better.","createdAt":"2026-10-19T12:00:00.000Z","updatedAt":"2026-10-19T12:00:00.000Z","user":{"id":"u-2","name":"Casey"},"issue":{"id":"9f0c4c1e-6c1f-4d43-9d7a-1b2f6f1c0a65","project":null}}
+  ],"pageInfo":{"hasNextPage":false,"endCursor":null}}},"errors":null}},
+  {"op":"CoralSwarmProjectsChanged","when":{},"data":{"data":{"projects":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}},"errors":null}}
+]}

@@ -1,0 +1,287 @@
+name: COR-91 tenant restore
+
+# Selective restore of what the COR-91 atom-delete sweep wiped, from a nightly
+# tenant dump. Plan: outputs/cor-91-recovery-plan.md (Section 3 has the merge
+# rules this implements).
+#
+# WHY A WORKFLOW: the dump is encrypted under BACKUP_ENCRYPTION_KEY, and that
+# key exists only as this repository's Actions secret. So the dump can only be
+# decrypted inside a run. The key reaches one step as an env var and is never
+# echoed; the plaintext dump lives in the runner only until pg_restore reads it.
+#
+# WHAT A RUN DOES (scripts/cor91_restore/restore.sh, one subcommand per step):
+#   1. validate  refuse bad input combinations before any secret is touched
+#   2. hold      copy the dump to restore-hold/<slug>/, outside the nightly
+#                pruning (which lists only tenant/<slug>/), then read it back
+#                from there, so every run proves the hold copy restores
+#   3. restore   decrypt into a pgvector:pg18 service container (throwaway),
+#                snapshot production READ-ONLY on the direct endpoint, fail
+#                unless the sweep events name exactly the pinned graphs, print
+#                the dry-run report, build restore.sql, and read the control
+#                plane's credit_ledger (read-only) for jobs restored to done
+#   4. apply     only from main, only after the cor91-restore-apply
+#                environment's reviewer approves the job, with apply=true,
+#                dry_run=false, confirm_slug equal to the slug,
+#                expected_restore_sha256 equal to the SHA-256 a reviewed dry
+#                run printed, and expected_counts as that dry run printed.
+#                restore.sql refuses unless no trigger on atoms can still wipe
+#                a graph, rolls back if any table would change more rows than
+#                expected_counts, and refuses if the sweep events stop naming
+#                exactly the pinned graphs.
+#
+# THE RESTORE SQL STAYS IN THE RUN. It carries plaintext chat answers, session
+# labels and job payloads. An artifact, even encrypted, would be a second copy
+# whose only usable key is BACKUP_ENCRYPTION_KEY, readable only by another run
+# that can rebuild the same bytes from the held dump anyway. The SHA-256 links
+# a reviewed dry run to the apply run instead: the build is deterministic, so
+# an apply refuses unless it rebuilt exactly the data that was reviewed.
+#
+# DISPATCHING THIS TOUCHES PRODUCTION SECRETS AND DATA. A dry run reads the
+# tenant database; an apply writes it. Both need the founder's approval.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_slug:
+        description: "Tenant slug"
+        type: string
+        required: true
+        default: coralswarm
+      object_key:
+        description: "Dump object key (tenant/<slug>/... or restore-hold/<slug>/...)"
+        type: string
+        required: true
+        default: tenant/coralswarm/tenant-coralswarm-20261013T101010Z.dump.enc
+      hold_only:
+        description: "Only copy the dump to restore-hold/ and stop"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Dry run: read production read-only and print the report"
+        type: boolean
+        default: true
+      apply:
+        description: "APPLY to production (needs dry_run=false, confirm_slug, expected_restore_sha256)"
+        type: boolean
+        default: false
+      confirm_slug:
+        description: "Type the tenant slug again to confirm an apply"
+        type: string
+        default: ""
+      expected_restore_sha256:
+        description: "restore.sql SHA-256 from the reviewed dry run (apply only)"
+        type: string
+        default: ""
+      expected_counts:
+        description: "expected_counts line from the reviewed dry run, e.g. cs=1,msg=2,conv=3,qh=4,jr=5,jobs=6 (apply only)"
+        type: string
+        default: ""
+      restore_canary_wiped:
+        description: "Restore what source-delete events since the dump wiped graph-wide (citations of the deleted item stay wiped)"
+        type: boolean
+        default: true
+      access_signoff_graphs:
+        description: "Comma-separated graph ids whose access change since the dump is signed off (their query history and rollups are restored)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cor91-restore
+  cancel-in-progress: false
+
+env:
+  COR91_SLUG: ${{ inputs.tenant_slug }}
+  COR91_OBJECT_KEY: ${{ inputs.object_key }}
+  COR91_HOLD_ONLY: ${{ inputs.hold_only }}
+  COR91_DRY_RUN: ${{ inputs.dry_run }}
+  COR91_APPLY: ${{ inputs.apply }}
+  COR91_CONFIRM_SLUG: ${{ inputs.confirm_slug }}
+  COR91_EXPECTED_SHA256: ${{ inputs.expected_restore_sha256 }}
+  COR91_EXPECTED_COUNTS: ${{ inputs.expected_counts }}
+  COR91_RESTORE_CANARY_WIPED: ${{ inputs.restore_canary_wiped }}
+  COR91_ACCESS_SIGNOFF: ${{ inputs.access_signoff_graphs }}
+
+jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate inputs
+        run: bash scripts/cor91_restore/restore.sh validate
+
+  hold:
+    name: Hold the dump outside retention pruning
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      hold_key: ${{ steps.hold.outputs.hold_key }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify required secrets are configured
+        env:
+          HAVE_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT != '' }}
+          HAVE_BUCKET: ${{ secrets.BACKUP_S3_BUCKET != '' }}
+          HAVE_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID != '' }}
+          HAVE_SECRET: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY != '' }}
+        run: |
+          for pair in "$HAVE_ENDPOINT:BACKUP_S3_ENDPOINT" "$HAVE_BUCKET:BACKUP_S3_BUCKET" \
+                      "$HAVE_KEY_ID:BACKUP_S3_ACCESS_KEY_ID" "$HAVE_SECRET:BACKUP_S3_SECRET_ACCESS_KEY"; do
+            if [ "${pair%%:*}" != true ]; then echo "::error::Required secret ${pair#*:} is not set" >&2; exit 1; fi
+          done
+      - name: Copy to restore-hold/
+        id: hold
+        env:
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+        run: bash scripts/cor91_restore/restore.sh hold
+
+  restore:
+    name: Restore, report, and (apply=true only) apply
+    needs: hold
+    if: ${{ !inputs.hold_only }}
+    # An apply run waits for the environment's required reviewer before any
+    # step (and any secret) runs. A dry run uses no environment.
+    environment: ${{ inputs.apply && 'cor91-restore-apply' || '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      scratch:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_PASSWORD: scratch
+          POSTGRES_DB: scratch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PG_BIN_DIR: /usr/lib/postgresql/18/bin
+      COR91_SCRATCH_DSN: postgresql://postgres:scratch@localhost:5432/scratch
+      COR91_HOLD_KEY: ${{ needs.hold.outputs.hold_key }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify required secrets are configured
+        env:
+          HAVE_FLY: ${{ secrets.FLY_API_TOKEN != '' }}
+          HAVE_ENC: ${{ secrets.BACKUP_ENCRYPTION_KEY != '' }}
+          HAVE_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT != '' }}
+          HAVE_BUCKET: ${{ secrets.BACKUP_S3_BUCKET != '' }}
+          HAVE_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID != '' }}
+          HAVE_SECRET: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY != '' }}
+          HAVE_CONTROL: ${{ secrets.BACKUP_DATABASE_URL != '' }}
+        run: |
+          for pair in "$HAVE_FLY:FLY_API_TOKEN" "$HAVE_ENC:BACKUP_ENCRYPTION_KEY" "$HAVE_CONTROL:BACKUP_DATABASE_URL" \
+                      "$HAVE_ENDPOINT:BACKUP_S3_ENDPOINT" "$HAVE_BUCKET:BACKUP_S3_BUCKET" \
+                      "$HAVE_KEY_ID:BACKUP_S3_ACCESS_KEY_ID" "$HAVE_SECRET:BACKUP_S3_SECRET_ACCESS_KEY"; do
+            if [ "${pair%%:*}" != true ]; then echo "::error::Required secret ${pair#*:} is not set" >&2; exit 1; fi
+          done
+
+      # Tenant dumps are written by pg_dump 18 (backup-tenants.yml), so reading
+      # one needs pg_restore 18. Same PGDG install as that workflow.
+      - name: Install postgresql-client-18
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (pinned 2026-07-19)
+
+      # Same resolver as backup-tenants.yml: prints the named Fly secret from
+      # the running backend or, for a self-serve tenant with no Fly secret,
+      # the KEK-encrypted tenant_db_credentials row via
+      # `migrate_tenants --resolve-dsn` (issue #1514; stderr discarded on the
+      # machine). Only TENANT_DB_* names. restore.sh masks it and rewrites it
+      # to the direct endpoint before any connection.
+      - name: Write tenant DSN resolver
+        run: |
+          cat > resolve_tenant_dsn.sh <<'RESOLVER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          name="$1"
+          [[ "$name" =~ ^TENANT_DB_[A-Z0-9_]+$ ]] || { echo "not a tenant secret name" >&2; exit 2; }
+          flyctl ssh console -a coralswarm-backend -q \
+            -C "/bin/sh -c 'printenv $name || /app/migrate_tenants --resolve-dsn $name 2>/dev/null'" 2>/dev/null | tr -d '\r'
+          RESOLVER
+          chmod +x resolve_tenant_dsn.sh
+
+      - name: Download the held dump and verify its checksum
+        env:
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+        run: bash scripts/cor91_restore/restore.sh fetch
+
+      - name: Decrypt and restore into the throwaway database
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: bash scripts/cor91_restore/restore.sh restore-scratch
+
+      - name: Snapshot production (read-only, direct endpoint)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          COR91_DSN_RESOLVER_CMD: ./resolve_tenant_dsn.sh
+        run: bash scripts/cor91_restore/restore.sh snapshot
+
+      - name: Dry-run report and restore.sql
+        run: bash scripts/cor91_restore/restore.sh build
+
+      # coralswarm-db has no public endpoint; same tunnel as backup-control-plane.yml.
+      - name: Open flyctl proxy to coralswarm-db
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl proxy 15432:5432 -a coralswarm-db > proxy.log 2>&1 &
+          echo $! > proxy.pid
+          for _ in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/15432) 2>/dev/null; then exec 3>&-; exit 0; fi
+            sleep 1
+          done
+          echo "::error::flyctl proxy to coralswarm-db did not come up within 30s" >&2
+          exit 1
+
+      - name: Credit ledger for jobs restored to done (control plane, read-only)
+        env:
+          BACKUP_DATABASE_URL_RAW: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          COR91_CONTROL_DSN="$(printf '%s' "$BACKUP_DATABASE_URL_RAW" | sed -E 's#@[^@/]+(:[0-9]+)?/#@127.0.0.1:15432/#')"
+          export COR91_CONTROL_DSN
+          bash scripts/cor91_restore/restore.sh ledger
+
+      - name: Close flyctl proxy
+        if: always()
+        run: if [ -f proxy.pid ]; then kill "$(cat proxy.pid)" 2>/dev/null || true; fi
+
+      - name: APPLY to production
+        if: ${{ inputs.apply && !inputs.dry_run && github.ref == 'refs/heads/main' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          COR91_DSN_RESOLVER_CMD: ./resolve_tenant_dsn.sh
+        run: bash scripts/cor91_restore/restore.sh apply
+
+      - name: Remove the work directory
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/cor91"

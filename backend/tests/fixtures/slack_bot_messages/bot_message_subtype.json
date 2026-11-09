@@ -1,0 +1,122 @@
+{
+  "subtype": "bot_message",
+  "text": "**Weekly burn — Mon Sep 7**  **Total: ~$1,234/mo** (source: the `burn` dashboard, sample data). No change vs last week — **zero new billing receipts in the last 7 days**, verified both in the workspace and by a direct mailbox search.  Top lines: Build minutes $111 · Model API ~$222 (est) · Review bot $33.44 · <https://example.com/hosting|Hosting> ~$55 (est) · Auth $66.77 · Scheduler $88 (annual prepay, active).  No new, changed or cancelled subscriptions. Nothing anomalous in spend.  Worth knowing: • **Office suite goes paid Oct 1** (~$9/user/mo) — trial-ending notice Sep 3, and there was a payment-failure notice Aug 21, so the card should be verified before then. • **The database is still on the FREE plan** — blocking for paying tenants and the biggest unmeasured cost risk (~$5–77/tenant/mo). • Caveat: only 3 billing receipts exist in <mailto:someone@example.com|someone@example.com> over 90 days, so those four remain *estimates* — receipts likely land in another mailbox. Want me to add that mailbox to the sync?  Dashboard: <https://dashboard.example.com/burn|dashboard.example.com/burn>",
+  "username": "Ledger Bot",
+  "type": "message",
+  "ts": "1788912345.222222",
+  "bot_id": "B0TESTSEN0",
+  "app_id": "A0TESTSEN0",
+  "blocks": [
+    {
+      "type": "rich_text",
+      "block_id": "lp3Q84",
+      "elements": [
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "Weekly burn — Mon Sep 7",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": "  "
+            },
+            {
+              "type": "text",
+              "text": "Total: ~$1,234/mo",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " (source: the "
+            },
+            {
+              "type": "text",
+              "text": "burn",
+              "style": {
+                "code": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " dashboard, sample data). No change vs last week — "
+            },
+            {
+              "type": "text",
+              "text": "zero new billing receipts in the last 7 days",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": ", verified both in the workspace and by a direct mailbox search.  Top lines: Build minutes $111 · Model API ~$222 (est) · Review bot $33.44 · "
+            },
+            {
+              "type": "link",
+              "url": "https://example.com/hosting",
+              "text": "Hosting"
+            },
+            {
+              "type": "text",
+              "text": " ~$55 (est) · Auth $66.77 · Scheduler $88 (annual prepay, active).  No new, changed or cancelled subscriptions. Nothing anomalous in spend.  Worth knowing: • "
+            },
+            {
+              "type": "text",
+              "text": "Office suite goes paid Oct 1",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " (~$9/user/mo) — trial-ending notice Sep 3, and there was a payment-failure notice Aug 21, so the card should be verified before then. • "
+            },
+            {
+              "type": "text",
+              "text": "The database is still on the FREE plan",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " — blocking for paying tenants and the biggest unmeasured cost risk (~$5–77/tenant/mo). • Caveat: only 3 billing receipts exist in "
+            },
+            {
+              "type": "link",
+              "url": "mailto:someone@example.com",
+              "text": "someone@example.com"
+            },
+            {
+              "type": "text",
+              "text": " over 90 days, so those four remain "
+            },
+            {
+              "type": "text",
+              "text": "estimates",
+              "style": {
+                "italic": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " — receipts likely land in another mailbox. Want me to add that mailbox to the sync?  Dashboard: "
+            },
+            {
+              "type": "link",
+              "url": "https://dashboard.example.com/burn",
+              "text": "dashboard.example.com/burn"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

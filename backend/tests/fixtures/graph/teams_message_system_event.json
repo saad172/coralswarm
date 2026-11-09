@@ -1,0 +1,12 @@
+{
+  "id": "1738368180000",
+  "messageType": "systemEventMessage",
+  "createdDateTime": "2026-02-01T09:03:00Z",
+  "eventDetail": {
+    "@odata.type": "#microsoft.graph.membersAddedEventMessageDetail"
+  },
+  "body": {
+    "contentType": "html",
+    "content": ""
+  }
+}

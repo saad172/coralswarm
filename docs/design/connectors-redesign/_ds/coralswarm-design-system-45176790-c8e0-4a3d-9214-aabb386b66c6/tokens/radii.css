@@ -1,0 +1,17 @@
+/* Radius, named for what it wraps. The system tops out at 14px. */
+:root {
+  --r-badge: 6px;   /* citation chips, tiny marks */
+  --r-row: 8px;     /* list rows, small buttons */
+  --r-field: 9px;   /* inputs, sidebar items, icon buttons */
+  --r-control: 10px;/* popovers, inset panels, source tiles */
+  --r-card: 12px;   /* cards */
+  --r-frame: 14px;  /* modals, composer, screen frames */
+  --r-full: 999px;  /* pills, dots, avatars, meters */
+
+  /* legacy scale, remapped */
+  --r-1: 6px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 14px;
+  --r-5: 14px;
+}

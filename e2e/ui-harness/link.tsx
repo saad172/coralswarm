@@ -1,0 +1,1 @@
+export default function Link(props:any) {return <a {...props}/>;}

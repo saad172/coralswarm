@@ -1,0 +1,20 @@
+/* Minimal element defaults. Everything else is component-level. */
+body {
+  background: var(--bg-2);
+  color: var(--ink);
+  font: var(--type-body);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: var(--font-feature-ui);
+}
+a { color: var(--brand-2); text-decoration: none; }
+a:hover { color: var(--brand); }
+::selection { background: var(--brand); color: var(--bg); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+
+/* Ambient reef texture — a subtle dot grid, the one decorative background. */
+.reef-bg {
+  background-image: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0);
+  background-size: 24px 24px;
+}

@@ -1,0 +1,11 @@
+# Parked, unwired code — keep it byte-identical to what was archived.
+archive
+node_modules
+.next
+dist
+out
+target
+*.lock
+pnpm-lock.yaml
+Cargo.lock
+package-lock.json

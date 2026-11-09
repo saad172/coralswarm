@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+. /local/config
+export MASTER_KEK_HEX ACCOUNT_MASTER_KEK INTERNAL_TOKEN OAUTH_STATE_SECRET CLERK_ISSUER
+exec "$@"

@@ -1,0 +1,29 @@
+-- no-transaction
+-- Migration: 0064_atom_embed_versioning_backfill
+-- Description: Runs the batched backfill defined by 0063
+--   (`backfill_atom_embed_versioning`) to stamp every pre-existing embedded
+--   atom with `embed_model = 'bge-small-en-v1.5'` / `chunker_version = 1`.
+--
+--   This MUST be a separate migration file from 0063, and the ONLY
+--   statement in it, for the same reason 0059 splits `CREATE INDEX
+--   CONCURRENTLY` out from its `ALTER TABLE`: sqlx sends a migration file's
+--   SQL as a single wire-protocol Query message, and Postgres implicitly
+--   wraps MULTIPLE statements in one such message in a transaction even
+--   when sqlx itself isn't wrapping one. `CALL backfill_atom_embed_versioning()`
+--   commits per-batch INSIDE the procedure (see 0063), which Postgres only
+--   allows when the CALL itself is a standalone, non-transactional
+--   top-level statement — hence the `-- no-transaction` directive (sqlx's
+--   migrator recognizes this literal first line and executes the file
+--   directly on the connection instead of wrapping it in `BEGIN`/`COMMIT`)
+--   AND this file containing nothing else.
+--
+--   Idempotent / resumable: the procedure's WHERE clause only ever selects
+--   `embed_model IS NULL` rows, so re-running this migration (or retrying
+--   after an interrupted run) is a no-op once the backfill has completed.
+--
+-- Down:
+--   -- No schema change to undo; see 0063's Down for dropping the columns
+--   -- and procedure. Re-running this file's CALL is always safe (see
+--   -- idempotency note above), so there is nothing to roll back here.
+
+CALL backfill_atom_embed_versioning();

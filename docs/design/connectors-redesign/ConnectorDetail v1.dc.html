@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/styles.css"><script src="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/_ds_bundle.js"></script></helmet>
+<div style="position:relative;display:flex;min-height:{{ minH }};background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+  <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+    <nav style="display:flex;width:224px;flex:none;flex-direction:column;border-right:1px solid var(--line);background:var(--bg-2)">
+      <div style="padding:12px 11px 9px"><div style="display:flex;align-items:center;gap:8px;padding:0 1px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.DotMandala" size="{{ 22 }}" density="{{ 0.8 }}" hint-size="22px,22px"></x-import><span style="flex:1;font-size:13px;font-weight:600">Acme</span><span style="color:var(--ink-3);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="chevronUpDown" size="{{ 14 }}" hint-size="14px,14px"></x-import></span></div></div>
+      <div style="display:flex;flex-direction:column;gap:5px;padding:0 11px 8px">
+        <div style="display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12.5px;color:var(--ink-3)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="search" size="{{ 14 }}" hint-size="14px,14px"></x-import>Search<span style="margin-left:auto;font-family:var(--mono);font-size:10px">⌘K</span></div>
+        <div style="display:flex;align-items:center;gap:7px;border-radius:var(--r-field);border:1px solid var(--line);background:var(--bg);padding:7px 10px;font-size:13px;font-weight:500;box-shadow:var(--shadow-card)"><span style="color:var(--brand);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="add" size="{{ 15 }}" stroke-width="{{ 2 }}" hint-size="15px,15px"></x-import></span>New chat<span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-4)">⌘N</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1px;padding:0 11px 6px"><sc-for list="{{ places }}" as="p" hint-placeholder-count="5"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" icon="{{ p.icon }}" label="{{ p.label }}" count="{{ p.count }}" hint-size="100%,30px"></x-import></sc-for></div>
+      <div style="flex:1"></div>
+      <div style="display:flex;flex-direction:column;gap:1px;padding:0 11px 8px"><sc-for list="{{ utilities }}" as="p" hint-placeholder-count="2"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" icon="{{ p.icon }}" label="{{ p.label }}" active="{{ p.active }}" hint-size="100%,30px"></x-import></sc-for></div>
+      <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding:9px 11px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Avatar" name="Dana Ross" size="{{ 24 }}" hint-size="24px,24px"></x-import><span style="flex:1;font-size:12.5px;font-weight:500">Dana Ross</span><span style="color:var(--ink-3);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="settings" size="{{ 15 }}" hint-size="15px,15px"></x-import></span></div>
+    </nav>
+  </sc-if>
+  <div style="display:flex;min-width:0;flex:1;flex-direction:column">
+    <header style="display:flex;height:52px;flex:none;align-items:center;gap:10px;border-bottom:1px solid var(--line-2);background:var(--bg);padding:0 {{ headerPad }}">
+      <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.IconButton" label="Open sidebar" size="{{ 30 }}" hint-size="30px,30px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="sidebar" size="{{ 15 }}" hint-size="15px,15px"></x-import></x-import></sc-if>
+      <span style="font-size:14px;color:var(--ink-3)">Connectors</span><span style="color:var(--ink-4);font-size:13px">/</span><span style="font-size:14px;font-weight:500;letter-spacing:-0.01em">{{ p.name }}</span>
+    </header>
+    <main style="flex:1;background:var(--bg-2)">
+      <div style="margin:0 auto;max-width:1040px;padding:{{ pad }};display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px 16px">
+          <dc-import name="ProviderMark" provider="{{ p.provider }}" letter="{{ p.letter }}" hue="{{ p.hue }}" box="{{ 44 }}" hint-size="44px,44px"></dc-import>
+          <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h1 style="margin:0;font-family:var(--display);font-weight:400;font-size:30px;line-height:1.1">{{ p.name }}</h1><span style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:var(--r-full);border:1px solid {{ pill.border }};background:{{ pill.bg }};color:{{ pill.fg }};font-family:var(--mono);font-size:10px;line-height:1.5;white-space:nowrap"><span style="color:{{ pill.tone }};font-weight:600">{{ pill.glyph }}</span><span>{{ pill.label }}</span></span></div>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">signed in as {{ p.account }} · connected {{ p.since }}</span>
+          </div>
+          <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" hint-size="96px,30px">Disconnect</x-import>
+        </div>
+
+        <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
+          <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;border-radius:var(--r-control);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);background:color-mix(in srgb, var(--warn) 10%, transparent);padding:10px 12px;font-size:12.5px;line-height:1.55;color:var(--ink-2)">
+            <span style="flex:1;min-width:220px"><b style="font-weight:500;color:var(--ink)">{{ notice.head }}</b> {{ notice.body }}</span>
+            <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="primary" size="sm" hint-size="96px,30px">Reconnect</x-import>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">sources</span>
+          <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+            <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}"><div style="display:grid;grid-template-columns:{{ cols }};gap:14px;padding:9px 16px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)"><span>source</span><span>status</span><span>captures</span><span>last captured</span><span style="text-align:right">on</span></div></sc-if>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+              <div style="border-top:{{ r.rule }}">
+                <div style="display:grid;grid-template-columns:{{ cols }};gap:8px 14px;align-items:center;padding:12px 16px;background:{{ r.rowBg }}">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0;grid-column:{{ r.nameSpan }}">
+                    <span style="display:flex;color:var(--ink-3);transform:rotate({{ r.chev }})"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="{{ r.chevIcon }}" size="{{ 13 }}" hint-size="13px,13px"></x-import></span>
+                    <span style="font-size:13.5px;font-weight:500;color:{{ r.nameColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.n }}</span>
+                  </div>
+                  <div><span style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:var(--r-full);border:1px solid {{ r.pill.border }};background:{{ r.pill.bg }};color:{{ r.pill.fg }};font-family:var(--mono);font-size:10px;line-height:1.5;white-space:nowrap"><span style="color:{{ r.pill.tone }};font-weight:600">{{ r.pill.glyph }}</span><span>{{ r.pill.label }}</span></span></div>
+                  <span style="font-size:12.5px;line-height:1.45;color:{{ r.scopeColor }};grid-column:{{ r.scopeSpan }};text-wrap:pretty">{{ r.scope }}</span>
+                  <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                    <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);white-space:nowrap">{{ r.last }}</span>
+                    <sc-if value="{{ r.meter }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Meter" value="{{ r.meter }}" tone="var(--ok)" hint-size="100%,6px"></x-import></sc-if>
+                  </div>
+                  <div style="display:flex;justify-content:flex-end;grid-column:{{ r.toggleCol }};grid-row:{{ r.toggleRow }}">
+                    <sc-if value="{{ r.canToggle }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Toggle" checked="{{ r.on }}" hint-size="30px,18px"></x-import></sc-if><sc-if value="{{ r.connectBtn }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" hint-size="76px,28px">Connect</x-import></sc-if>
+                  </div>
+                </div>
+                <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:16px;padding:4px 16px 18px {{ openIndent }};background:var(--bg-subtle);border-top:1px solid var(--line-3)">
+                    <div style="display:flex;flex-direction:column;gap:10px;padding-top:12px">
+                      <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">what it captures</span>
+                      <div style="align-self:flex-start;display:flex;max-width:100%"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ modes }}" value="pick" hint-size="300px,32px"></x-import></div>
+                      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px">
+                        <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.SearchInput" placeholder="Search threads you follow…" icon="{{ searchIcon }}" style="flex:1;min-width:180px;max-width:320px" hint-size="240px,32px"></x-import>
+                        <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">5 followed</span>
+                      </div>
+                      <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden">
+                        <sc-for list="{{ threads }}" as="t" hint-placeholder-count="5">
+                          <div style="display:grid;grid-template-columns:{{ threadCols }};gap:4px 12px;align-items:center;padding:9px 12px;border-top:{{ t.rule }}">
+                            <span style="font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.subject }}</span>
+                            <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);white-space:nowrap">{{ t.meta }}</span>
+                            <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="ghost" size="sm" hint-size="70px,28px">Unfollow</x-import></sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <span style="font-size:12.5px;color:var(--ink-3)">Follow a thread from the Gmail add-on, or forward it to your capture address. Nothing else in your inbox is read.</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line-3);padding-top:14px">
+                      <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">gmail add-on</span>
+                      <span style="font-size:13px;line-height:1.5;color:var(--ink-2)">The add-on uses this token to follow threads from inside Gmail. It's yours — revoking it stops the add-on, not this connection.</span>
+                      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                        <span style="font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:5px 12px">cs_addon_••••••••3f9a</span>
+                        <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">created Sep 14 · used 2h ago</span>
+                        <div style="flex:1"></div>
+                        <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" hint-size="100px,30px">New token</x-import>
+                        <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="ghost" size="sm" hint-size="70px,30px">Revoke</x-import>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <span style="font-size:12.5px;color:var(--ink-3)">Pausing a source stops new capture from it. Everything already captured stays, and nothing else changes.</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <sc-if value="{{ confirm }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:grid;place-items:{{ confirmPlace }};padding:{{ confirmPad }};background:var(--overlay-scrim)">
+      <div role="dialog" style="width:460px;max-width:100%;overflow:hidden;border-radius:{{ confirmRadius }};border:1px solid var(--line);background:var(--bg);box-shadow:var(--shadow-frame)">
+        <div style="display:flex;align-items:flex-start;gap:12px;border-bottom:1px solid var(--line-2);padding:14px 18px">
+          <div style="min-width:0;flex:1"><h2 style="margin:0;font-size:15px;font-weight:500;line-height:1.35;color:var(--ink)">Stop capturing from {{ p.name }}?</h2><p style="margin:4px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-2)">What's already captured stays in your ocean.</p></div>
+          <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.IconButton" label="Close" size="{{ 26 }}" style="border-color:transparent" hint-size="26px,26px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="close" size="{{ 14 }}" hint-size="14px,14px"></x-import></x-import>
+        </div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:1.5;color:var(--ink)">
+          <div style="display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--bad);padding-top:3px">stops</span><span>{{ confirmStops }}</span></div>
+          <div style="display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ok);padding-top:3px">stays</span><span>Every coral and topic already built from it.</span></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;border-top:1px solid var(--line-2);background:var(--bg-2);padding:12px 18px">
+          <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="md" hint-size="80px,34px">Cancel</x-import>
+          <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="danger" size="md" hint-size="100px,34px">Disconnect</x-import>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:860},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ms&quot;,&quot;gmailOpen&quot;,&quot;slackReconnect&quot;,&quot;disconnect&quot;],&quot;default&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;narrow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { r: 0 };
+  componentDidMount() { this._t = setInterval(() => { if (window.CoralSwarmDesignSystem_451767) { clearInterval(this._t); this.setState({ r: 1 }); } }, 80); }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const NS = window.CoralSwarmDesignSystem_451767;
+    const ic = (name, size = 15) => (NS ? React.createElement(NS.Icon, { name, size }) : null);
+    const screen = this.props.screen ?? "ms";
+    const narrow = !!this.props.narrow, wide = !narrow;
+    const TONE = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--bad)", muted: "var(--ink-3)" };
+    const mkPill = (label, tone, glyph) => ({ label, glyph, tone: TONE[tone], border: `color-mix(in srgb, ${TONE[tone]} 40%, transparent)`, bg: tone === "muted" ? "transparent" : `color-mix(in srgb, ${TONE[tone]} 18%, transparent)`, fg: tone === "muted" ? "var(--ink-2)" : "var(--ink)" });
+    const ST = {
+      active: mkPill("Active", "ok", "✓"), importing: mkPill("Importing history", "ok", "↓"), paused: mkPill("Paused", "muted", "‖"),
+      stopped: mkPill("Stopped", "bad", "×"), attention: mkPill("Needs attention", "warn", "!"), off: mkPill("Off", "muted", "○"),
+      reconnect: mkPill("Reconnect needed", "bad", "×"),
+    };
+    const P = {
+      ms: { provider: "microsoft", letter: "M", hue: "plum", name: "Microsoft", account: "dana@acme.com", since: "Sep 2", status: "active" },
+      gmailOpen: { provider: "google", letter: "G", hue: "coral", name: "Google", account: "dana@acme.com", since: "Aug 19", status: "active" },
+      slackReconnect: { provider: "slack", letter: "S", hue: "amber", name: "Slack", account: "dana · acme.slack.com", since: "Jul 30", status: "reconnect" },
+    };
+    const key = screen === "disconnect" ? "slackReconnect" : screen;
+    const p = P[key];
+    const R = {
+      ms: [
+        ["Outlook mail", "active", "4 followed threads", "3 min ago", true],
+        ["Calendar", "importing", "Everything I can see", "importing 30 days · 62%", true, 62],
+        ["Teams chats", "paused", "6 chats", "paused Oct 25", false],
+        ["Teams channels", "off", "Messages in the channels you're a member of", "—"],
+        ["Teams meetings", "off", "Transcripts of meetings you join", "—"],
+      ],
+      gmailOpen: [
+        ["Gmail", "active", "5 followed threads", "12 min ago", true, 0, true],
+        ["Calendar", "active", "Everything I can see", "1h ago", true],
+        ["Meet", "active", "Everything I can see", "yesterday", true],
+        ["Chat", "paused", "Only what I pick · 2 spaces", "paused Oct 20", false],
+      ],
+      slackReconnect: [["Channels", "stopped", "14 channels", "stopped Oct 27", true]],
+    }[key];
+    const cols = wide ? "minmax(0,1.1fr) 160px minmax(0,1.6fr) 170px 84px" : "minmax(0,1fr) auto";
+    const rows = R.map(([n, s, scope, last, on, meter, open], k) => {
+      const locked = s === "off";
+      return {
+        n, pill: ST[s], scope, last: wide || !locked ? last : "", on: !!on, meter: meter || 0, open: !!open,
+        canToggle: !locked, connectBtn: locked, rule: k ? "1px solid var(--line-3)" : (wide ? "1px solid var(--line-3)" : "none"),
+        rowBg: open ? "var(--bg-subtle)" : "var(--bg)",
+        chevIcon: "chevron", chev: open ? "0deg" : "-90deg",
+        nameColor: locked ? "var(--ink-3)" : "var(--ink)", scopeColor: locked ? "var(--ink-3)" : "var(--ink-2)",
+        nameSpan: "auto", scopeSpan: wide ? "auto" : "1 / -1",
+        toggleCol: wide ? "auto" : "2", toggleRow: wide ? "auto" : "1",
+      };
+    });
+    const threads = [["Q4 pricing review — final numbers", "Maya Chen · Oct 28"], ["EU invoicing vendor shortlist", "Jonas Weber · Oct 24"], ["Re: Seat caps for mid-market", "Priya Raman · Oct 21"], ["Launch checklist v3", "Sam Ortiz · Oct 17"], ["Renewal terms — Northwind", "Ana Silva · Oct 9"]].map(([subject, meta], k) => ({ subject, meta, rule: k ? "1px solid var(--line-3)" : "none" }));
+    const st = p.status;
+    return {
+      p, wide, narrow, pill: st === "reconnect" ? ST.reconnect : ST.active, rows, cols, threads,
+      minH: narrow ? "844px" : "860px", headerPad: narrow ? "10px" : "20px", pad: narrow ? "18px 16px 28px" : "24px 28px 40px",
+      openIndent: narrow ? "16px" : "37px", threadCols: wide ? "minmax(0,1fr) auto auto" : "minmax(0,1fr)",
+      notice: st === "reconnect" ? { head: "Slack revoked access on Oct 27.", body: "Reconnect to resume. Your 14 channels and everything already captured are kept." } : null,
+      confirm: screen === "disconnect", confirmStops: "New capture from 14 channels, and your Slack sign-in is revoked.",
+      confirmPlace: narrow ? "end stretch" : "center", confirmPad: narrow ? "0" : "24px", confirmRadius: narrow ? "var(--r-frame) var(--r-frame) 0 0" : "var(--r-frame)",
+      modes: [{ key: "pick", label: "Only what I pick" }, { key: "all", label: "Everything I can see" }],
+      searchIcon: ic("search", 13),
+      places: [["chats", "Chats"], ["library", "Library"], ["today", "Today"], ["review", "Review"], ["workspaces", "Workspaces"]].map(([k, l]) => ({ icon: ic(k), label: l, count: k === "review" && NS ? React.createElement(NS.CountPill, null, "3") : undefined })),
+      utilities: [{ icon: ic("connectors"), label: "Connectors", active: true }, { icon: ic("settings"), label: "Settings", active: false }],
+    };
+  }
+}
+</script>
+</body>
+</html>

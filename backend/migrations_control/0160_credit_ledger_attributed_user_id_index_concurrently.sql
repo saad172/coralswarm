@@ -1,0 +1,58 @@
+-- no-transaction
+-- Migration: 0160_credit_ledger_attributed_user_id_index_concurrently
+-- Description: Build the partial index backing billing Phase 2's per-member
+--   PERIOD SUM read (`SELECT COALESCE(SUM(credits), 0) FROM credit_ledger
+--   WHERE account_id = $1 AND attributed_user_id = $2 AND created_at >= $3`,
+--   e.g. "how many credits has this member drawn down this billing period" —
+--   the read a per-seat enforcement gate or a per-member cost breakdown UI
+--   would issue against the LEDGER, the same shape `0158`'s header already
+--   built for `llm_usage` itself) WITHOUT blocking writes on `credit_ledger`
+--   while it builds. Split out of `0159_credit_ledger_attributed_user_id.sql`
+--   (which adds the `attributed_user_id` column) for the same reason
+--   `0142`/`0059`/`0158` were split out of their respective column-add
+--   migrations — see `0142`'s header for the full explanation of why `CREATE
+--   INDEX CONCURRENTLY` must be alone in a `-- no-transaction` file (sqlx
+--   sends a migration's SQL as one wire-protocol Query message, and Postgres
+--   implicitly wraps multiple statements in such a message in a transaction,
+--   which `CONCURRENTLY` refuses to run inside).
+--
+--   Column order `(account_id, attributed_user_id, created_at)`: identical
+--   reasoning to `0158`'s own header for `llm_usage`'s twin index — the
+--   anticipated query shape is an EQUALITY lookup on both `account_id` and
+--   `attributed_user_id` (one member, within one account) plus a RANGE
+--   filter on `created_at` (one billing period), the textbook "equality,
+--   equality, range" btree column order. This column order also serves the
+--   account-wide per-member ROLLUP shape (`WHERE account_id = $1 AND
+--   created_at >= $2 GROUP BY attributed_user_id`) reasonably well for the
+--   identical reason `0158` gives.
+--
+--   Partial (`WHERE attributed_user_id IS NOT NULL`): the column is NULL on
+--   every row until this PR's Rust starts populating it, stays NULL forever
+--   on every pre-epoch row, and stays NULL by design on every debit whose
+--   underlying `llm_usage` rows have no member in scope, disagree on which
+--   member, or are unattributable for the same reasons `llm_usage.
+--   attributed_user_id` itself is NULL (see `workers::billing_derivation`'s
+--   module doc for the full per-axis inventory) — indexing that NULL
+--   majority would waste space for a predicate a per-member lookup never
+--   issues (it always wants a REAL member id).
+--
+--   `IF NOT EXISTS` + `CONCURRENTLY`: a failed concurrent build leaves an
+--   INVALID index behind, and `IF NOT EXISTS` will then happily skip it
+--   forever. If this migration errors, drop
+--   `idx_credit_ledger_attributed_user` before re-running rather than
+--   assuming the skip means success — the same operational caveat every
+--   `CONCURRENTLY` migration in this tree carries (0059/0074/0075/0099/0142/
+--   0143/0144/0146/0147/0152/0158).
+--
+--   No tenant twin — see `0159`'s own header, "CONTROL-ONLY, no tenant twin"
+--   section, for why `credit_ledger` has no `migrations_tenant` counterpart
+--   for this index to pair with.
+--
+-- Depends on: 0159_credit_ledger_attributed_user_id.sql (creates
+--   attributed_user_id).
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_credit_ledger_attributed_user;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_credit_ledger_attributed_user
+    ON credit_ledger (account_id, attributed_user_id, created_at)
+    WHERE attributed_user_id IS NOT NULL;

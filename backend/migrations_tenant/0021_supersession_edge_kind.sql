@@ -1,0 +1,60 @@
+-- Migration: 0021_supersession_edge_kind
+-- Description: `supersession_edge.kind` — change vs. correction
+--   (graph-temporal-memory plan, Workstream B, §3.5).
+-- Depends on: 0001_tenant_baseline (supersession_edge)
+-- PAIRED WITH: migrations_control/0110_supersession_edge_kind.sql — the DDL in
+--              the two files is IDENTICAL and must stay that way
+--              (`scripts/check_schema_parity.sh`).
+-- Down:
+--   ALTER TABLE supersession_edge DROP COLUMN IF EXISTS kind;
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- WHAT `kind` MEANS
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- A `change` means the superseded claim WAS true and stays citable as history
+-- (e.g. "we no longer use Fly.io" — Fly.io really was in use). A `correction`
+-- means the superseded claim was NEVER true and must not be recounted (e.g.
+-- "it's actually Elmbrook, not Elmbrok" — "Elmbrok" was never correct).
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- WHY THE DEFAULT IS `change`, NOT SOMETHING INFERRED PER ROW
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- The costs are asymmetric. Wrongly leaving a real historical fact classified
+-- as `change` is cheap: it stays visible, `[SUPERSEDED]`-annotated, ranked down
+-- by the ×0.5 penalty once §3.9 is on — exactly the existing, harmless
+-- behavior. Wrongly classifying a real historical fact as `correction` is not
+-- cheap: `correction` rows are the ones a future §3.6 CLAIMS block is
+-- instructed to STOP recounting, so a misclassification silently erases real
+-- history with no easy way for a reader to notice it happened. The column
+-- therefore defaults to the cheap failure mode for every row that predates
+-- this migration AND for every future write that does not explicitly opt in
+-- to `correction` (see `SupersessionKind`/`classify_supersession_kind` in
+-- `backend/src/store/mod.rs` / `backend/src/services/supersession.rs` for the
+-- Rust-side enforcement of the same asymmetry — escalation to `correction`
+-- requires explicit correction language in the newer coral, and any ambiguous
+-- input falls back to `change`).
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- WHY NO BACKFILL BEYOND THE COLUMN DEFAULT
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- Unlike 0109's `coral_count` (whose correct backfilled value was mechanically
+-- derivable from `node_atoms`), there is no data in this schema today that
+-- distinguishes a `change` from a `correction` for an EXISTING edge — nothing
+-- upstream of this migration has ever recorded that distinction, classified
+-- it, or asked a human. Every row written before this migration was written by
+-- one of exactly two producers: `POST /v1/nodes/{id}/supersede` (source='user')
+-- or `Store::insert_auto_supersession_edge` (source='auto', CS-050 contradiction
+-- hints) — NEITHER of which has ever read or classified correction language.
+-- `DEFAULT 'change'` is therefore not merely the safe fallback for existing
+-- rows, it is the ONLY value consistent with what actually happened when they
+-- were written: nothing about their provenance claims "never true", so nothing
+-- here should either. This is verified against the live row population in the
+-- accompanying PR description rather than asserted blindly (`SELECT source,
+-- COUNT(*) FROM supersession_edge GROUP BY source` before/after).
+
+ALTER TABLE supersession_edge
+  ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'change'
+    CHECK (kind IN ('change', 'correction'));

@@ -1,0 +1,11 @@
+{
+  "toolInput": {
+    "question": "What did we decide about rate limiting on the public API?",
+    "ocean_ids": ["818ccfa2-051b-417a-96af-06335e439fac", "aff253b3-7614-4a01-bd48-a4163c7fe2f8", "36ad4a37-c345-43fd-8085-4d0948ffe894"]
+  },
+  "toolOutput": {
+    "task_id": "9c4a5e2a-1c1a-4c2a-9a3a-1a2b3c4d5e6f",
+    "status": "working",
+    "poll_with": "get_task_result"
+  }
+}

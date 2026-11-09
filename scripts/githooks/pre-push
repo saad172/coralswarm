@@ -1,0 +1,250 @@
+#!/usr/bin/env bash
+#
+# Run the affected CI lanes locally before a push and publish the verdict to the
+# PR. ADVISORY ONLY — it reports, it never rejects a push.
+#
+# WHY IT NO LONGER BLOCKS
+# -----------------------
+# This hook was written while GitHub Actions was over quota. Back then Actions
+# was dark and branch protection was off, so refusing the push really was the
+# only enforcement there was.
+#
+# Neither is true any more, and what replaced them changed AGAIN on 2026-09-10.
+# This paragraph used to assert a gate that no longer exists.
+#
+# WHAT USED TO BE TRUE (and is not): ruleset 22282255 was "main: PR + CI gate +
+# merge queue" with a required `CI gate` status check, so nothing reached main
+# without GitHub agreeing. That is what made GitHub the gate and this hook a
+# mere pre-flight in front of it.
+#
+# WHAT IS TRUE NOW: the required `CI gate` check and the `merge_queue` rule were
+# BOTH removed from that ruleset, which is now just "main: PR required". ci.yml
+# runs nightly, and only on days something deployed; deploy.yml is a manual
+# dispatch that does not wait for CI. See both files' `on:` blocks.
+#
+# So GitHub judges a change the night AFTER it deploys. Between merge and that
+# nightly run, main and production can hold code no remote CI run has seen.
+# That is a deliberate cost decision, and it makes this hook the ONLY automated
+# check that looks at a change before it lands on main. It is advisory, so it
+# cannot stop anything. Treat a failure here as the last warning before a
+# nightly red.
+#
+# Its cost rationale is unchanged and is still why it is path-filtered: catching
+# a failure on this laptop avoids burning a remote run, and the budget is ~50k
+# billed-equivalent minutes/month with Linux ~76% of it.
+#
+# A pre-flight must not be able to strand you. A local-only failure — a dead
+# Docker VM, another worktree holding
+# the Postgres containers — is not a reason to refuse a push. So a failure here
+# is loud, and then the push proceeds.
+#
+# DURATION: path-filtered, so a normal change runs a few lanes. Editing
+# `.github/workflows/ci.yml` is the exception — that path is in EVERY filter by
+# design ("a CI change must exercise every lane it configures"), so a workflow
+# edit runs the whole suite, ~30 minutes. That is expected, not a hang.
+#
+# WHY pre-push RATHER THAN AT PR-CREATION TIME
+# --------------------------------------------
+# A PR cannot exist before its branch is pushed, so this is the earliest point
+# at which the exact code a reviewer will see is known. It also fires no matter
+# how the PR is opened afterwards — `gh pr create`, the web UI, or a later push
+# to an existing PR — whereas a `gh pr create` wrapper only covers the first of
+# those and silently misses every follow-up commit.
+#
+# WHAT IT RUNS
+# ------------
+# `ci_local.py` in its default path-filtered mode, which reads the real
+# dorny/paths-filter globs out of ci.yml's `changes` job and runs only the
+# affected lanes: a docs-only push finishes in seconds, a backend push runs the
+# Rust and Postgres lanes. The diff is taken against the merge-base with main,
+# so what gets validated is exactly the PR's diff.
+#
+# A LOCAL-ONLY ABORT PUBLISHES NOTHING
+# ------------------------------------
+# `ci_local.py` exits with status 1 for a whole family of reasons that are about
+# this machine and not about the code: Docker not running, a Postgres container
+# that never came up, no bash >= 4, a missing toolchain, another worktree
+# already holding the run lock, a mistyped job name. Status 1 is also exactly
+# what a genuinely failing test suite returns, so the exit code alone cannot
+# tell the two apart — and now that this hook publishes failures as well as
+# successes, guessing wrong stamps a red `local-ci` onto a commit whose code was
+# never run. That red outlives the terminal it came from; the reviewer who sees
+# it has no way to know it was Docker.
+#
+# So the hook does not guess. It hands `ci_local.py` a marker path, and that
+# script creates the file at the instant it starts executing jobs and never one
+# line earlier (see RAN_MARKER_ENV there). No marker, no verdict: the hook
+# explains itself on this terminal, where it is actionable, and leaves the PR
+# unannotated. Absence is the safe default, so a future early exit nobody
+# thought about is covered too.
+#
+# The run lock also gets a fast pre-check below, purely so a collision costs a
+# second rather than Python's startup. That check is racy by nature — the lock
+# can be claimed between the test and `ci_local.py`'s own atomic acquire — and
+# it is fine that it is, because losing the race now costs a wasted second
+# instead of a false red. It deliberately does not offer `ci_local.py --force`
+# as the way out: that flag overrides the lock and would corrupt the run
+# already in progress.
+#
+# ESCAPE HATCHES
+#   git push --no-verify        skip the hook entirely (git's own mechanism)
+#   SKIP_LOCAL_CI=1 git push    same, but explicit about what is being skipped
+#
+# Installed via scripts/install_git_hooks.sh, which sets core.hooksPath.
+
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+RUNNER="$ROOT/scripts/ci_local.py"
+LOCK="$HOME/.cache/coralswarm-ci-local.lock"
+ZERO="0000000000000000000000000000000000000000"
+
+if [ "${SKIP_LOCAL_CI:-}" = "1" ]; then
+  echo "pre-push: SKIP_LOCAL_CI=1 — skipping local CI." >&2
+  exit 0
+fi
+[ -x "$RUNNER" ] || [ -f "$RUNNER" ] || exit 0   # runner not on this branch yet
+
+# git feeds us one line per ref being pushed:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# Collect the shas worth validating. A local sha of all-zeros is a deletion,
+# and tags carry no branch diff to filter on.
+shas=()
+while read -r local_ref local_sha remote_ref _remote_sha; do
+  [ -z "${local_sha:-}" ] && continue
+  [ "$local_sha" = "$ZERO" ] && continue          # branch/tag deletion
+  case "$remote_ref$local_ref" in *refs/tags/*) continue ;; esac
+  shas+=("$local_sha")
+done
+
+# No stdin (e.g. `git push` with nothing to do) means nothing to validate.
+[ ${#shas[@]} -eq 0 ] && exit 0
+
+# Another run holding the lock is a scheduling fact, not a verdict on this push.
+# Mirror `RunLock.acquire`'s own staleness rule — a lock whose pid is gone is
+# stale and ci_local.py would clear it itself, so only a LIVE pid means skip.
+#
+# A FAST PATH, NOT THE GUARD. Nothing here is atomic with `RunLock.acquire`, so
+# the lock can be taken in the gap and `ci_local.py` will abort a moment later.
+# The marker below is what makes that outcome harmless; this block only saves
+# the interpreter startup in the common case.
+if [ -f "$LOCK" ]; then
+  lock_pid="$(head -n 1 "$LOCK" 2>/dev/null || true)"
+  lock_when="$(sed -n '2p' "$LOCK" 2>/dev/null || true)"
+  if [ -n "${lock_pid:-}" ] && kill -0 "$lock_pid" 2>/dev/null; then
+    echo ""
+    echo "pre-push: another local CI run is live (pid $lock_pid, started ${lock_when:-unknown}) — skipping."
+    echo "          Concurrent runs share the Postgres containers. GitHub's CI gate still runs on the PR."
+    echo ""
+    exit 0
+  fi
+fi
+
+echo ""
+echo "pre-push: running local CI as a pre-flight (advisory — it cannot block this push)"
+echo "          skip with: git push --no-verify"
+echo ""
+
+# Where ci_local.py will announce that it got as far as executing jobs. Only
+# whether it is non-empty matters; the contents (the job list) are there for a
+# human reading it during a postmortem. If mktemp itself fails we pass an empty
+# path, which ci_local.py ignores — so the hook falls back to publishing
+# nothing, never to guessing.
+MARKER=""
+if MARKER="$(mktemp "${TMPDIR:-/tmp}/coralswarm-ci-local-ran.XXXXXX" 2>/dev/null)"; then
+  trap 'rm -f "$MARKER"' EXIT
+else
+  MARKER=""
+fi
+
+# A worktree branched before the marker landed carries an older ci_local.py that
+# never writes it, and no verdict can be published from there. Silence is the
+# right way to be wrong, but a check that simply stops appearing looks like a
+# broken hook — so detect it and name the reason instead.
+runner_reports=1
+grep -Fq "CI_LOCAL_RAN_MARKER" "$RUNNER" 2>/dev/null || runner_reports=0
+
+CI_LOCAL_RAN_MARKER="$MARKER" python3 "$RUNNER" --base main
+rc=$?
+
+# THE QUESTION THAT DECIDES WHETHER THERE IS A VERDICT TO PUBLISH AT ALL:
+# did any job actually run? Not "what was the exit code".
+ran=0
+if [ -n "$MARKER" ] && [ -s "$MARKER" ]; then
+  ran=1
+fi
+
+if [ "$ran" -eq 0 ]; then
+  echo "" >&2
+  if [ "$runner_reports" -eq 0 ]; then
+    echo "pre-push: this worktree's scripts/ci_local.py predates the run marker, so" >&2
+    echo "          no local-ci status can be posted from it (it exited $rc). Rebase" >&2
+    echo "          on main to get the check back." >&2
+  elif [ $rc -eq 0 ]; then
+    echo "pre-push: local CI selected no job for this diff — nothing to report." >&2
+  else
+    echo "pre-push: local CI never started a job (exit $rc) — see its message above." >&2
+    echo "          Nothing was tested, so no local-ci status is posted: a red here" >&2
+    echo "          would blame the code for something wrong with this machine." >&2
+  fi
+  echo "          GitHub's CI gate still runs on the PR." >&2
+  echo "" >&2
+  exit 0
+fi
+
+# Publish the verdict to GitHub so the PR shows a check.
+#
+# POSTED ASYNCHRONOUSLY, AFTER THE PUSH — not here and now. A pre-push hook runs
+# BEFORE the objects reach GitHub, so the commit does not exist there yet and the
+# statuses API rejects it outright:
+#   422 No commit found for SHA: c368abc8...
+# That is why the first version of this hook always printed "could not post
+# commit status". So we detach a small waiter that polls for the commit to
+# appear (the push is happening concurrently) and posts once it does.
+#
+# BOTH outcomes are published now. While a failure aborted the push there was
+# never a commit on GitHub to annotate, so only success was worth posting; now
+# that the push always proceeds, a red `local-ci` is exactly the signal a
+# reviewer wants. It is informational either way — the ruleset requires only
+# `CI gate`, so this context can never gate a merge on its own.
+#
+# Reached only when the marker above says jobs really ran, so `rc` here is a
+# verdict on the code and nothing else.
+#
+# Nothing here can affect the push decision — a missing `gh`, an expired token,
+# or an offline laptop is not a reason to hold up code.
+if command -v gh >/dev/null 2>&1; then
+  if [ $rc -eq 0 ]; then
+    st="success"; desc="local CI passed on $(hostname -s)"
+  else
+    st="failure"; desc="local CI failed on $(hostname -s) — see the pushing terminal"
+  fi
+  for sha in "${shas[@]}"; do
+    (
+      for _ in $(seq 1 30); do
+        if gh api "repos/{owner}/{repo}/commits/$sha" --jq .sha >/dev/null 2>&1; then
+          gh api -X POST "repos/{owner}/{repo}/statuses/$sha" \
+            -f state="$st" \
+            -f context="local-ci" \
+            -f description="$desc" >/dev/null 2>&1
+          exit 0
+        fi
+        sleep 2
+      done
+    ) >/dev/null 2>&1 &
+  done
+  echo "pre-push: local-ci status ($st) will post once the push lands"
+fi
+
+if [ $rc -ne 0 ]; then
+  echo "" >&2
+  echo "pre-push: LOCAL CI FAILED — pushing anyway (this hook is advisory)." >&2
+  echo "  GitHub's CI gate is the gate. Do not merge until it is green." >&2
+  echo "  Re-run just this locally with: python3 scripts/ci_local.py --base main" >&2
+  echo "" >&2
+  exit 0
+fi
+
+echo ""
+echo "pre-push: local CI passed — pushing."
+exit 0

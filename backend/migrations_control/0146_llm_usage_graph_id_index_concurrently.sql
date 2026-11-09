@@ -1,0 +1,72 @@
+-- no-transaction
+-- Migration: 0146_llm_usage_graph_id_index_concurrently
+-- Description: PR7 of the usage-metering + credit-ledger train (13-PR plan,
+--   `.scratch/usage-metering/plan.md` §1 PR7) — build a plain index on
+--   `llm_usage(graph_id)` WITHOUT blocking writes on `llm_usage` while it
+--   builds.
+--
+--   `llm_usage` has no index on `graph_id` alone today. The three partial
+--   indexes PR2 added (`idx_llm_usage_source_job_id`,
+--   `idx_llm_usage_source_query_id`, and
+--   `idx_llm_usage_source_journal_period` on `(graph_id,
+--   source_journal_granularity, source_journal_period)`) each cover a
+--   specific `source_*` predicate, and the pre-existing
+--   `idx_llm_usage_account_created` leads on `account_id`, not `graph_id` —
+--   worker-generated rows carry `account_id NULL` (plan §1 PR9: "Tenant-plane
+--   rows carry `account_id NULL` for the worker-generated majority → resolve
+--   via `graphs.account_id`"), so that index cannot serve a graph-scoped
+--   lookup either. A plain `WHERE graph_id = $1` — or `WHERE graph_id IS
+--   NULL`, PR9's other stated need: "Rows with NULL `graph_id` are
+--   unattributable on the tenant plane — count and alert them, don't
+--   silently drop" — is a full sequential scan today.
+--
+--   Deliberately NOT partial: unlike PR2's three `source_*` indexes (each
+--   scoped to the minority of rows carrying that specific join key), a
+--   graph-scoped lookup or a NULL-graph alert query needs to see every row
+--   regardless of which `source_*` axis it was attributed through, and a
+--   plain btree index still serves an `IS NULL` predicate efficiently
+--   (nulls sort together, by default at the end of the index) — there is no
+--   selective subset of `llm_usage` this index could exclude without also
+--   excluding rows PR9 needs to find through it.
+--
+--   `llm_usage` is a live, high-write production table (every background LLM
+--   call and every synthesis prose call eventually writes here — same
+--   rationale 0141's header already gives) — a plain `CREATE INDEX` still
+--   takes a blocking `SHARE` lock for the whole build regardless of the
+--   resulting index's selectivity, so `CREATE INDEX CONCURRENTLY` is used
+--   here for the same reason as every other index this PR adds. Same
+--   `-- no-transaction` / single-statement-file mechanics as 0059 (see that
+--   migration's header for the full explanation) and this PR's own
+--   `0145`/`0147`.
+--
+--   EXPLAIN evidence (seeded local Postgres 17.10, 1,000,000 `llm_usage`
+--   rows across 5,000 distinct `graph_id` values, ~20,000 rows with
+--   `graph_id IS NULL`, enough that the planner genuinely prefers a
+--   sequential scan without this index):
+--     BEFORE: `Parallel Seq Scan on llm_usage` under a `Gather`, ~32ms,
+--       reads ~333,268 rows the filter then discards to find the ~196 rows
+--       for one graph.
+--     AFTER:  `Bitmap Heap Scan` + `Bitmap Index Scan using
+--       idx_llm_usage_graph_id`, ~1.2ms.
+--     NEGATIVE CONTROL: dropping the index reverted the plan to the same
+--       parallel sequential scan (~27ms) — confirmed before restoring.
+--   Full plans pasted in this PR's description.
+--
+--   `IF NOT EXISTS` + `CONCURRENTLY`: a failed concurrent build leaves an
+--   INVALID index behind, and `IF NOT EXISTS` will then happily skip it
+--   forever. If this migration errors, drop `idx_llm_usage_graph_id` before
+--   re-running rather than reading the skip as success — same operational
+--   caveat as `0145`/`0147`/`0142`/`0143`/`0144`.
+--
+-- PAIRED WITH: backend/migrations_tenant/0053_llm_usage_graph_id_index_concurrently.sql
+--   — `llm_usage` is a SHARED table, present in both trees and NOT in
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster, so the DDL
+--   statement below (below this header) must stay byte-for-byte identical to
+--   that file's. Only this header's prose is control-tree-specific.
+--
+-- Depends on: 0044_llm_usage.sql (creates `llm_usage`, including `graph_id`).
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_llm_usage_graph_id;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_llm_usage_graph_id
+    ON llm_usage (graph_id);

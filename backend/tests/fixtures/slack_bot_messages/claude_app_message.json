@@ -1,0 +1,54 @@
+{
+  "user": "U0TESTCLA0",
+  "type": "message",
+  "ts": "1788403960.677609",
+  "bot_id": "B0TESTCLA0",
+  "app_id": "A0TESTCLA0",
+  "text": "Hello! I'm Claude, an AI assistant created by Anthropic.",
+  "team": "T0TESTWS0",
+  "bot_profile": {
+    "id": "B0TESTCLA0",
+    "deleted": false,
+    "name": "Claude",
+    "updated": 1788403926,
+    "app_id": "A0TESTCLA0",
+    "user_id": "U0TESTCLA0",
+    "icons": {
+      "image_36": "https://example.com/icons/claude_36.png",
+      "image_48": "https://example.com/icons/claude_48.png",
+      "image_72": "https://example.com/icons/claude_72.png"
+    },
+    "team_id": "T0TESTWS0"
+  },
+  "blocks": [
+    {
+      "type": "section",
+      "block_id": "FhfDs",
+      "text": {
+        "type": "mrkdwn",
+        "text": ":wave: *Hello! I'm Claude, an AI assistant created by Anthropic.*\n\nI'm here to help with your questions and tasks. Just mention me using @Claude to get started!",
+        "verbatim": false
+      }
+    },
+    {
+      "type": "section",
+      "block_id": "15CFd",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*How I collect and process context:*\n• When you mention me in a thread, I automatically read recent messages in that thread to understand the conversation context\n• I can access and analyze files shared in the conversation when you mention me\n• I only process messages in threads where I'm explicitly mentioned\n• Your conversations are private and only accessible to you through your connected account\n• I do not retain or train on your Slack conversations",
+        "verbatim": false
+      }
+    },
+    {
+      "type": "context",
+      "block_id": "sTxIn",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": ":bulb: To work with me here, each person connects their own account once. <https://example.com/app_redirect?team=T0TESTWS0&amp;app=A0TESTCLA0&amp;tab=home|Open Claude's Home tab> to connect yours.",
+          "verbatim": false
+        }
+      ]
+    }
+  ]
+}

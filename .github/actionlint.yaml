@@ -1,0 +1,4 @@
+self-hosted-runner:
+  # GitHub-hosted larger runner configured for this organization.
+  labels:
+    - ubuntu-4core-16gb

@@ -1,0 +1,64 @@
+/* Colour. Source of truth: web/app/globals.css + web/tailwind.config.ts.
+   The 2026-07 redesign flipped the canvas from warm cream to cool neutral by
+   rewriting these VALUES in place; the coral brand, the five hues, ok and warn
+   were left unchanged. */
+:root {
+  /* ---- neutral surfaces ---- */
+  --bg: #ffffff;          /* content surface */
+  --bg-2: #f5f6f8;        /* app canvas / sidebar inset */
+  --bg-3: #ebecef;        /* document backdrop behind frames */
+  --bg-hover: #edeef1;    /* row hover, pressed field */
+  --bg-subtle: #fcfcfd;   /* quiet cards, alternating rows */
+  --bg-subtle-2: #fafbfc;
+
+  /* ---- ink ---- */
+  --ink: #14161a;         /* primary text, and the PRIMARY BUTTON fill */
+  --ink-2: #4b5058;       /* secondary text */
+  --ink-3: #8a9099;       /* meta, eyebrows, placeholders */
+  --ink-4: #a6abb3;       /* faintest text, disabled glyphs */
+
+  /* ---- lines: standard, internal divider, faintest in-card rule ---- */
+  --line: #e4e6ea;
+  --line-2: #edeef1;
+  --line-3: #f2f3f5;
+
+  /* ---- brand ---- */
+  --brand: #f77764;       /* coral — accent, never the default button */
+  --brand-2: #d14a38;     /* darker coral: text on wash, hover fill */
+  --brand-soft: #ffe1d9;  /* light coral wash: chips, citations, avatars */
+  --brand-3: #ffe1d9;     /* legacy alias of brand-soft (~15 call sites) */
+  --accent: #2a9d8f;
+
+  /* ---- the five hues. They colour KINDS OF KNOWLEDGE, not moods ----
+     coral = decisions / the brand · pink = entities, people ·
+     amber = sources, extraction candidates · teal = meetings, ingested content ·
+     plum = systems (MCP, references), archive */
+  --hue-coral: #f77764;
+  --hue-pink: #eb7290;
+  --hue-amber: #f4b860;
+  --hue-teal: #2a9d8f;
+  --hue-plum: #7c5295;
+
+  /* ---- semantic ---- */
+  --ok: #3f8a5b;
+  --warn: #d89a3a;
+  --bad: #c24a3a;         /* destructive lives here, NOT on brand-3 */
+
+  /* ---- semantic aliases (design-system additions; same values) ---- */
+  --text-body: var(--ink);
+  --text-muted: var(--ink-2);
+  --text-meta: var(--ink-3);
+  --text-faint: var(--ink-4);
+  --text-onbrand: #ffffff;
+  --surface-page: var(--bg-2);
+  --surface-card: var(--bg);
+  --surface-quiet: var(--bg-subtle);
+  --surface-inset: var(--bg-2);
+  --border-default: var(--line);
+  --border-divider: var(--line-2);
+  --border-hairline: var(--line-3);
+  --focus-ring: color-mix(in srgb, var(--brand) 22%, transparent);
+  --overlay-scrim: rgba(20, 22, 26, 0.28);
+  --overlay-panel: color-mix(in srgb, var(--ink) 88%, transparent);
+  --overlay-ink: #f4eee6;
+}

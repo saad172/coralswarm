@@ -1,0 +1,384 @@
+/* =========================================================
+   CoralSwarm — marketing home (v4a "safe cut")
+   Design tokens from the CoralSwarm design system's token layer.
+   The 2026-07 redesign flipped the canvas from warm cream to cool
+   neutral by rewriting these VALUES in place; the coral brand, the
+   five hues, ok and warn are unchanged from the old system.
+
+   Fonts are NOT imported here — next/font/google loads Instrument
+   Serif, Geist and JetBrains Mono in app/layout.tsx and exposes them
+   as --font-display / --font-sans / --font-mono, which the type
+   tokens below build on. That keeps every face self-hosted inside
+   the static export: no runtime request to fonts.googleapis.com.
+   ========================================================= */
+
+:root {
+  /* ---- neutral surfaces ---- */
+  --bg: #ffffff;          /* content surface */
+  --bg-2: #f5f6f8;        /* app canvas / sidebar inset */
+  --bg-3: #ebecef;        /* document backdrop behind frames */
+  --bg-hover: #edeef1;    /* row hover, pressed field */
+  --bg-subtle: #fcfcfd;   /* quiet cards, alternating rows */
+  --bg-subtle-2: #fafbfc;
+
+  /* ---- ink ---- */
+  --ink: #14161a;         /* primary text, and the PRIMARY BUTTON fill */
+  --ink-2: #4b5058;       /* secondary text */
+  --ink-3: #8a9099;       /* meta, eyebrows, placeholders */
+  --ink-4: #a6abb3;       /* faintest text, timecodes */
+
+  /* ---- lines: standard, internal divider, faintest in-card rule ---- */
+  --line: #e4e6ea;
+  --line-2: #edeef1;
+  --line-3: #f2f3f5;
+
+  /* ---- brand ---- */
+  --brand: #f77764;       /* coral — accent, never the default button */
+  --brand-2: #d14a38;     /* darker coral: text on wash, hover fill */
+  --brand-soft: #ffe1d9;  /* light coral wash: chips, citations, ribbons */
+  --brand-3: #ffe1d9;
+  --accent: #2a9d8f;
+
+  /* ---- the five hues. They colour KINDS OF KNOWLEDGE, not moods ----
+     coral = decisions / the brand · pink = entities, people ·
+     amber = sources, extraction candidates · teal = meetings, ingested
+     content · plum = systems (MCP, references), archive */
+  --hue-coral: #f77764;
+  --hue-pink: #eb7290;
+  --hue-amber: #f4b860;
+  --hue-teal: #2a9d8f;
+  --hue-plum: #7c5295;
+
+  /* ---- semantic ---- */
+  --ok: #3f8a5b;
+  --warn: #d89a3a;
+  --bad: #c24a3a;
+
+  --overlay-ink: #f4eee6;
+  --overlay-scrim: rgba(20, 22, 26, 0.28);
+  --focus-ring: color-mix(in srgb, var(--brand) 22%, transparent);
+
+  /* ---- type ---- */
+  --display: var(--font-display), Georgia, serif;
+  --sans: var(--font-sans), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono: var(--font-mono), ui-monospace, monospace;
+
+  --type-body: 400 13px/1.55 var(--sans);
+  --type-ui: 400 12.5px/1.5 var(--sans);
+  --type-fine: 400 11.5px/1.5 var(--sans);
+
+  --type-eyebrow: 400 9.5px/1.2 var(--mono);
+  --type-mono-meta: 400 10px/1.3 var(--mono);
+  --type-mono-chip: 400 10.5px/1.3 var(--mono);
+
+  --tracking-eyebrow: 0.13em;
+  --tracking-title: -0.01em;
+  --tracking-wordmark: -0.045em;
+
+  --font-feature-ui: "ss01", "cv11";
+
+  /* ---- radius, named for what it wraps. Tops out at 14px. ---- */
+  --r-badge: 6px;
+  --r-row: 8px;
+  --r-field: 9px;
+  --r-control: 10px;
+  --r-card: 12px;
+  --r-frame: 14px;
+  --r-full: 999px;
+
+  /* ---- shadow: 1px borders separate, shadow only lifts ---- */
+  --shadow-row: 0 1px 2px rgba(20, 22, 26, 0.06);
+  --shadow-card: 0 1px 2px rgba(20, 22, 26, 0.05);
+  --shadow-pop: 0 12px 28px -12px rgba(20, 22, 26, 0.16);
+  --shadow-frame: 0 28px 56px -20px rgba(20, 22, 26, 0.22);
+  --shadow-overlay: 0 22px 54px -16px rgba(0, 0, 0, 0.5);
+
+  /* ---- motion: a 0.15s colour/border transition is the house default ---- */
+  --dur-fast: 0.15s;
+  --ease: ease;
+  --transition-control:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+/* ---------- base ---------- */
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+/* Never let a stray wide child pan the whole page sideways.
+   `clip`, NOT `hidden`: `overflow-x: hidden` forces the other axis to
+   compute as `auto`, which turns <html> into a scroll container and
+   silently breaks `position: sticky` on every descendant — including
+   the sticky site header. `overflow: clip` prevents the sideways pan
+   without creating a scroll container. */
+html, body { overflow-x: clip; }
+
+/* Anchor navigation goes through an explicit handler that subtracts
+   the 58px sticky header (components/motion.ts). This covers the other
+   route in: a keyboard user tabbing into a section. */
+html { scroll-padding-top: 58px; }
+
+body {
+  background: var(--bg-2);
+  color: var(--ink);
+  font: var(--type-body);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: var(--font-feature-ui);
+}
+
+a { color: inherit; text-decoration: none; }
+
+::selection { background: var(--brand); color: var(--bg); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+
+img { max-width: 100%; }
+
+button { font-family: inherit; }
+
+/* ---------- keyframes ----------
+   The whole motion budget of the page. Nothing else moves. */
+
+@keyframes cs-caret { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }
+@keyframes cs-orbit { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+@keyframes cs-orbit-rev { from { transform: rotate(0) } to { transform: rotate(-360deg) } }
+
+.cs-orbit-mandala { animation: cs-orbit 90s linear infinite; display: flex; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-orbit-mandala { animation: none !important; }
+}
+
+/* ---------- layout primitives ----------
+   Band padding lives here rather than inline so the breakpoint at the
+   bottom can retune the vertical rhythm without touching a component. */
+
+.cs-band,
+.cs-band-dark { max-width: 1080px; margin: 0 auto; }
+.cs-band      { padding: 88px 28px; }
+.cs-band-dark { padding: 80px 28px; }
+
+.cs-rail { max-width: 1160px; margin: 0 auto; }
+
+/* Every grid on this page is auto-fit, so all of them collapse to one
+   column on their own — v4 needs no grid breakpoints at all. */
+.cs-grid-auto-290 { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; align-items: stretch; }
+.cs-grid-auto-258 { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 14px; align-items: stretch; }
+.cs-grid-auto-340 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 48px; align-items: center; }
+.cs-grid-auto-320 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 44px; align-items: start; }
+
+/* ---------- text marks ---------- */
+
+.cs-eyebrow {
+  font: var(--type-eyebrow);
+  font-family: var(--mono);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cs-eyebrow-dark { color: rgba(244, 238, 230, 0.5); }
+
+/* ---------- controls ----------
+   The prototype expressed these as style-hover / style-focus
+   attributes; they are real CSS state rules here. */
+
+.cs-btn-solid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: #fff;
+  transition: var(--transition-control);
+  cursor: pointer;
+}
+.cs-btn-solid:hover { background: var(--ink-2); border-color: var(--ink-2); color: #fff; }
+
+.cs-btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-2);
+  transition: var(--transition-control);
+  cursor: pointer;
+}
+.cs-btn-quiet:hover { border-color: var(--ink-3); color: var(--ink); }
+
+/* Pricing's quiet CTA fills on hover rather than darkening its border. */
+.cs-btn-quiet-fill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-2);
+  transition: var(--transition-control);
+  cursor: pointer;
+}
+.cs-btn-quiet-fill:hover { background: var(--bg-hover); color: var(--ink); }
+
+.cs-btn-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  color: var(--ink-2);
+  transition: var(--transition-control);
+}
+.cs-btn-ghost:hover { background: var(--bg-hover); color: var(--ink); }
+
+.cs-navlink { color: var(--ink-2); transition: var(--transition-control); }
+.cs-navlink:hover { color: var(--ink); }
+
+/* The nav link row. `display` lives here, NOT inline on the element —
+   an inline style would outrank the `display: none` the breakpoint
+   applies, and the row would survive on mobile. */
+.cs-nav-links {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  font: 500 13px/1 var(--sans);
+}
+
+.cs-footlink { color: var(--ink-3); transition: var(--transition-control); }
+.cs-footlink:hover { color: var(--ink); }
+
+/* Mobile nav — hamburger trigger + drawer links. Hidden above 860px
+   (see the breakpoint below); .cs-nav-links / .cs-nav-ghost take over
+   there instead. */
+.cs-nav-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-row);
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+.cs-nav-burger:hover { border-color: var(--ink-3); background: var(--bg-hover); }
+
+.cs-drawer-link {
+  display: block;
+  padding: 14px 2px;
+  border-top: 1px solid var(--line-3);
+  font: 500 16px/1.3 var(--sans);
+  color: var(--ink);
+  transition: var(--transition-control);
+}
+.cs-drawer-link:first-child { border-top: none; }
+.cs-drawer-link:hover { color: var(--brand-2); }
+
+.cs-field {
+  border: 1px solid var(--line);
+  border-radius: var(--r-field);
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 13.5px/1.4 var(--sans);
+  padding: 9px 11px;
+  transition: var(--transition-control);
+  width: 100%;
+}
+.cs-field::placeholder { color: var(--ink-3); }
+.cs-field:focus {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent);
+}
+
+/* Keyboard focus on anything else: a solid, high-contrast outline —
+   the box-shadow ring above reads clearly on the field's border, but at
+   only 20% opacity it was too faint on links and buttons. */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--brand-2);
+  outline-offset: 2px;
+  border-radius: var(--r-row);
+}
+
+/* ---------- FAQ ----------
+   <details>/<summary> gets its native marker suppressed (both the
+   modern `list-style` route and Safari's older `::-webkit-details-
+   marker` pseudo, which only a real stylesheet rule — not an inline
+   style — can reach) and replaced with a plus/cross built the same
+   way SiteNav's BurgerIcon is: two CSS-transform bars, no new asset. */
+
+.cs-faq-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 2px;
+  cursor: pointer;
+  list-style: none;
+}
+.cs-faq-summary::-webkit-details-marker { display: none; }
+.cs-faq-summary::marker { content: ""; }
+
+.cs-faq-caret {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  transition: transform var(--dur-fast) var(--ease);
+}
+.cs-faq-caret span {
+  position: absolute;
+  background: var(--ink-3);
+  transition: var(--transition-control);
+}
+.cs-faq-caret span:first-child { top: 50%; left: 0; right: 0; height: 1.5px; transform: translateY(-50%); }
+.cs-faq-caret span:last-child { left: 50%; top: 0; bottom: 0; width: 1.5px; transform: translateX(-50%); }
+
+.cs-faq-item[open] .cs-faq-caret { transform: rotate(45deg); }
+
+/* Inline `style` wins over a class selector regardless of :hover, so
+   the question's colour lives here rather than as an inline style on
+   the <h3> — the one deliberate exception to this file's usual
+   "structure/interaction in CSS, values inline" split. */
+.cs-faq-summary h3 { color: var(--ink); transition: color var(--dur-fast) var(--ease); }
+.cs-faq-item:hover .cs-faq-summary h3 { color: var(--brand-2); }
+
+/* ---------- responsive ----------
+   v4 needs far less than v3 did: every grid is auto-fit and the hero
+   is a single normal-flow block, so the only things that cannot
+   reflow on their own are the nav row and the vertical rhythm. */
+
+@media (max-width: 860px) {
+  .cs-band      { padding: 64px 28px; }
+  .cs-band-dark { padding: 60px 28px; }
+
+  .cs-nav-links,
+  .cs-nav-ghost { display: none; }
+
+  .cs-nav-burger { display: flex; }
+}
+
+@media (max-width: 480px) {
+  .cs-band,
+  .cs-band-dark,
+  .cs-rail-inner { padding-left: 20px; padding-right: 20px; }
+}
+
+/* Reduced motion: reveals resolve instantly and nothing translates.
+   The hero and the reef canvas handle their own reduced-motion paths
+   in JS (one final frame, no typing). */
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}

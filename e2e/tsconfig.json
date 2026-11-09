@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "types": ["node"]
+  },
+  "include": ["playwright.config.ts", "playwright.page-load-speed.config.ts", "playwright.page-load-clock.config.ts", "playwright.page-load-ops.config.ts", "playwright.stored-refresh-app.config.ts", "playwright.fresh-navigation-app.config.ts", "fresh-navigation-app/**/*.ts", "stored-refresh-app/**/*.ts", "perf/**/*.ts", "perf/**/*.mts", "playwright.n1.config.ts", "n1/**/*.ts", "lib/**/*.ts", "tests/**/*.ts", "stack/**/*.mjs", "stack/**/*.d.mts"]
+}

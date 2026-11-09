@@ -1,0 +1,1330 @@
+{
+ "_comment": "Mock Composio responses for the reviewed toolkits, shaped by each tool's cached Composio output schema (outputs/composio-catalog/toolkits/<slug>.json). A registered toolkit is read from recipes/<slug>.json; the rest are drafts in docs/connectors/composio-toolkit-review/<draft>.json. Routes answer the first response whose `when` pointers equal the request arguments (null = absent). `items` are the source ids one pass must produce; `error` is the contract failure a pass must stop on; `namespace_error` is a namespace that must fail, with `poll_namespace` used for the pass; `plain_text` means no item content may contain markup.",
+ "scenarios": {
+  "zendesk": {
+   "draft": "zendesk",
+   "watermark": "2026-10-12T00:00:00Z",
+   "now": "2026-10-14T00:00:00Z",
+   "_inferred": "connected_account.params.base_url is the field measured on real v3.1 connected accounts (Linear evidence); that Composio sets it to the Zendesk subdomain host is inferred. Everything under routes follows the 20260916_00 output schemas.",
+   "connected_account": {
+    "id": "ca_fixture",
+    "toolkit": {
+     "slug": "zendesk"
+    },
+    "status": "ACTIVE",
+    "auth_config": {
+     "id": "ac_fixture",
+     "auth_scheme": "OAUTH2",
+     "is_composio_managed": true
+    },
+    "data": {
+     "access_token": "[fixture]",
+     "token_type": "bearer",
+     "scope": "read",
+     "base_url": "https://acme.zendesk.com"
+    },
+    "params": {
+     "access_token": "[fixture]",
+     "token_type": "bearer",
+     "scope": "read",
+     "base_url": "https://acme.zendesk.com"
+    },
+    "requested_scopes": [
+     "read"
+    ]
+   },
+   "namespace": "zendesk:host:acme.zendesk.com",
+   "routes": {
+    "ZENDESK_GET_SEARCH_EXPORT": [
+     {
+      "when": {
+       "/page_after": null,
+       "/filter_type": "ticket"
+      },
+      "data": {
+       "results": [
+        {
+         "id": 35436,
+         "url": "https://acme.zendesk.com/api/v2/tickets/35436.json",
+         "result_type": "ticket",
+         "type": "incident",
+         "subject": "Ticket 35436",
+         "description": "Printer offline on floor 3",
+         "status": "open",
+         "priority": "normal",
+         "tags": [
+          "printer"
+         ],
+         "requester_id": 366000000101,
+         "assignee_id": 366000000202,
+         "group_id": 360000000303,
+         "organization_id": null,
+         "external_id": null,
+         "deleted": false,
+         "created_at": "2026-10-10T08:00:00Z",
+         "updated_at": "2026-10-13T08:00:00Z"
+        },
+        {
+         "id": 35437,
+         "url": "https://acme.zendesk.com/api/v2/tickets/35437.json",
+         "result_type": "ticket",
+         "type": "incident",
+         "subject": "Ticket 35437",
+         "description": "Printer offline on floor 3",
+         "status": "open",
+         "priority": "normal",
+         "tags": [
+          "printer"
+         ],
+         "requester_id": 366000000101,
+         "assignee_id": 366000000202,
+         "group_id": 360000000303,
+         "organization_id": null,
+         "external_id": null,
+         "deleted": false,
+         "created_at": "2026-10-10T08:00:00Z",
+         "updated_at": "2026-10-13T08:30:00Z"
+        }
+       ],
+       "facets": null,
+       "meta": {
+        "has_more": true,
+        "after_cursor": "xNjU0MzZ8",
+        "before_cursor": null
+       },
+       "links": {
+        "next": "https://acme.zendesk.com/api/v2/search/export.json?page%5Bafter%5D=xNjU0MzZ8",
+        "prev": null
+       }
+      }
+     },
+     {
+      "when": {
+       "/page_after": "xNjU0MzZ8"
+      },
+      "data": {
+       "results": [
+        {
+         "id": 35438,
+         "url": "https://acme.zendesk.com/api/v2/tickets/35438.json",
+         "result_type": "ticket",
+         "type": "incident",
+         "subject": "Ticket 35438",
+         "description": "Printer offline on floor 3",
+         "status": "open",
+         "priority": "normal",
+         "tags": [
+          "printer"
+         ],
+         "requester_id": 366000000101,
+         "assignee_id": 366000000202,
+         "group_id": 360000000303,
+         "organization_id": null,
+         "external_id": null,
+         "deleted": false,
+         "created_at": "2026-10-10T08:00:00Z",
+         "updated_at": "2026-10-13T09:00:00Z"
+        }
+       ],
+       "facets": null,
+       "meta": {
+        "has_more": false,
+        "after_cursor": null,
+        "before_cursor": "xNjU0Mzd8"
+       },
+       "links": {
+        "next": null,
+        "prev": null
+       }
+      }
+     }
+    ],
+    "ZENDESK_GET_TICKETS_CONVERSATION_LOG": [
+     {
+      "when": {
+       "/ticket_id": "35436",
+       "/page_after": null
+      },
+      "data": {
+       "events": [
+        {
+         "id": "01JAZ8M6V3K2",
+         "type": "Comment",
+         "author": {
+          "type": "agent",
+          "avatar_url": null,
+          "display_name": "Ana Agent"
+         },
+         "content": {
+          "body": "<p>Power cycled it.</p>",
+          "type": "html"
+         },
+         "metadata": {
+          "public": true,
+          "ticket_version": 3,
+          "custom": {},
+          "system": {}
+         },
+         "reference": null,
+         "created_at": "2026-10-13T07:55:00Z",
+         "attachments": []
+        }
+       ],
+       "meta": {
+        "has_more": true,
+        "after_cursor": "ev2",
+        "before_cursor": null
+       },
+       "links": {}
+      }
+     },
+     {
+      "when": {
+       "/ticket_id": "35436",
+       "/page_after": "ev2"
+      },
+      "data": {
+       "events": [
+        {
+         "id": "01JAZ8M6V3K3",
+         "type": "Comment",
+         "author": {
+          "type": "agent",
+          "avatar_url": null,
+          "display_name": "Ana Agent"
+         },
+         "content": {
+          "body": "<p>Fixed.</p>",
+          "type": "html"
+         },
+         "metadata": {
+          "public": true,
+          "ticket_version": 3,
+          "custom": {},
+          "system": {}
+         },
+         "reference": null,
+         "created_at": "2026-10-13T08:00:00Z",
+         "attachments": []
+        }
+       ],
+       "meta": {
+        "has_more": false,
+        "after_cursor": null,
+        "before_cursor": "ev2"
+       },
+       "links": {}
+      }
+     },
+     {
+      "when": {},
+      "data": {
+       "events": [],
+       "meta": {
+        "has_more": false,
+        "after_cursor": null,
+        "before_cursor": null
+       },
+       "links": {}
+      }
+     }
+    ]
+   },
+   "items": [
+    "zendesk:host:acme.zendesk.com/ticket/35436",
+    "zendesk:host:acme.zendesk.com/comment/35436/01JAZ8M6V3K2",
+    "zendesk:host:acme.zendesk.com/comment/35436/01JAZ8M6V3K3",
+    "zendesk:host:acme.zendesk.com/ticket/35437",
+    "zendesk:host:acme.zendesk.com/ticket/35438"
+   ],
+   "self_check": "passed",
+   "plain_text": true
+  },
+  "dart": {
+   "draft": "dart",
+   "watermark": "2026-10-12T00:00:00Z",
+   "now": "2026-10-14T00:00:00Z",
+   "_note": "Comments are not captured (no time field, task-scoped list); the task stream pages by offset and total.",
+   "namespace": "dart:user:ana@example.com",
+   "routes": {
+    "DART_GET_CONFIG": [
+     {
+      "when": {},
+      "data": {
+       "today": "2026-10-14",
+       "user": {
+        "name": "Ana",
+        "email": "ana@example.com"
+       },
+       "assignees": [
+        {
+         "name": "Ana",
+         "email": "ana@example.com"
+        }
+       ],
+       "dartboards": [
+        "General/Active"
+       ],
+       "folders": [],
+       "types": [
+        "Task"
+       ],
+       "statuses": [
+        "To-do",
+        "In progress",
+        "Done"
+       ],
+       "tags": [],
+       "priorities": [
+        "High"
+       ],
+       "sizes": [],
+       "skills": [],
+       "customProperties": []
+      }
+     }
+    ],
+    "DART_LIST_TASKS": [
+     {
+      "when": {
+       "/offset": 0,
+       "/limit": 25
+      },
+      "data": {
+       "count": 3,
+       "next": "https://app.dartai.com/api/v0/public/tasks/list?limit=25&offset=2",
+       "previous": null,
+       "meta": {},
+       "results": [
+        {
+         "id": "aaaaaaaaaaa1",
+         "title": "Task aaaaaaaaaaa1",
+         "status": "In progress",
+         "type": "Task",
+         "priority": "High",
+         "assignee": null,
+         "assignees": [],
+         "tags": [],
+         "size": null,
+         "dartboard": "General/Active",
+         "htmlUrl": "https://app.dartai.com/t/aaaaaaaaaaa1",
+         "parentId": null,
+         "description": "Ship the onboarding flow",
+         "createdAt": "2026-10-10T08:00:00Z",
+         "createdBy": "Ana",
+         "updatedAt": "2026-10-13T08:00:00Z",
+         "updatedBy": "Ana",
+         "is_completed": false,
+         "customProperties": {}
+        },
+        {
+         "id": "aaaaaaaaaaa2",
+         "title": "Task aaaaaaaaaaa2",
+         "status": "In progress",
+         "type": "Task",
+         "priority": "High",
+         "assignee": null,
+         "assignees": [],
+         "tags": [],
+         "size": null,
+         "dartboard": "General/Active",
+         "htmlUrl": "https://app.dartai.com/t/aaaaaaaaaaa2",
+         "parentId": null,
+         "description": "Ship the onboarding flow",
+         "createdAt": "2026-10-10T08:00:00Z",
+         "createdBy": "Ana",
+         "updatedAt": "2026-10-13T08:30:00Z",
+         "updatedBy": "Ana",
+         "is_completed": false,
+         "customProperties": {}
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "/offset": 2
+      },
+      "data": {
+       "count": 3,
+       "next": null,
+       "previous": null,
+       "meta": {},
+       "results": [
+        {
+         "id": "aaaaaaaaaaa3",
+         "title": "Task aaaaaaaaaaa3",
+         "status": "In progress",
+         "type": "Task",
+         "priority": "High",
+         "assignee": null,
+         "assignees": [],
+         "tags": [],
+         "size": null,
+         "dartboard": "General/Active",
+         "htmlUrl": "https://app.dartai.com/t/aaaaaaaaaaa3",
+         "parentId": null,
+         "description": "Ship the onboarding flow",
+         "createdAt": "2026-10-10T08:00:00Z",
+         "createdBy": "Ana",
+         "updatedAt": "2026-10-13T09:00:00Z",
+         "updatedBy": "Ana",
+         "is_completed": false,
+         "customProperties": {}
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "items": [
+    "dart:user:ana@example.com/task/aaaaaaaaaaa1",
+    "dart:user:ana@example.com/task/aaaaaaaaaaa2",
+    "dart:user:ana@example.com/task/aaaaaaaaaaa3"
+   ],
+   "self_check": "passed"
+  },
+  "confluence": {
+   "draft": "confluence",
+   "watermark": "2026-10-12T00:00:00Z",
+   "now": "2026-10-14T00:00:00Z",
+   "_inferred": "content.history and content.container come back through the recipe's expand (Atlassian v1 docs); Composio's CQL output schema does not describe them.",
+   "namespace": "confluence:site:a436116f-02ce-4520-8fbb-7301462a1674",
+   "routes": {
+    "CONFLUENCE_CQL_SEARCH": [
+     {
+      "when": {
+       "/cql": "type = space"
+      },
+      "data": {
+       "results": [
+        {
+         "space": {
+          "id": 98306,
+          "key": "ENG",
+          "name": "Engineering"
+         },
+         "title": "Engineering",
+         "entityType": "space"
+        }
+       ],
+       "start": 0,
+       "limit": 1,
+       "size": 1,
+       "totalSize": 4,
+       "_links": {
+        "base": "https://acme.atlassian.net/wiki",
+        "context": "/wiki",
+        "self": "https://acme.atlassian.net/wiki/rest/api/search"
+       }
+      }
+     },
+     {
+      "when": {
+       "/expand": "content.body.storage,content.version,content.history,content.space",
+       "/start": 0,
+       "/limit": 25
+      },
+      "data": {
+       "results": [
+        {
+         "content": {
+          "id": "1001",
+          "type": "page",
+          "status": "current",
+          "title": "page 1001",
+          "space": {
+           "id": 98306,
+           "key": "ENG",
+           "name": "Engineering",
+           "type": "global",
+           "status": "current"
+          },
+          "body": {
+           "storage": {
+            "value": "<p>Decision: pilot first.</p>",
+            "representation": "storage"
+           }
+          },
+          "version": {
+           "when": "2026-10-13T08:00:00.000Z",
+           "number": 4,
+           "minorEdit": false
+          },
+          "history": {
+           "createdBy": {
+            "type": "known",
+            "accountId": "5b10a2844c20165700ede21g",
+            "displayName": "Ana"
+           }
+          },
+          "_links": {
+           "webui": "/spaces/ENG/pages/1001"
+          },
+          "_expandable": {}
+         },
+         "title": "page 1001",
+         "excerpt": "",
+         "url": "/spaces/ENG/pages/1001",
+         "entityType": "content",
+         "iconCssClass": "aui-icon content-type-page",
+         "lastModified": "2026-10-13T08:00:00.000Z",
+         "friendlyLastModified": "yesterday",
+         "score": 0.0,
+         "breadcrumbs": [],
+         "resultGlobalContainer": {
+          "title": "Engineering",
+          "displayUrl": "/spaces/ENG"
+         }
+        },
+        {
+         "content": {
+          "id": "1002",
+          "type": "blogpost",
+          "status": "current",
+          "title": "blogpost 1002",
+          "space": {
+           "id": 98306,
+           "key": "ENG",
+           "name": "Engineering",
+           "type": "global",
+           "status": "current"
+          },
+          "body": {
+           "storage": {
+            "value": "<p>Decision: pilot first.</p>",
+            "representation": "storage"
+           }
+          },
+          "version": {
+           "when": "2026-10-13T08:30:00.000Z",
+           "number": 4,
+           "minorEdit": false
+          },
+          "history": {
+           "createdBy": {
+            "type": "known",
+            "accountId": "5b10a2844c20165700ede21g",
+            "displayName": "Ana"
+           }
+          },
+          "_links": {
+           "webui": "/spaces/ENG/pages/1002"
+          },
+          "_expandable": {}
+         },
+         "title": "blogpost 1002",
+         "excerpt": "",
+         "url": "/spaces/ENG/pages/1002",
+         "entityType": "content",
+         "iconCssClass": "aui-icon content-type-page",
+         "lastModified": "2026-10-13T08:30:00.000Z",
+         "friendlyLastModified": "yesterday",
+         "score": 0.0,
+         "breadcrumbs": [],
+         "resultGlobalContainer": {
+          "title": "Engineering",
+          "displayUrl": "/spaces/ENG"
+         }
+        }
+       ],
+       "start": 0,
+       "limit": 25,
+       "size": 2,
+       "totalSize": 3,
+       "_links": {
+        "base": "https://acme.atlassian.net/wiki"
+       }
+      }
+     },
+     {
+      "when": {
+       "/expand": "content.body.storage,content.version,content.history,content.space",
+       "/start": 2
+      },
+      "data": {
+       "results": [
+        {
+         "content": {
+          "id": "1003",
+          "type": "page",
+          "status": "current",
+          "title": "page 1003",
+          "space": {
+           "id": 98306,
+           "key": "ENG",
+           "name": "Engineering",
+           "type": "global",
+           "status": "current"
+          },
+          "body": {
+           "storage": {
+            "value": "<p>Decision: pilot first.</p>",
+            "representation": "storage"
+           }
+          },
+          "version": {
+           "when": "2026-10-13T09:00:00.000Z",
+           "number": 4,
+           "minorEdit": false
+          },
+          "history": {
+           "createdBy": {
+            "type": "known",
+            "accountId": "5b10a2844c20165700ede21g",
+            "displayName": "Ana"
+           }
+          },
+          "_links": {
+           "webui": "/spaces/ENG/pages/1003"
+          },
+          "_expandable": {}
+         },
+         "title": "page 1003",
+         "excerpt": "",
+         "url": "/spaces/ENG/pages/1003",
+         "entityType": "content",
+         "iconCssClass": "aui-icon content-type-page",
+         "lastModified": "2026-10-13T09:00:00.000Z",
+         "friendlyLastModified": "yesterday",
+         "score": 0.0,
+         "breadcrumbs": [],
+         "resultGlobalContainer": {
+          "title": "Engineering",
+          "displayUrl": "/spaces/ENG"
+         }
+        }
+       ],
+       "start": 2,
+       "limit": 25,
+       "size": 1,
+       "totalSize": 3,
+       "_links": {
+        "base": "https://acme.atlassian.net/wiki"
+       }
+      }
+     },
+     {
+      "when": {
+       "/expand": "content.body.storage,content.version,content.history,content.container,content.space",
+       "/start": 0
+      },
+      "data": {
+       "results": [
+        {
+         "content": {
+          "id": "2001",
+          "type": "comment",
+          "status": "current",
+          "title": "comment 2001",
+          "space": {
+           "id": 98306,
+           "key": "ENG",
+           "name": "Engineering",
+           "type": "global",
+           "status": "current"
+          },
+          "body": {
+           "storage": {
+            "value": "<p>Decision: pilot first.</p>",
+            "representation": "storage"
+           }
+          },
+          "version": {
+           "when": "2026-10-13T08:45:00.000Z",
+           "number": 4,
+           "minorEdit": false
+          },
+          "history": {
+           "createdBy": {
+            "type": "known",
+            "accountId": "5b10a2844c20165700ede21g",
+            "displayName": "Ana"
+           }
+          },
+          "_links": {
+           "webui": "/spaces/ENG/pages/2001"
+          },
+          "_expandable": {},
+          "container": {
+           "id": "1001",
+           "type": "page",
+           "title": "page 1001"
+          }
+         },
+         "title": "comment 2001",
+         "excerpt": "",
+         "url": "/spaces/ENG/pages/2001",
+         "entityType": "content",
+         "iconCssClass": "aui-icon content-type-page",
+         "lastModified": "2026-10-13T08:45:00.000Z",
+         "friendlyLastModified": "yesterday",
+         "score": 0.0,
+         "breadcrumbs": [],
+         "resultGlobalContainer": {
+          "title": "Engineering",
+          "displayUrl": "/spaces/ENG"
+         }
+        }
+       ],
+       "start": 0,
+       "limit": 25,
+       "size": 1,
+       "totalSize": 1,
+       "_links": {
+        "base": "https://acme.atlassian.net/wiki"
+       }
+      }
+     }
+    ],
+    "CONFLUENCE_WHO_AM_I": [
+     {
+      "when": {},
+      "data": {
+       "data": {
+        "account_id": null,
+        "sites": [
+         {
+          "id": "0b6c2c0e-other-site",
+          "url": "https://other.atlassian.net",
+          "name": "other"
+         },
+         {
+          "id": "a436116f-02ce-4520-8fbb-7301462a1674",
+          "url": "https://acme.atlassian.net",
+          "name": "acme"
+         }
+        ]
+       },
+       "display_name": "ana@example.com"
+      }
+     }
+    ]
+   },
+   "items": [
+    "confluence:site:a436116f-02ce-4520-8fbb-7301462a1674/content/1001",
+    "confluence:site:a436116f-02ce-4520-8fbb-7301462a1674/content/1002",
+    "confluence:site:a436116f-02ce-4520-8fbb-7301462a1674/content/1003",
+    "confluence:site:a436116f-02ce-4520-8fbb-7301462a1674/comment/1001/2001"
+   ],
+   "self_check": "passed",
+   "_namespace": "_links.base carries /wiki; the match compares origins, so the site with the same origin wins over another site the grant can see.",
+   "plain_text": true
+  },
+  "hubspot": {
+   "draft": "hubspot",
+   "watermark": "2026-10-12T00:00:00Z",
+   "now": "2026-10-14T00:00:00Z",
+   "namespace": "hubspot:portal:62515",
+   "rendered": {
+    "stream": 0,
+    "since": "2026-10-11T23:55:00Z",
+    "pointer": "/filterGroups/0/filters/0/value",
+    "value": "1791762900000"
+   },
+   "routes": {
+    "HUBSPOT_GET_ACCOUNT_INFO": [
+     {
+      "when": {},
+      "data": {
+       "portalId": 62515,
+       "accountType": "STANDARD",
+       "timeZone": "US/Eastern",
+       "companyCurrency": "USD",
+       "additionalCurrencies": [],
+       "utcOffset": "-04:00",
+       "utcOffsetMilliseconds": -14400000,
+       "uiDomain": "app.hubspot.com",
+       "dataHostingLocation": "na1"
+      }
+     }
+    ],
+    "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA": [
+     {
+      "when": {
+       "/objectType": "companies",
+       "/after": null
+      },
+      "data": {
+       "total": 2,
+       "results": [
+        {
+         "id": "9001",
+         "properties": {
+          "hs_object_id": "9001",
+          "hs_lastmodifieddate": "2026-10-13T08:00:00.000Z",
+          "createdate": "2026-10-01T00:00:00.000Z",
+          "hubspot_owner_id": "77",
+          "name": "Acme",
+          "domain": "acme.com",
+          "description": "Pilot customer",
+          "lifecyclestage": "customer"
+         },
+         "createdAt": "2026-10-01T00:00:00.000Z",
+         "updatedAt": "2026-10-13T08:00:00.000Z",
+         "archived": false
+        }
+       ],
+       "paging": {
+        "next": {
+         "after": "1",
+         "link": "https://api.hubapi.com/crm/v3/objects/companies/search?after=1"
+        }
+       }
+      }
+     },
+     {
+      "when": {
+       "/objectType": "companies",
+       "/after": "1"
+      },
+      "data": {
+       "total": 2,
+       "results": [
+        {
+         "id": "9002",
+         "properties": {
+          "hs_object_id": "9002",
+          "hs_lastmodifieddate": "2026-10-13T08:30:00.000Z",
+          "createdate": "2026-10-01T00:00:00.000Z",
+          "hubspot_owner_id": "77",
+          "name": "Globex",
+          "domain": "globex.com",
+          "description": null,
+          "lifecyclestage": "lead"
+         },
+         "createdAt": "2026-10-01T00:00:00.000Z",
+         "updatedAt": "2026-10-13T08:30:00.000Z",
+         "archived": false
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "/objectType": "contacts"
+      },
+      "data": {
+       "total": 0,
+       "results": []
+      }
+     },
+     {
+      "when": {
+       "/objectType": "deals"
+      },
+      "data": {
+       "total": 1,
+       "results": [
+        {
+         "id": "5001",
+         "properties": {
+          "hs_object_id": "5001",
+          "hs_lastmodifieddate": "2026-10-13T09:00:00.000Z",
+          "createdate": "2026-10-01T00:00:00.000Z",
+          "hubspot_owner_id": "77",
+          "dealname": "Acme renewal",
+          "description": "Three-year term",
+          "dealstage": "appointmentscheduled",
+          "pipeline": "default",
+          "amount": "12000"
+         },
+         "createdAt": "2026-10-01T00:00:00.000Z",
+         "updatedAt": "2026-10-13T09:00:00.000Z",
+         "archived": false
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "/objectType": "notes"
+      },
+      "data": {
+       "total": 1,
+       "results": [
+        {
+         "id": "7001",
+         "properties": {
+          "hs_object_id": "7001",
+          "hs_lastmodifieddate": "2026-10-13T08:45:00.000Z",
+          "createdate": "2026-10-01T00:00:00.000Z",
+          "hubspot_owner_id": "77",
+          "hs_note_body": "<p>Decision: renew at list price.</p>",
+          "hs_timestamp": "2026-10-13T08:45:00.000Z"
+         },
+         "createdAt": "2026-10-01T00:00:00.000Z",
+         "updatedAt": "2026-10-13T08:45:00.000Z",
+         "archived": false
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "/objectType": "calls"
+      },
+      "data": {
+       "total": 0,
+       "results": []
+      }
+     },
+     {
+      "when": {
+       "/objectType": "meetings"
+      },
+      "data": {
+       "total": 0,
+       "results": []
+      }
+     }
+    ]
+   },
+   "items": [
+    "hubspot:portal:62515/company/9001",
+    "hubspot:portal:62515/company/9002",
+    "hubspot:portal:62515/deal/5001",
+    "hubspot:portal:62515/note/7001"
+   ],
+   "self_check": "passed",
+   "plain_text": true
+  },
+  "pipedrive": {
+   "draft": "pipedrive",
+   "watermark": "2026-10-12T00:00:00Z",
+   "now": "2026-10-14T00:00:00Z",
+   "_inferred": "Composio's schema does not describe activity items or person timestamps; their update_time/subject/note fields follow Pipedrive v2 docs.",
+   "namespace": "pipedrive:company:7311",
+   "routes": {
+    "PIPEDRIVE_GET_CURRENT_USER_DATA": [
+     {
+      "when": {},
+      "data": {
+       "success": true,
+       "data": {
+        "id": 12,
+        "name": "Ana",
+        "email": "ana@example.com",
+        "company_id": 7311,
+        "company_name": "Acme",
+        "company_domain": "acme",
+        "is_you": true,
+        "active_flag": true,
+        "created": "2026-01-01 00:00:00",
+        "modified": "2026-10-01 00:00:00"
+       }
+      }
+     }
+    ],
+    "PIPEDRIVE_LIST_DEALS": [
+     {
+      "when": {
+       "/cursor": null
+      },
+      "data": {
+       "success": true,
+       "data": [
+        {
+         "id": 101,
+         "title": "Acme renewal",
+         "status": "open",
+         "owner_id": 12,
+         "person_id": 301,
+         "org_id": null,
+         "stage_id": 2,
+         "pipeline_id": 1,
+         "add_time": "2026-10-01T00:00:00Z",
+         "update_time": "2026-10-13T08:00:00Z"
+        }
+       ],
+       "additional_data": {
+        "next_cursor": "eyJpZCI6MTAxfQ"
+       }
+      }
+     },
+     {
+      "when": {
+       "/cursor": "eyJpZCI6MTAxfQ"
+      },
+      "data": {
+       "success": true,
+       "data": [
+        {
+         "id": 102,
+         "title": "Globex pilot",
+         "status": "won",
+         "owner_id": 12,
+         "add_time": "2026-10-02T00:00:00Z",
+         "update_time": "2026-10-13T08:30:00Z"
+        }
+       ],
+       "additional_data": {
+        "next_cursor": null
+       }
+      }
+     }
+    ],
+    "PIPEDRIVE_LIST_ACTIVITIES": [
+     {
+      "when": {},
+      "data": {
+       "success": true,
+       "data": [
+        {
+         "id": 501,
+         "subject": "Renewal call",
+         "type": "call",
+         "note": "<p>Agreed on terms.</p>",
+         "done": true,
+         "deal_id": 101,
+         "owner_id": 12,
+         "add_time": "2026-10-13T07:00:00Z",
+         "update_time": "2026-10-13T09:00:00Z"
+        }
+       ],
+       "additional_data": {
+        "next_cursor": null
+       }
+      }
+     }
+    ],
+    "PIPEDRIVE_LIST_PERSONS": [
+     {
+      "when": {},
+      "data": {
+       "success": true,
+       "data": [
+        {
+         "id": 301,
+         "name": "Riley Buyer",
+         "custom_fields": {},
+         "add_time": "2026-10-01T00:00:00Z",
+         "update_time": "2026-10-13T08:45:00Z"
+        }
+       ],
+       "additional_data": {}
+      }
+     }
+    ]
+   },
+   "items": [
+    "pipedrive:company:7311/deal/101",
+    "pipedrive:company:7311/deal/102",
+    "pipedrive:company:7311/activity/501",
+    "pipedrive:company:7311/person/301"
+   ],
+   "self_check": "passed"
+  },
+  "intercom": {
+   "draft": "intercom",
+   "watermark": "2026-10-12T00:00:00Z",
+   "now": "2026-10-14T00:00:00Z",
+   "namespace": "intercom:workspace:abc12def",
+   "routes": {
+    "INTERCOM_IDENTIFY_AN_ADMIN": [
+     {
+      "when": {},
+      "data": {
+       "type": "admin",
+       "id": "991",
+       "name": "Ana",
+       "email": "ana@example.com",
+       "app": {
+        "type": "app",
+        "id_code": "abc12def",
+        "name": "Acme",
+        "region": "US",
+        "timezone": "America/Chicago",
+        "created_at": 1600000000,
+        "secure": false,
+        "identity_verification": false
+       }
+      }
+     }
+    ],
+    "INTERCOM_SEARCH_CONVERSATIONS": [
+     {
+      "when": {
+       "/starting_after": null
+      },
+      "data": {
+       "type": "conversation.list",
+       "total_count": 3,
+       "pages": {
+        "type": "pages",
+        "page": 1,
+        "per_page": 25,
+        "total_pages": 2,
+        "next": {
+         "page": 2,
+         "starting_after": "WzE3OTE4Nzg0MDAwMDAsMl0="
+        }
+       },
+       "conversations": [
+        {
+         "type": "conversation",
+         "id": "215469998427661",
+         "title": null,
+         "created_at": 1791800000,
+         "updated_at": 1791882000,
+         "state": "open",
+         "open": true,
+         "read": true,
+         "priority": "not_priority",
+         "tags": {
+          "type": "tag.list",
+          "tags": []
+         },
+         "source": {
+          "type": "conversation",
+          "id": "403918330",
+          "delivered_as": "customer_initiated",
+          "subject": "",
+          "body": "<p>Billing question</p>",
+          "author": {
+           "type": "user",
+           "id": "5310d8e7598c9a0b24000002",
+           "name": "Riley",
+           "email": "riley@example.com"
+          },
+          "attachments": [],
+          "url": null,
+          "redacted": false
+         },
+         "contacts": {
+          "type": "contact.list",
+          "contacts": []
+         }
+        },
+        {
+         "type": "conversation",
+         "id": "215469998427662",
+         "title": null,
+         "created_at": 1791800000,
+         "updated_at": 1791878400,
+         "state": "open",
+         "open": true,
+         "read": true,
+         "priority": "not_priority",
+         "tags": {
+          "type": "tag.list",
+          "tags": []
+         },
+         "source": {
+          "type": "conversation",
+          "id": "403918330",
+          "delivered_as": "customer_initiated",
+          "subject": "",
+          "body": "<p>Billing question</p>",
+          "author": {
+           "type": "user",
+           "id": "5310d8e7598c9a0b24000002",
+           "name": "Riley",
+           "email": "riley@example.com"
+          },
+          "attachments": [],
+          "url": null,
+          "redacted": false
+         },
+         "contacts": {
+          "type": "contact.list",
+          "contacts": []
+         }
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "/starting_after": "WzE3OTE4Nzg0MDAwMDAsMl0="
+      },
+      "data": {
+       "type": "conversation.list",
+       "total_count": 3,
+       "pages": {
+        "type": "pages",
+        "page": 2,
+        "per_page": 25,
+        "total_pages": 2
+       },
+       "conversations": [
+        {
+         "type": "conversation",
+         "id": "215469998427600",
+         "title": null,
+         "created_at": 1791800000,
+         "updated_at": 1790812800,
+         "state": "open",
+         "open": true,
+         "read": true,
+         "priority": "not_priority",
+         "tags": {
+          "type": "tag.list",
+          "tags": []
+         },
+         "source": {
+          "type": "conversation",
+          "id": "403918330",
+          "delivered_as": "customer_initiated",
+          "subject": "",
+          "body": "<p>Billing question</p>",
+          "author": {
+           "type": "user",
+           "id": "5310d8e7598c9a0b24000002",
+           "name": "Riley",
+           "email": "riley@example.com"
+          },
+          "attachments": [],
+          "url": null,
+          "redacted": false
+         },
+         "contacts": {
+          "type": "contact.list",
+          "contacts": []
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "INTERCOM_GET_CONVERSATION": [
+     {
+      "when": {
+       "/conversation_id": "215469998427661",
+       "/display_as": "plaintext"
+      },
+      "data": {
+       "type": "conversation",
+       "id": "215469998427661",
+       "title": null,
+       "created_at": 1791800000,
+       "updated_at": 1791882000,
+       "state": "open",
+       "open": true,
+       "read": true,
+       "priority": "not_priority",
+       "tags": {
+        "type": "tag.list",
+        "tags": []
+       },
+       "source": {
+        "type": "conversation",
+        "id": "403918330",
+        "delivered_as": "customer_initiated",
+        "subject": "",
+        "body": "<p>Billing question</p>",
+        "author": {
+         "type": "user",
+         "id": "5310d8e7598c9a0b24000002",
+         "name": "Riley",
+         "email": "riley@example.com"
+        },
+        "attachments": [],
+        "url": null,
+        "redacted": false
+       },
+       "contacts": {
+        "type": "contact.list",
+        "contacts": []
+       },
+       "conversation_parts": {
+        "type": "conversation_part.list",
+        "total_count": 2,
+        "conversation_parts": [
+         {
+          "type": "conversation_part",
+          "id": "9001",
+          "part_type": "comment",
+          "body": "Refund issued.",
+          "created_at": 1791881040,
+          "updated_at": 1791881100,
+          "notified_at": 1791881100,
+          "assigned_to": null,
+          "author": {
+           "type": "admin",
+           "id": "991",
+           "name": "Ana",
+           "email": "ana@example.com"
+          },
+          "attachments": [],
+          "external_id": null,
+          "redacted": false
+         },
+         {
+          "type": "conversation_part",
+          "id": "9002",
+          "part_type": "note",
+          "body": "Checked with finance.",
+          "created_at": 1791881940,
+          "updated_at": 1791882000,
+          "notified_at": 1791882000,
+          "assigned_to": null,
+          "author": {
+           "type": "admin",
+           "id": "991",
+           "name": "Ana",
+           "email": "ana@example.com"
+          },
+          "attachments": [],
+          "external_id": null,
+          "redacted": false
+         }
+        ]
+       }
+      }
+     },
+     {
+      "when": {},
+      "data": {
+       "type": "conversation",
+       "id": "215469998427662",
+       "title": null,
+       "created_at": 1791800000,
+       "updated_at": 1791878400,
+       "state": "open",
+       "open": true,
+       "read": true,
+       "priority": "not_priority",
+       "tags": {
+        "type": "tag.list",
+        "tags": []
+       },
+       "source": {
+        "type": "conversation",
+        "id": "403918330",
+        "delivered_as": "customer_initiated",
+        "subject": "",
+        "body": "<p>Billing question</p>",
+        "author": {
+         "type": "user",
+         "id": "5310d8e7598c9a0b24000002",
+         "name": "Riley",
+         "email": "riley@example.com"
+        },
+        "attachments": [],
+        "url": null,
+        "redacted": false
+       },
+       "contacts": {
+        "type": "contact.list",
+        "contacts": []
+       },
+       "conversation_parts": {
+        "type": "conversation_part.list",
+        "total_count": 0,
+        "conversation_parts": []
+       }
+      }
+     }
+    ]
+   },
+   "items": [
+    "intercom:workspace:abc12def/conversation/215469998427661",
+    "intercom:workspace:abc12def/part/215469998427661/9001",
+    "intercom:workspace:abc12def/part/215469998427661/9002",
+    "intercom:workspace:abc12def/conversation/215469998427662"
+   ],
+   "self_check": "passed"
+  }
+ }
+}

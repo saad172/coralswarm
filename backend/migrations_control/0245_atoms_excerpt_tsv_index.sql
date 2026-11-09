@@ -1,0 +1,65 @@
+-- no-transaction
+-- Migration: 0245_atoms_excerpt_tsv_index
+-- Description: GIN index over `atoms.excerpt`'s tsvector, for the atom keyword
+--              leg's SYMBOL candidate half (`store::keyword_search_pg`, fix 3b).
+--
+-- WHAT IT IS FOR
+--   A developer types an identifier as ONE word, and Postgres splits it:
+--   `to_tsvector('simple','intake_window')` is `'intake':1 'window':2`. The
+--   repair is to compile the spelling into a PHRASE (`'intake' <-> 'window'`)
+--   with `phraseto_tsquery`, which is precise — it matches
+--   `function intake_window` and does NOT match "the intake was wide open and
+--   the window closed" (both verified on PostgreSQL 17).
+--
+-- WHY NOT JUST RUN THAT PHRASE AGAINST `content_tsv`
+--   Because a GIN tsvector index stores no positions, the phrase is evaluated
+--   as an AND of its lexemes at the index and rechecked on the heap — so an
+--   identifier made of COMMON words is not selective at all. Measured on the
+--   live dev ocean (29,953 atoms), `content_tsv @@ phraseto_tsquery('simple',
+--   'user_id')`:
+--
+--     matches 3,925 rows -> Seq Scan on atoms, detoasting every content_tsv
+--                           241ms WARM, 3,837ms COLD
+--     'graph_id'          57ms warm;  a common path lexeme
+--     ('backend/src/store/mod.rs', 1,105 rows)  213ms warm
+--
+--   A hard LIMIT does not bound it either — `id_user` capped at 600 rows still
+--   cost 221ms, and a two-common-lexeme phrase that matches NOTHING scans the
+--   whole table. This is migration 0244's 6.5s `content_tsv` OR in miniature,
+--   against the same ~130ms retrieve budget.
+--
+-- WHY `excerpt` IS AFFORDABLE WHERE `content_tsv` IS NOT
+--   `atoms.excerpt` is at most JOURNAL_EXCERPT_MAX_CHARS (280) characters of
+--   INLINE text (migration 0116), so it never toasts and its whole tsvector is
+--   read from the heap tuple. The same pathological symbols stay bounded:
+--
+--     'user_id'    666 rows, 10.5ms      'graph_id'   856 rows, 12.8ms
+--     'intake_window'  10 rows, 0.22ms   'build_catalog'  4 rows, 0.14ms
+--
+--   It is also the RIGHT field: `routes::ingest` writes it for every chunk at
+--   write time, so it is populated regardless of whether the body went to R2,
+--   and for a code chunk it is the head of the chunk — the provenance header
+--   plus the declarations — which is exactly where the symbol a "where is X"
+--   question names appears.
+--
+--   Index size on the dev ocean: 6,840 kB, SMALLER than 0244's title index
+--   (8,528 kB) and a fifth of `idx_atoms_content_tsv` (32 MB).
+--
+-- WHY AN EXPRESSION INDEX, NOT A GENERATED COLUMN
+--   Same reason as 0244: a stored generated column rewrites `atoms` under an
+--   ACCESS EXCLUSIVE lock (379 MB on dogfood). An expression index over
+--   `to_tsvector('simple', coalesce(excerpt, ''))` needs no column, no rewrite,
+--   and builds CONCURRENTLY. `keyword_search_pg` spells the expression
+--   character-for-character, which is what makes it usable.
+--
+-- 'simple' (not 'english') matches `content_tsv`, `idx_atoms_title_tsv` and
+-- `idx_nodes_search_tsv`: no stemming, so an identifier stays the token the
+-- user typed. `coalesce(excerpt, '')` rather than a partial index, for the same
+-- reason 0244 used it — a NULL excerpt indexes an empty tsvector, which GIN
+-- stores nothing for, and the predicate stays a single matchable expression.
+--
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_atoms_excerpt_tsv;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_atoms_excerpt_tsv
+    ON atoms USING GIN (to_tsvector('simple', coalesce(excerpt, '')));

@@ -1,0 +1,55 @@
+-- Migration: 0276_microsoft_calendar_verify_sweep
+-- Description: Microsoft Calendar reconcile sweep cursor (cs-mscal-body-window).
+--   Where the verification of stored corals against Graph stands, so the
+--   sweep is resumable across passes instead of restarting from the same
+--   fixed position every time.
+--
+--   ── The gap ──
+--   0272's reconcile verified "every stored id this PASS did not see",
+--   capped at 200 `GET /me/events/{id}` per pass, and ran only on the pass
+--   that completed a full round. A full round is cut every 20 pages (1000
+--   `calendarView` occurrences), so a busy calendar needs several passes
+--   and only the LAST one's ids counted as seen: the "unseen" set was most
+--   of the calendar, the cap always hit, and — the ids being a sorted set —
+--   the same 200 lowest-sorting ids were verified every time. A deleted
+--   recurring series (its occurrences come back `@removed`; its stored
+--   series-master id never does) whose master id sorted after those 200
+--   was never verified and its coral never retracted.
+--
+--   ── The fix these columns support ──
+--   `connectors::microsoft_calendar::plan_verification` walks the stored
+--   ids in sorted order as a circle: each reconcile-eligible pass verifies
+--   the next `VERIFY_CAP` ids after `delta_verify_cursor` (wrapping to the
+--   smallest id), skipping what the pass itself just handled, until the lap
+--   that began at `delta_verify_lap_end` is closed. Every stored id is
+--   therefore verified within one lap of the trigger (a completed full
+--   round, or a pass carrying unexplained `@removed` ids), however many
+--   passes the round took and however the id sorts; the cap only paces the
+--   sweep (≤ 200 GETs per pass). A trigger while a lap is in progress moves
+--   `delta_verify_lap_end` to the current cursor — one more full lap from
+--   here, never a restart from a fixed position — which is what makes the
+--   sweep starvation-free.
+--
+--   `delta_verify_cursor` — the last stored id verified; NULL reads as
+--   "before the smallest id". Kept between laps so successive laps rotate
+--   through the calendar rather than always beginning at the same id.
+--
+--   `delta_verify_lap_end` — the id the lap in progress ends at
+--   (inclusive, in circular order from the cursor). NULL = no lap in
+--   progress. Set to the cursor's position when a lap starts.
+--
+--   `delta_reconciled_at` (0272) now records when the last lap STARTED;
+--   it no longer throttles anything — the lap mechanics bound the cost.
+--
+--   Same two columns on the tenant twin (`migrations_tenant/0115_microsoft_
+--   calendar_verify_sweep.sql`). No policy change.
+--
+-- Depends on: 0273_microsoft_calendar_delta_window_start.
+-- Down:
+--   ALTER TABLE microsoft_calendar_sync_state
+--       DROP COLUMN IF EXISTS delta_verify_cursor,
+--       DROP COLUMN IF EXISTS delta_verify_lap_end;
+
+ALTER TABLE microsoft_calendar_sync_state
+    ADD COLUMN IF NOT EXISTS delta_verify_cursor  TEXT,
+    ADD COLUMN IF NOT EXISTS delta_verify_lap_end TEXT;

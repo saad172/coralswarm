@@ -1,0 +1,101 @@
+-- no-transaction
+-- Migration: 0147_llm_usage_journal_period_cursor_index_concurrently
+-- Description: PR7 of the usage-metering + credit-ledger train (13-PR plan,
+--   `.scratch/usage-metering/plan.md` §1 PR7) — build a partial index backing
+--   PR9's CROSS-GRAPH journal-compile cursor, WITHOUT blocking writes on
+--   `llm_usage` while it builds. Added on top of the two indexes this PR's
+--   header set out to add (`0145`/`0146`) after `EXPLAIN` — not assumption,
+--   per this PR's own instructions — showed the existing journal index
+--   cannot serve PR9's actual access pattern.
+--
+--   Merged PR #605 (this train's PR2, control `0144` / tenant `0051`)
+--   already added `idx_llm_usage_source_journal_period` on `(graph_id,
+--   source_journal_granularity, source_journal_period) WHERE
+--   source_journal_period IS NOT NULL`. That index serves plan §1 PR9's
+--   GROUPING query — "group `llm_usage` rows by `(graph_id,
+--   source_journal_granularity, source_journal_period)`" for one already-
+--   known ocean — perfectly: `graph_id` is the leading, equality-selective
+--   column for that access pattern.
+--
+--   It does NOT serve the OTHER journal-axis query PR9 needs: a cursor that
+--   "advances over `source_journal_period` **across** graphs" (this PR's own
+--   task description) — the journal-compile axis has no `jobs` row to
+--   cursor over the way `0145`'s index lets PR9 cursor `ExtractEntities`
+--   completions, so it needs its own time-ordered sweep across EVERY graph's
+--   journal-compile rows, not one graph at a time. With `graph_id` as the
+--   leading column, `0144`'s index only helps once the graph is already
+--   fixed; a query filtering/ordering by `source_journal_period` ACROSS
+--   graph_id values cannot use a `graph_id`-first btree to satisfy that
+--   ordering, and confirmed the following in the EXPLAIN evidence below.
+--
+--   EXPLAIN evidence (seeded local Postgres 17.10, 1,000,000 `llm_usage`
+--   rows, ~250,000 with `source_journal_period IS NOT NULL` spread across
+--   5,000 graphs and 90 days — enough that the planner genuinely prefers a
+--   sequential scan without a period-leading index):
+--     Query tested: a `(source_journal_period, id) > (cursor)` keyset-cursor
+--       scan, `ORDER BY source_journal_period, id LIMIT 500` — the shape
+--       PR9's own cursor-over-a-lag-window pattern needs (same
+--       `(column, id)` composite-with-tie-breaker idiom as `0145`'s
+--       `(finished_at, id)`, for the identical non-monotonic-timestamp
+--       reason: `source_journal_period` is assigned at compile time, not at
+--       insert-commit time, but concurrent compiles across graphs can still
+--       commit their `llm_usage` rows out of period order).
+--     BEFORE (0144's `(graph_id, granularity, period)` index present, no
+--       period-leading index): `Parallel Seq Scan on llm_usage` + top-N
+--       heapsort, ~42ms — the planner does NOT use `0144`'s index at all for
+--       this query, confirming the leading-column limitation described
+--       above empirically rather than by assumption.
+--     AFTER (this index added): `Index Scan using
+--       idx_llm_usage_journal_period_cursor`, ~1.1ms.
+--     NEGATIVE CONTROL: dropping this index (leaving `0144`'s still in
+--       place) reverted the plan to the same sequential scan (~39ms) —
+--       confirmed before restoring.
+--   Full plans pasted in this PR's description.
+--
+--   Column order: `source_journal_period` leads (the cursor's own advancing
+--   axis); `id` is the tie-breaker, same role as `0145`'s trailing `id` —
+--   `llm_usage.id` is always unique, so it makes the composite predicate
+--   `(source_journal_period, id) > (cursor_period, cursor_id)` a stable,
+--   gap-free cursor even when many rows across many graphs share the exact
+--   same `source_journal_period` (routine: every graph's hourly compile at a
+--   given wall-clock hour shares that boundary). Partial on the same `WHERE
+--   source_journal_period IS NOT NULL` predicate as `0144` — this index
+--   exists solely to serve the journal-compile cursor and every non-journal
+--   row (job/query-attributed or fully unattributed) would only add NULL
+--   entries this cursor never queries.
+--
+--   Deliberately does NOT replace `0144`'s index: the two serve different
+--   access patterns (per-graph grouping vs. cross-graph cursoring) that PR9
+--   both needs, on the same partial predicate but different column orders —
+--   neither can substitute for the other, which is exactly what this
+--   migration's own EXPLAIN evidence demonstrates.
+--
+--   `llm_usage` is a live, high-write production table — same
+--   `CREATE INDEX CONCURRENTLY` / `-- no-transaction` / single-statement-file
+--   mechanics as `0145`/`0146` and the established precedent those files
+--   cite (0059, 0074, 0075, 0099, `migrations_tenant/0012`, PR2's own
+--   0142-0144/0049-0051 split).
+--
+--   `IF NOT EXISTS` + `CONCURRENTLY`: a failed concurrent build leaves an
+--   INVALID index behind, and `IF NOT EXISTS` will then happily skip it
+--   forever. If this migration errors, drop
+--   `idx_llm_usage_journal_period_cursor` before re-running rather than
+--   reading the skip as success — same operational caveat as
+--   `0145`/`0146`/`0142`/`0143`/`0144`.
+--
+-- PAIRED WITH: backend/migrations_tenant/0054_llm_usage_journal_period_cursor_index_concurrently.sql
+--   — `llm_usage` is a SHARED table, present in both trees and NOT in
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster, so the DDL
+--   statement below (below this header) must stay byte-for-byte identical to
+--   that file's. Only this header's prose is control-tree-specific.
+--
+-- Depends on: 0141_llm_usage_provider_cost.sql (creates
+--   `source_journal_period`); 0144_llm_usage_source_journal_period_index_concurrently.sql
+--   (the sibling per-graph index this one deliberately complements rather
+--   than replaces).
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_llm_usage_journal_period_cursor;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_llm_usage_journal_period_cursor
+    ON llm_usage (source_journal_period, id)
+    WHERE source_journal_period IS NOT NULL;

@@ -1,0 +1,26 @@
+-- Migration: 0403_graph_mail_routes_client_state_sha256
+-- Description: Let the Graph webhook verify an ORG mail notification's
+--   `clientState` from the control plane alone (ADR-0016 layer 3 review).
+--
+--   The webhook writes a durable receive job per notification before it
+--   answers 202. Writing one for any well-formed body let an unauthenticated
+--   sender grow `jobs` and, worse, a forged pending notification shared the
+--   genuine one's dedupe key and suppressed it. The route now checks that
+--   the subscription exists and the `clientState` matches BEFORE it writes.
+--   A personal subscription (`graph_subscriptions` here) and a Teams
+--   doorbell (`teams_container_subscriptions`) are readable from the control
+--   pool. An org mail subscription's row lives on the org's tenant database;
+--   this column carries the hex SHA-256 of its `clientState` on the
+--   control-plane route (0270) so the check needs no tenant hop. The secret
+--   itself stays on the tenant row, as 0270 promised; it is 256 random bits,
+--   so its hash cannot be inverted.
+--
+--   NULL until the next `sync_mail_routes` (every opt-in ingest and every
+--   renewal tick) fills it in; the webhook holds such a notification without
+--   a dedupe key and the worker verifies it, as before this migration.
+--
+-- Depends on: 0270_graph_mail_routes.
+-- Down:
+--   ALTER TABLE graph_mail_routes DROP COLUMN client_state_sha256;
+
+ALTER TABLE graph_mail_routes ADD COLUMN IF NOT EXISTS client_state_sha256 TEXT;

@@ -1,0 +1,87 @@
+name: coralswarm-reference
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  environment: &environment
+    DATABASE_URL: postgres://postgres:local-development@postgres:5432/coralswarm
+    APP_ENV: development
+    BASE_URL: http://localhost:8080
+    FRONTEND_URL: http://localhost:3000
+    PORT: '8080'
+    CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?Set your Clerk development secret in .env}
+    OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set your OpenRouter key in .env}
+    TENANT_PROVISIONER: local
+    TENANT_PROVISIONER_ADMIN_DSN: postgres://postgres:local-development@postgres:5432/postgres
+    R2_ACCOUNT_ID: local
+    R2_ACCESS_KEY_ID: local
+    R2_SECRET_ACCESS_KEY: local-development
+    R2_BUCKET_NAME: coralswarm-local
+    R2_ENDPOINT_OVERRIDE: http://s3:9090
+    STANDING_PROCESSING_ENABLED: 'true'
+    SOURCE_EXTRACTION_PROFILE: source-atoms-v3
+    GRAPH_TRAVERSAL_ENABLED: 'true'
+  volumes:
+    - local-config:/local:ro
+  entrypoint: ['/bin/sh', '/app/local-start.sh']
+services:
+  init:
+    image: node:22-alpine
+    environment:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?Set your Clerk development publishable key in .env}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?Set your Clerk development secret in .env}
+    volumes:
+      - local-config:/local
+      - ./scripts/local/init.mjs:/init.mjs:ro
+    command: ['node', '/init.mjs']
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: local-development
+      POSTGRES_DB: coralswarm
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/local/postgres-init.sql:/docker-entrypoint-initdb.d/roles.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d coralswarm']
+      interval: 3s
+      retries: 30
+  s3:
+    image: adobe/s3mock:4.7.0
+    environment:
+      initialBuckets: coralswarm-local
+      root: /data
+      retainFilesOnExit: 'true'
+    volumes:
+      - s3-data:/data
+  migrate:
+    <<: *backend
+    command: ['/bin/sh', '-ec', '/app/migrate_control && /app/migrate_tenants']
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+  backend:
+    <<: *backend
+    command: ['/app/coralswarm-funded-backend']
+    ports: ['127.0.0.1:8080:8080']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      s3:
+        condition: service_started
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?Set your Clerk development publishable key in .env}
+    environment:
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+    ports: ['127.0.0.1:3000:8080']
+    depends_on: [backend]
+volumes:
+  local-config:
+  postgres-data:
+  s3-data:

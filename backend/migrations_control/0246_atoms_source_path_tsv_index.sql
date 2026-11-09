@@ -1,0 +1,70 @@
+-- no-transaction
+-- Migration: 0246_atoms_source_path_tsv_index
+-- Description: GIN index over the PATH SEGMENTS of `atoms.source_id`, for the
+--              atom keyword leg's path half (`store::keyword_search_pg`, fix 3b).
+--
+-- THE GAP
+--   A GitHub code atom's `source_id` is `{repo_id}:blob:{path}:chunk:{n}` and
+--   its chunk header quotes the path, which Postgres indexes as ONE lexeme:
+--
+--     to_tsvector('simple','// backend/src/routes/queries.rs - function intake_window')
+--       -> 'backend/src/routes/queries.rs':1 'function':2 'intake':3 'window':4
+--
+--   A user says `queries.rs`, or `routes/queries.rs`. Both are SUFFIXES of that
+--   lexeme, and a tsquery prefix match cannot reach a suffix:
+--
+--     to_tsquery('simple','queries.rs')   @@ <that vector>  ->  FALSE
+--     to_tsquery('simple','backend/src:*') @@ <that vector> ->  TRUE
+--
+-- THE FIX, AND THE THREE CANDIDATES IT WAS CHOSEN OVER
+--   `translate(source_id, '/', ' ')` turns the path into one lexeme per
+--   SEGMENT, so `queries.rs` becomes a lexeme in its own right and
+--   `routes/queries.rs` compiles (through the same `translate`) to the
+--   order-sensitive phrase `'routes' <-> 'queries.rs'`.
+--
+--   EXPLAIN (ANALYZE, BUFFERS) on the live dev ocean, 29,953 atoms, warm,
+--   `WHERE graph_id = <ocean> AND <predicate>` for `queries.rs`:
+--
+--     (1) no new index, `source_id LIKE '%queries.rs%'`
+--           Seq Scan on atoms, 5,688 buffers ................. 40.2 ms
+--           (forced index scan was worse: 441.6 ms — the existing
+--            idx_atoms_graph_source_id_pattern is text_pattern_ops, i.e.
+--            PREFIX-only, and cannot serve an infix LIKE)
+--     (2) pg_trgm GIN on source_id
+--           Bitmap Index Scan, 30 index buffers .............. 0.89 ms
+--           index size 3,816 kB; 291 rows — INCLUDING
+--           `backend/src/store/roster_queries.rs`, a substring false hit
+--     (3) THIS: GIN on to_tsvector('simple', translate(source_id,'/',' '))
+--           Bitmap Index Scan, 3 index buffers ............... 0.48 ms
+--           index size 976 kB; 286 rows, whole-segment only
+--
+--   (3) wins on every axis that matters: a quarter of (2)'s size, half its
+--   time, and it matches per SEGMENT rather than per substring — the same
+--   "no substring false hits like 'man' inside 'management'" rule
+--   `retrieval::node_match_tokens` already applies to every other lexical
+--   comparison in this system. A `reverse()` expression index was not built:
+--   it can only serve an exact suffix of a path that must first be extracted
+--   from `source_id` with a GitHub-specific `split_part`, where `source_id`
+--   itself is universal — this index serves coding sessions, Slack, meetings
+--   and every future source type for free.
+--
+-- WHY NOT MATCH THE PATH AGAINST `content_tsv` INSTEAD
+--   Because a common path IS a common lexeme: `content_tsv @@
+--   phraseto_tsquery('simple','backend/src/store/mod.rs')` matches 1,105 rows
+--   and seq-scans the toasted tsvectors at 213ms warm. See 0245's header for
+--   the full measurement of that family.
+--
+-- The junk lexemes this expression also produces from the rest of a source id
+-- (`1236057652`, `blob`, `chunk`, `19`) are harmless: only
+-- `retrieval::keyword_query_symbols` output is ever matched against this index,
+-- and a symbol must contain an interior `_`, `.`, `/` or `:` — an ordinary
+-- query word like "chunk" never reaches it.
+--
+-- Expression index, not a generated column, and CONCURRENTLY, for the same
+-- reasons as 0244/0245. `source_id` is NOT NULL, so no `coalesce` is needed.
+--
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_atoms_source_path_tsv;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_atoms_source_path_tsv
+    ON atoms USING GIN (to_tsvector('simple', translate(source_id, '/', ' ')));

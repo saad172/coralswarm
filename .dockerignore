@@ -1,0 +1,10 @@
+**/node_modules
+**/target
+**/.next
+**/out
+**/.git
+**/*.log
+.env
+.env.*
+models
+.scratch

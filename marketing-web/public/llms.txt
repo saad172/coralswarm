@@ -1,0 +1,30 @@
+# CoralSwarm
+
+> CoralSwarm captures the work your team already does — meetings, chat, email, coding sessions, agent sessions — and turns it into organizational memory, automatically, for people and AI agents alike.
+
+CoralSwarm's problem is distribution, not search: knowledge only helps the
+people and agents who actually see it, and most of what a team learns never
+gets written down anywhere. CoralSwarm solves that by capturing continuously
+from the tools a team already uses, splitting each source into atoms
+("corals") with citations, grouping related atoms into confirmed topics
+("reefs"), and answering questions — from a person in the app or an agent
+over MCP — with the same cited answer either way. Nothing is filed by hand,
+and nothing moves between private/team/org scopes until a person promotes it.
+
+## Pages
+
+- [CoralSwarm](https://coralswarm.example/): product overview — how it works, ask + cite, agents/MCP, pricing, security, FAQ, and the waitlist/contact form.
+- [Support](https://coralswarm.example/support): get help with your account, connections, permissions, and captured content.
+- [Privacy Policy](https://coralswarm.example/privacy): how CoralSwarm handles data.
+- [Terms of Service](https://coralswarm.example/terms): terms of use.
+
+## Key facts
+
+- What it is: organizational memory that captures automatically from meetings, chat, email, code, and agent sessions — no manual filing — and answers questions with citations.
+- Pricing: Personal Pro is $25/month for 1,500 queries; Personal Max is $100/month for 7,000 queries; Enterprise is priced per seat, contact sales. A 14-day free trial is planned at launch. Capture, ingestion, and review are never metered — only queries are.
+- Agents: CoralSwarm has an MCP connector so AI agents (e.g. Claude) can query a team's ocean directly, with cited, scoped answers.
+- Platforms: web app.
+- Privacy/security: nothing leaves a private ocean until a user promotes it; encryption keys never touch CoralSwarm's servers; on Enterprise, each tenant runs on its own private database rather than a shared one.
+- Status: pre-launch, building a waitlist and looking for design partners.
+
+See also: [/llms-full.txt](https://coralswarm.example/llms-full.txt) for a fuller markdown rendition of this site's content.

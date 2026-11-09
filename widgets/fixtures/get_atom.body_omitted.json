@@ -1,0 +1,22 @@
+{
+  "atom_id": "d0bc13f1-0e09-481f-95a0-3cbea71d0129",
+  "graph_id": "818ccfa2-051b-417a-96af-06335e439fac",
+  "source_type": "note",
+  "source_id": "notes:weekly-digest-2026-01-25",
+  "content": "Weekly digest note: rate limiting follow-ups are tracked in the platform reef. Per-endpoint overrides remain parked; partner usage page still needs an owner. No new decisions this week — just a pointer back to the Feb 12 sync.",
+  "content_truncated": false,
+  "participants": null,
+  "timestamp": "2026-01-25T00:00:00Z",
+  "created_at": "2026-01-25T00:05:00Z",
+  "scope": "account",
+  "fts_language": "english",
+  "channel_id": null,
+  "channel_name": null,
+  "author_id": null,
+  "author_name": null,
+  "project": null,
+  "mcp_client_name": null,
+  "title": "Rate limit follow-ups — weekly notes digest",
+  "excerpt": null,
+  "linked_reefs": []
+}

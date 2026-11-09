@@ -1,0 +1,40 @@
+-- no-transaction
+-- Migration: 0075_meeting_transcripts_created_at_index
+-- Description: Index `meeting_transcripts(graph_id, created_at DESC)` to
+--   support `list_meeting_transcripts`'s `WHERE graph_id = $1 ORDER BY
+--   created_at DESC LIMIT $2 OFFSET $3` (backs the `list_meetings` MCP tool).
+--
+--   0056 gave `meeting_transcripts` a `UNIQUE (graph_id, source_id)`
+--   constraint (and its supporting index), but nothing covers the
+--   `(graph_id, created_at DESC)` access pattern this query actually uses —
+--   without it, every page of `list_meetings` sorts a full per-graph scan
+--   (dogfooding gap-sweep #2, item 5, 2026-07-18).
+--
+--   `meeting_transcripts` is a live production table that takes writes on
+--   every ingested meeting; a plain `CREATE INDEX` takes a `SHARE` lock for
+--   the entire build, which blocks every concurrent INSERT/UPDATE/DELETE
+--   against the table until it finishes, regardless of how low that table's
+--   current write rate happens to be today — a rate that isn't guaranteed to
+--   hold for the life of the migration. `CREATE INDEX CONCURRENTLY` avoids
+--   that lock (CodeRabbit review, 2026-07-18), matching the same
+--   `CONCURRENTLY` / `-- no-transaction` convention already used by 0059
+--   and 0074 on `atoms` for the identical reason.
+--
+--   Single statement only: a self-healing `DROP INDEX CONCURRENTLY IF
+--   EXISTS` before the `CREATE` was tried alongside it but reverted — see
+--   0074's header for why (two `CONCURRENTLY` statements in one migration
+--   file fails with "cannot run inside a transaction block", confirmed
+--   against CI). `CONCURRENTLY` must stay this file's ONLY statement.
+--
+--   Known residual risk (same as 0059/0074): if this build is interrupted
+--   mid-way, Postgres can leave an INVALID index of the same name behind,
+--   which `IF NOT EXISTS` then silently skips rebuilding on a retry. If
+--   that happens operationally: run
+--   `DROP INDEX CONCURRENTLY idx_meeting_transcripts_graph_created;` then
+--   re-run this migration.
+--
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_meeting_transcripts_graph_created;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_meeting_transcripts_graph_created
+    ON meeting_transcripts (graph_id, created_at DESC);

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.25/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.25",
+  "supportsChannelFeatures": "tier1",
+  "version": "1.1.0",
+  "id": "{{TEAMS_APP_ID}}",
+  "developer": {
+    "name": "CoralSwarm",
+    "websiteUrl": "https://coralswarm.example",
+    "privacyUrl": "https://coralswarm.example/privacy",
+    "termsOfUseUrl": "https://coralswarm.example/terms"
+  },
+  "name": {
+    "short": "CoralSwarm",
+    "full": "CoralSwarm \u2014 grow your team's knowledge"
+  },
+  "description": {
+    "short": "Mention CoralSwarm to capture a Teams conversation in your private ocean.",
+    "full": "Add CoralSwarm to your team or group chat, then mention it in the conversation you want to capture. Sign in and connect your Microsoft account when prompted. New capture starts from now in your own private ocean for that conversation only. Existing capture and history settings are preserved; installing the app alone does not start capture. For meeting transcripts, use the CoralSwarm meeting add-in and explicitly enable capture after signing in, or add its bot to that meeting with your connected account. Sign in and confirm your workspace when prompted. Recording or transcription alone does not enable capture."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#F77764",
+  "bots": [
+    {
+      "botId": "{{BOT_APP_ID}}",
+      "scopes": [
+        "team",
+        "groupChat"
+      ],
+      "isNotificationOnly": false,
+      "supportsFiles": false
+    }
+  ],
+  "webApplicationInfo": {
+    "id": "{{AAD_APP_ID}}",
+    "resource": "api://app.coralswarm.example/{{AAD_APP_ID}}"
+  },
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "name": "ChannelMessage.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "ChatMessage.Read.Chat",
+          "type": "Application"
+        },
+        {
+          "name": "TeamMember.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "ChannelSettings.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "OnlineMeetingTranscript.Read.Chat",
+          "type": "Application"
+        },
+        {
+          "name": "OnlineMeeting.ReadBasic.Chat",
+          "type": "Application"
+        }
+      ]
+    }
+  },
+  "configurableTabs": [
+    {
+      "configurationUrl": "https://app.coralswarm.example/teams/meeting/configure",
+      "canUpdateConfiguration": false,
+      "scopes": [
+        "groupChat"
+      ],
+      "context": [
+        "meetingDetailsTab",
+        "meetingSidePanel"
+      ]
+    }
+  ],
+  "validDomains": [
+    "app.coralswarm.example"
+  ]
+}

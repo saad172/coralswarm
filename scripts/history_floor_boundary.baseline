@@ -1,0 +1,95 @@
+# The team-seat history-floor boundary ratchet (scripts/check_history_floor_boundary.sh).
+#
+# Per file: how many SQL literals read a floored table without the floor
+# boundary (crate::history_floor). A RATCHET: counts may go down and may not
+# go up, and no file may be added. Lower it with `--update`. RAISING IT IS A
+# HAND EDIT, with the reason in the PR: a new member read of floored content
+# must apply the floor instead.
+#
+# Committed at #1545 (2026-10-28). `--list` prints every counted statement.
+#
+# Raised by hand:
+#   library_read/listing_facts.rs 1 -> 2 (#1565 follow-up): #1565 split the one
+#   canonical listing CTE literal into two (LISTING_OUTCOMES_CTE). Same reads,
+#   no new statement. It builds graph-wide cached facts; a floored reader never
+#   reaches the cache (read_model/listing.rs admission: permission_window).
+#   Adding the floor or a claim comment would change the sealed model SQL hash.
+#   desktop_purge.rs 0 -> 4 -> 7 (ADR 0015, purge_desktop_data): an operator one-shot
+#   that counts and selects work-session rows across a whole database to
+#   delete them. Not a member read; nothing it reads is shown to a member.
+#   4 -> 7 (#1594 review): the dry-run survey of blob keys, affected graphs
+#   and invalidated read surfaces, read the same way for the operator.
+#   ingest.rs 0 -> 1 (ADR-0016 layer 1): the ingest funnel moved here from
+#   routes/ingest.rs (removed, 1). Same statement: the capture's own
+#   source_versions.extraction_status, read back inside its write transaction.
+unfloored backend/src/capture_admission_health.rs 5
+unfloored backend/src/ingest/capture.rs 4
+unfloored backend/src/chunk_reconcile.rs 2
+unfloored backend/src/chunk_reconcile/backfill.rs 5
+unfloored backend/src/co_occurrence.rs 1
+unfloored backend/src/connectors/github_conformance.rs 14
+unfloored backend/src/connectors/google_chat.rs 1
+unfloored backend/src/connectors/google_gmail.rs 4
+unfloored backend/src/connectors/microsoft.rs 1
+unfloored backend/src/connectors/microsoft_calendar.rs 1
+unfloored backend/src/connectors/slack_channel_actions.rs 1
+unfloored backend/src/connectors/slack_channel_management.rs 3
+unfloored backend/src/connectors/slack_onboarding.rs 2
+unfloored backend/src/connectors/state.rs 2
+unfloored backend/src/corpus_enrichment.rs 7
+unfloored backend/src/desktop_purge.rs 7
+unfloored backend/src/fact_supersession.rs 9
+unfloored backend/src/fact_supersession/changes.rs 1
+unfloored backend/src/fact_supersession/judge.rs 1
+unfloored backend/src/failed_extraction_retry.rs 3
+unfloored backend/src/ingest.rs 1
+unfloored backend/src/lib.rs 1
+unfloored backend/src/library_read/evidence.rs 1
+unfloored backend/src/library_read/listing_facts.rs 2
+unfloored backend/src/library_read/read_model.rs 2
+unfloored backend/src/library_read/read_model/listing.rs 2
+unfloored backend/src/managed/embedding/operation.rs 2
+unfloored backend/src/managed/embedding/operation/statements.rs 1
+unfloored backend/src/managed/standing/admission.rs 3
+unfloored backend/src/managed_history.rs 4
+unfloored backend/src/meeting_evidence.rs 1
+unfloored backend/src/mention_sweep.rs 3
+unfloored backend/src/node_atoms_bridge.rs 2
+unfloored backend/src/ocean_health.rs 2
+unfloored backend/src/pipeline_stage_health.rs 4
+unfloored backend/src/promoted_blob_backfill.rs 3
+unfloored backend/src/provenance_link_backfill.rs 2
+unfloored backend/src/reef_digest_read.rs 1
+unfloored backend/src/routes/admin.rs 3
+unfloored backend/src/routes/graph_webhook.rs 1
+unfloored backend/src/routes/usage.rs 2
+unfloored backend/src/selected_publication.rs 2
+unfloored backend/src/services/account_deletion.rs 1
+unfloored backend/src/services/corrections.rs 1
+unfloored backend/src/services/deletion.rs 17
+unfloored backend/src/services/org_deletion_live.rs 5
+unfloored backend/src/services/reef_identity.rs 1
+unfloored backend/src/services/source_publication.rs 3
+unfloored backend/src/services/source_reingest.rs 1
+unfloored backend/src/source_carry_forward.rs 4
+unfloored backend/src/source_evidence.rs 4
+unfloored backend/src/source_reextract.rs 2
+unfloored backend/src/store/dimensions.rs 3
+unfloored backend/src/store/library.rs 1
+unfloored backend/src/store/mod.rs 19
+unfloored backend/src/workers/atom_title_backfill.rs 1
+unfloored backend/src/workers/digest.rs 2
+unfloored backend/src/workers/embed.rs 1
+unfloored backend/src/workers/entity_resolution.rs 1
+unfloored backend/src/workers/gmail_everything_mode.rs 1
+unfloored backend/src/workers/journal_sweep.rs 1
+unfloored backend/src/workers/library_evidence/listing_facts.rs 5
+unfloored backend/src/workers/member_ocean_reconciler.rs 8
+unfloored backend/src/workers/pipeline_stage_health.rs 1
+unfloored backend/src/workers/platform_rollup.rs 2
+unfloored backend/src/workers/reembed.rs 2
+unfloored backend/src/workers/slack_name_backfill.rs 1
+unfloored backend/src/workers/source_atoms.rs 5
+unfloored backend/src/workers/source_atoms_v2.rs 2
+unfloored backend/src/workers/statement_embed.rs 1
+unfloored backend/src/workers/summary.rs 1

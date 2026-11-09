@@ -1,0 +1,48 @@
+-- no-transaction
+-- Migration: 0059_atoms_workspace_index_concurrently
+-- Description: Build the index backing the workspace-scoped
+--   slack-name-backfill atom-selection query (see 0058's header for the
+--   column this indexes and the tenancy bug it closes) WITHOUT blocking
+--   writes on `atoms` while it builds.
+--
+--   `atoms` is a live, read/write-heavy production table (Fly/Supabase
+--   Postgres — every Slack/email/transcript ingest writes to it). A plain
+--   `CREATE INDEX` takes a `SHARE` lock for the entire build, which blocks
+--   every concurrent INSERT/UPDATE/DELETE against the table until it
+--   finishes (CodeRabbit review, PR #181 round 2). `CREATE INDEX
+--   CONCURRENTLY` avoids that — at the cost of two index-build passes
+--   instead of one, and Postgres REQUIRES it to run outside a transaction
+--   block, which is why:
+--     1. This is a SEPARATE migration from 0058's `ALTER TABLE ADD COLUMN`
+--        — sqlx's Postgres migrator sends a migration file's SQL as a single
+--        wire-protocol Query message, and Postgres implicitly wraps MULTIPLE
+--        statements in one such message in a transaction even when sqlx
+--        itself isn't wrapping one (see point 2) — so `CONCURRENTLY` needs to
+--        be the ONLY statement in its migration file, not bundled with the
+--        column add.
+--     2. The file's FIRST LINE is the literal `-- no-transaction` directive
+--        sqlx's migrator recognizes (sqlx-core `MigrationSource`: a migration
+--        whose content starts with exactly that string is executed directly
+--        on the connection instead of being wrapped in `BEGIN`/`COMMIT` — see
+--        sqlx-postgres `src/migrate.rs`'s `no_tx` handling). Without it, sqlx
+--        would wrap this in a transaction and Postgres would reject
+--        `CONCURRENTLY` outright ("cannot run inside a transaction block").
+--
+--   No earlier migration in this repo has needed `CONCURRENTLY`: 0042 and
+--   0052 added plain indexes directly to `atoms` back when the table was
+--   small enough that a brief write-lock was a non-issue; `atoms` is now a
+--   live production table, so this is the first to warrant the extra
+--   ceremony.
+--
+--   Known residual risk: if this build is interrupted mid-way (e.g. the
+--   deploying process is killed), Postgres can leave an INVALID index of the
+--   same name behind, which `IF NOT EXISTS` would then silently skip
+--   rebuilding on a retry. If that happens operationally: run
+--   `DROP INDEX CONCURRENTLY idx_atoms_graph_workspace;` then re-run this
+--   migration.
+--
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_atoms_graph_workspace;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_atoms_graph_workspace
+    ON atoms (graph_id, workspace_id);

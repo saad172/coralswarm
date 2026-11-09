@@ -1,0 +1,108 @@
+-- Migration: 0096_waitlist_snapshot
+-- Description: Platform-admin-metrics PR 5 of 7
+--              (docs/plans/platform-admin-metrics.md, if/when that plan doc
+--              lands). CONTROL-ONLY table: no tenant-tree counterpart exists
+--              or ever should (same "control-only, no tenant twin" precedent
+--              as `user_access_log`/`platform_metrics_daily`/
+--              `platform_active_users`, migration 0095 — see that
+--              migration's own "CI note" for the parity-guard discipline this
+--              inherits).
+--
+--              ── Why this table exists at all ──
+--              The public waitlist (marketing-web/migrations/
+--              0001_create_waitlist_signups.sql, `waitlist_signups`) lives in
+--              a Cloudflare D1 database — a SEPARATE SYSTEM from this
+--              Postgres control/consumer plane, reachable only over D1's REST
+--              API, never via a SQL join. `waitlist_snapshot` is a SYNCED
+--              PROJECTION of that table, refreshed periodically by
+--              `workers::waitlist_sync`, and is NOT the source of truth for
+--              waitlist membership — D1 is, always. If this table and D1 ever
+--              disagree, D1 wins; this table is only ever as fresh as its
+--              last successful sync (`synced_at`), and a sync that fails
+--              (missing Cloudflare credentials, a transient API error) simply
+--              leaves the existing rows stale rather than corrupting them —
+--              see `workers::waitlist_sync`'s module doc for the exact
+--              degrade-gracefully contract.
+--
+--              This table exists so a later PR (PR 6 of 7, the admin
+--              conversion-funnel view) can join waitlist rows against `users`
+--              on normalized email WITHOUT a live cross-system call on every
+--              dashboard load — exactly the same "cache the cross-system read
+--              locally, refresh on a schedule" shape `tenant_databases`
+--              itself uses for Clerk org metadata. That later PR does the
+--              join (`waitlist_snapshot.email_normalized = lower(trim(users.
+--              email))`, EXACT match only — no fuzzy/gmail-dot
+--              canonicalization) and computes conversion buckets; this
+--              migration and its sync worker are deliberately scoped to
+--              making the snapshot available, nothing more (no bucket/status
+--              column here — that is derived live, not stored, for the same
+--              "don't let a materialized rollup drift from its source"
+--              reasoning 0095's header gives for NOT storing user/org growth
+--              curves).
+--
+--              ── Columns ──
+--              `email_normalized` (PK) — lowercased + trimmed email, the join
+--              key PR 6 uses against `users.email` (also compared normalized
+--              there). Primary key, not a separate UNIQUE column: one waitlist
+--              signup per normalized email is exactly the invariant D1's own
+--              `waitlist_signups.email` UNIQUE constraint enforces upstream,
+--              so a bare PK here is the correct 1:1 mirror.
+--              `email_raw` — the ORIGINAL, un-normalized email exactly as D1
+--              stored it (casing, whitespace-stripped-or-not as D1 has it) —
+--              kept for display/support purposes; `email_normalized` alone
+--              would lose casing an operator might need when contacting a
+--              signup.
+--              `signed_up_at` — mirrors D1's `waitlist_signups.created_at`
+--              (when the signup itself was recorded, not `first_seen_at`,
+--              which is a first-touch marketing timestamp D1's own PR
+--              #357/cs-admin-b-waitlist-attribution schema tracks
+--              separately). Nullable: a defensively-parsed sync (D1's
+--              `created_at` is TEXT, not a typed timestamp) that fails to
+--              parse a given row's value stores NULL here rather than
+--              dropping the row or failing the whole sync.
+--              `utm_source` — first-touch acquisition channel, when D1 has
+--              the column (see below) and the row carries a value. Nullable
+--              from day one: D1's `utm_source` column ships in PR #357
+--              (cs-admin-b-waitlist-attribution), not yet merged as of this
+--              PR, and even once merged is itself nullable (client-side
+--              capture, may be absent). `workers::waitlist_sync` is written
+--              to tolerate D1 not having this column at all yet — see that
+--              worker's module doc.
+--              `country` — same "PR #357, may not exist in D1 yet" caveat as
+--              `utm_source`; derived server-side from `CF-IPCountry` on the
+--              marketing worker's side (never client-supplied), per that
+--              PR's migration.
+--              `synced_at` — when THIS row was last written by a successful
+--              sync pass; the freshness signal `workers::waitlist_sync`'s own
+--              doc and PR 6's dashboard rely on to show "waitlist data as of
+--              <time>" rather than silently presenting a stale snapshot as
+--              current.
+--
+--              ── CI note ──
+--              `waitlist_snapshot` MUST be added to `CONTROL_TABLES` in
+--              `scripts/check_schema_parity.sh` in this SAME PR (done) — the
+--              same discipline 0095's header describes for its three tables.
+--              Deliberately NOT added to `scripts/rls_coverage.manifest`'s
+--              roster: that manifest's roster is derived from
+--              `0083_consumer_rls.sql`'s `CREATE POLICY` lines (a per-account
+--              content boundary), and `waitlist_snapshot` has no account
+--              dimension at all — it is platform-operator data synced from a
+--              system with no concept of a CoralSwarm account, exactly the
+--              same "deliberate non-scoped surface" category `user_access_log`
+--              falls into (see that table's migration header and
+--              `workers::access_log_purge`'s module doc).
+--
+-- Depends on: 0095_platform_metrics (the control-only-table precedent this
+--             migration follows)
+--
+-- Down:
+--   DROP TABLE IF EXISTS waitlist_snapshot;
+
+CREATE TABLE waitlist_snapshot (
+    email_normalized TEXT        PRIMARY KEY,
+    email_raw        TEXT        NOT NULL,
+    signed_up_at      TIMESTAMPTZ,
+    utm_source        TEXT,
+    country           TEXT,
+    synced_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);

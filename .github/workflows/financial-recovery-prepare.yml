@@ -1,0 +1,77 @@
+name: Verify operator-retained financial release
+
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: Exact serving configuration used by operator preparation
+        type: choice
+        options: [fly.toml, fly.staging.toml, fly.manual.toml]
+        required: true
+      receipt_json:
+        description: Exact financial-image.json bytes from operator persistent storage
+        type: string
+        required: true
+      operator_evidence_json:
+        description: Exact operator-retention.json bytes beside the durable receipt
+        type: string
+        required: true
+      receipt_sha256:
+        description: Independently read-back SHA256 of financial-image.json
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate operator receipt bytes without registry or deployment access
+        env:
+          RECEIPT_JSON: ${{ inputs.receipt_json }}
+          OPERATOR_EVIDENCE_JSON: ${{ inputs.operator_evidence_json }}
+          RECEIPT_SHA256: ${{ inputs.receipt_sha256 }}
+          RELEASE_CONFIG: ${{ inputs.config }}
+        run: |
+          python3 scripts/test_deploy_financial_backend.py
+          python3 scripts/test_deploy_local_financial.py
+          mkdir original
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          Path("original/financial-image.json").write_bytes(os.environ["RECEIPT_JSON"].encode())
+          Path("original/operator-retention.json").write_bytes(os.environ["OPERATOR_EVIDENCE_JSON"].encode())
+          PY
+          python3 scripts/deploy_financial_backend.py verify --config "$RELEASE_CONFIG" --receipt original/financial-image.json --operator-evidence original/operator-retention.json --expected-sha256 "$RECEIPT_SHA256" --expected-source "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        id: candidate
+        with:
+          name: financial-receipt-candidate
+          path: original/*.json
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.candidate.outputs.artifact-id }}
+          path: downloaded
+          merge-multiple: true
+      - name: Independently compare the exact downloaded artifact
+        env:
+          RECEIPT_SHA256: ${{ inputs.receipt_sha256 }}
+          RELEASE_CONFIG: ${{ inputs.config }}
+        run: |
+          python3 scripts/deploy_financial_backend.py verify --config "$RELEASE_CONFIG" --receipt downloaded/financial-image.json --operator-evidence downloaded/operator-retention.json --expected-sha256 "$RECEIPT_SHA256" --expected-source "$GITHUB_SHA" --compare original/financial-image.json --write-ci-readback downloaded/ci-readback.json
+      - name: Retain the verified deployment handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-release-verified
+          path: downloaded/*.json
+          if-no-files-found: error
+          retention-days: 90

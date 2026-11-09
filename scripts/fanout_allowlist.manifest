@@ -1,0 +1,70 @@
+# Reviewed exceptions to the "no O(rows) request fan-out" guard
+# (scripts/check_no_unbounded_fanout.sh, W7 /
+# docs/plans/request-reliability-and-scale.md §6.3).
+#
+# An entry here is NOT "this file is safe forever". It is "this fan-out was
+# reviewed once, on the reasoning written next to it". When the reasoning
+# stops being true, the entry is a silent regression — which is why every
+# line carries one, and why the guard fails on an entry whose file no longer
+# contains the pattern at all.
+#
+# Format: <repo-relative path>  <comma-separated approved fingerprints>  <reason>
+#
+# THE FINGERPRINTS ARE LOAD-BEARING, and a bare count was not enough. Without
+# any list, an entry is a blanket exemption for the whole file and a newly
+# added O(rows) fan-out passes silently. With only a COUNT, deleting one
+# approved fan-out and adding a different one keeps the count equal — same
+# blanket exemption, one refactor later. The fingerprint is
+# `<collection>.<map|flatMap>-><api member>`, so the entry approves SPECIFIC
+# reviewed call sites and any substitution fails until a human looks again.
+
+# User-bounded: the fan-out is over reefs the USER selected in the promote
+# dialog, not over the ocean. Its width is a human's selection, so it does
+# not grow with the data. Routed through W1's transport limiter regardless.
+#
+# Fingerprint updated for #871 (recorded 2026-09-10 by its backend review
+# follow-up; #871 itself merged without this edit, leaving the guard RED ON
+# MAIN). Two changes, neither of them a new fan-out shape:
+#   * `attempted.map->api.reefs.promote` became `requests.map->api.reefs.
+#     promote`. `requests` is `attempted.flatMap(ocean => reefs)` — the
+#     cross-product of TWO human selections (how many oceans someone picked,
+#     how many reefs they are promoting), one leg per (reef, ocean) pair.
+#     That is the identical "human selection, never row count" bound this
+#     entry already asserts, and the exact shape the useJobPoll entry below
+#     already spells out for the POLLING half of the same feature.
+#   * `attempted.map->api.reefs.promoteSource` is gone: #871 replaced the
+#     synchronous source-publish call with a single `POST` that creates one
+#     source connection, so there is no fan-out left on that path at all.
+web/components/PromoteModal.tsx  attempted.map->api.reefs.promoteSession,requests.map->api.reefs.promote  user-selected (reef x ocean) pairs; width is a human selection, not row count
+
+# Bounded by IN-FLIGHT PROMOTE JOB count, not row count. `ids` is
+# `allBatchJobIds`'s output — one entry per still-running leg across every
+# batch a user (or, worst case, this account across a few open tabs) has
+# actively promoting at once: one leg per (reef, chosen ocean) pair. That's
+# bounded by human selections on both axes (how many reefs someone is
+# promoting, how many oceans they picked each into), the same "human
+# selection" shape the PromoteModal.tsx entry above already covers for the
+# OUTGOING half of the same feature — this is the polling half. Never grows
+# with reef/ocean/coral row counts. Routed through W1's transport limiter
+# regardless.
+web/lib/useJobPoll.ts  ids.map->api.jobs.get  in-flight promote-job ids (per reef×ocean the caller is actively promoting), not row count
+
+# (The ask/page.tsx entry — `ids.map->api.graphs.atoms`, fanning out over the
+# caller's ocean ids — lived here until the web redesign. /ask became a
+# redirect stub to /chats and the enrichment it fed was dropped rather than
+# moved: `api.graphs.atoms` now has no non-test call site anywhere in web/.
+# Removed because the staleness check fires on an allowlisted file that no
+# longer contains the pattern, which is the mechanism working as intended.)
+
+# (The libraryTopics.ts entry — `graphs.map->api.reefs.list`, one list per
+# reachable workspace — lived here until #891. Library is now a single
+# paged `GET /v1/library`, so the file no longer fans out. Removed because
+# the staleness check fires on an allowlisted file that no longer contains
+# the pattern.)
+
+# (The reefs/page.tsx entry lived here until W3. It was the fan-out the whole
+# plan existed to remove — one request per reef — and the entry said in so
+# many words that W3 must delete it. W3 did; the guard's staleness check
+# fired on the next run and made that non-optional. Left as a note because
+# the mechanism working is worth recording: an exception that carries its own
+# expiry condition is the only kind that reliably expires.)

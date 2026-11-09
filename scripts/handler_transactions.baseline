@@ -1,0 +1,48 @@
+# Request-handler transaction bypass ratchet; page-load standard L1 §4.3.
+# Freeze per-file/per-opener counts; reductions must tighten the baseline.
+# Existing control-plane scopes and legacy routes are included as debt.
+# Prefer Tenant methods, which preserve route class/lane/timeout.
+backend/src/routes/activity.rs free_scope 1
+backend/src/routes/addin.rs raw_begin 3
+backend/src/routes/addin_microsoft.rs raw_begin 6
+backend/src/routes/admin.rs free_scope 6
+backend/src/routes/billing_manage.rs free_scope 1
+backend/src/routes/billing_seats.rs free_scope 2
+backend/src/routes/calendar.rs free_scope 1
+backend/src/routes/checkout.rs free_scope 4
+backend/src/routes/composio.rs free_scope 15
+backend/src/routes/connector_audit.rs free_scope 2
+backend/src/routes/connectors.rs free_scope 1
+backend/src/routes/conversations.rs answer_read 1
+backend/src/routes/email_unsubscribe.rs legacy_tenant 1
+backend/src/routes/extra_usage.rs free_scope 3
+backend/src/routes/github.rs free_scope 5
+backend/src/routes/gmail_everything_mode.rs free_scope 3
+backend/src/routes/google_push.rs free_scope 2
+backend/src/routes/google_push.rs legacy_tenant 1
+backend/src/routes/google_push.rs raw_begin 1
+backend/src/routes/google_workspace_connect.rs free_scope 1
+backend/src/routes/graph_webhook.rs free_scope 4
+backend/src/routes/graph_webhook.rs legacy_tenant 1
+backend/src/routes/oauth.rs free_scope 6
+backend/src/routes/org_domains.rs free_scope 1
+backend/src/routes/org_join_requests.rs free_scope 1
+backend/src/routes/org_members.rs raw_begin 1
+backend/src/routes/org_slots.rs free_scope 6
+backend/src/routes/org_trial_checkout.rs free_scope 3
+backend/src/routes/orgs_create.rs free_scope 2
+backend/src/routes/orgs_create.rs raw_begin 3
+backend/src/routes/outlook_everything_mode.rs free_scope 3
+backend/src/routes/queries.rs free_scope 16
+backend/src/routes/query_audit.rs free_scope 2
+backend/src/routes/retractions.rs free_scope 2
+backend/src/routes/slack.rs free_scope 8
+backend/src/routes/slack_interactivity.rs free_scope 7
+backend/src/routes/stripe_webhook.rs free_scope 9
+backend/src/routes/teams.rs free_scope 2
+backend/src/routes/teams_bot.rs free_scope 2
+backend/src/routes/teams_ingest.rs free_scope 11
+backend/src/routes/teams_onboarding.rs free_scope 4
+backend/src/routes/transcript.rs free_scope 1
+backend/src/routes/usage.rs free_scope 3
+backend/src/routes/workflows.rs free_scope 7

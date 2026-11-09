@@ -1,0 +1,18 @@
+# Staging web — mirrors web/fly.toml (prod) but targets the staging app.
+# Deployed by CI on push to `develop`, built against the staging backend.
+app = 'coralswarm-web-staging'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

@@ -1,0 +1,15 @@
+{
+  "addOns": {
+    "common": {
+      "name": "CoralSwarm",
+      "logoUrl": "https://app.coralswarm.example/addin/gmail-icon.png"
+    },
+    "meet": {
+      "web": {
+        "sidePanelUrl": "https://app.coralswarm.example/meet/sidepanel",
+        "addOnOrigins": ["https://app.coralswarm.example"],
+        "logoUrl": "https://app.coralswarm.example/addin/gmail-icon.png"
+      }
+    }
+  }
+}

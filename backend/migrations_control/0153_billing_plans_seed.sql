@@ -1,0 +1,73 @@
+-- Migration: 0153_billing_plans_seed
+-- Description: usage-metering PR10 (`.scratch/usage-metering/plan.md` §1
+--   PR10) — seeds the two `plans` (migration `0150_credit_ledger.sql`) rows
+--   this train actually ships: `free` and `founder_comp`. `grants` (which
+--   accounts hold which plan) is deliberately NOT seeded here — see
+--   `backend/src/bin/grant_plan.rs`'s own header for why grant issuance must
+--   be operator-run rather than baked into a migration.
+--
+--   Per the PR10 task brief: "Seeding plans is data that can ship in a
+--   migration or a script; seeding grants for specific accounts must be
+--   operator-run." This migration takes the migration route for `plans`
+--   because it is GLOBAL reference data with no per-account identity to
+--   resolve (unlike a grant, which names a specific account) — same
+--   category as `model_rates`/`credit_conversion`'s own migration-seeded
+--   rows (`0148_model_rates.sql`). Idempotent (`ON CONFLICT (code) DO
+--   NOTHING`, keyed on `plans.code`'s own UNIQUE constraint), so re-running
+--   this migration (which sqlx never does against an already-applied
+--   database, but a `--seed`-style manual re-run during development might)
+--   cannot double-insert.
+--
+--   ── free ──
+--   1,000 credits, founder-decided (memory
+--   coralswarm-usage-billing-grilling-decisions / plan §1 PR10 / §2 item 14).
+--   `refresh_kind = 'lifetime'`, `period_length = NULL` — NEVER resets.
+--   Journal compiles are included in the tier, not billed separately (the
+--   plan's own words: "Journal compiles are included in the tier, not
+--   extra") — this is true by construction and needs no schema
+--   representation: PR9's journal axis debits the SAME `credit_balances`
+--   pool every other axis debits, so a Free account's journal-compile
+--   credits are the same 1,000 as everything else, not a separate pool.
+--
+--   ── founder_comp ──
+--   1,000,000 credits — DECIDED BY FOUNDER 2026-08-13 (plan §1 PR10: "≈
+--   $4,400 of real provider spend at the $0.0044 basis"). Recipients are
+--   Alex's personal account and `testorg`, nobody else — enforced by
+--   `grant_plan.rs` being an operator-run script with no default recipient
+--   list, not by anything in this migration.
+--
+--   `refresh_kind` for founder_comp is **NOT founder-decided** — only the
+--   CREDIT AMOUNT (1,000,000) was. This migration's call, made explicitly
+--   here rather than left implicit: `refresh_kind = 'lifetime'`,
+--   `period_length = NULL`, same shape as `free`, i.e. a ONE-TIME,
+--   non-renewing grant of 1,000,000 credits that is never replenished.
+--   Reasoning: the plan's own framing is "a real, FINITE pool that actually
+--   debits — not a bypass" and "sized to be large enough never to block
+--   dogfooding, small enough that the balance is a NUMBER THAT VISIBLY
+--   MOVES" (plan §1 PR10). Both properties depend on the pool being finite
+--   in the same sense Free's is: an `anniversary` refresh (say, monthly)
+--   would make the effective annual ceiling 12,000,000 credits — not
+--   meaningfully different from unlimited for a dogfooding account, and
+--   a periodic reset would mask exactly the runaway-worker signal the plan
+--   calls out by name (the post-#437 `infer_expertise` burn) by wiping the
+--   visible drop before an operator necessarily notices it. If a future
+--   change wants founder_comp to actually recur, that is a deliberate,
+--   separately-reviewed decision (change `refresh_kind` to `anniversary`
+--   with an explicit `period_length`), not the default this migration
+--   ships.
+--
+--   `is_active` defaults `true` for both — there is no third, inactive plan
+--   introduced here to make `false` meaningful yet.
+--
+-- Depends on: 0150_credit_ledger.sql (`plans` table + its
+--   `plans_period_length_matches_refresh_kind` CHECK, which is why both
+--   rows below carry `period_length = NULL` alongside `refresh_kind =
+--   'lifetime'` — the CHECK rejects any other pairing for a lifetime plan).
+-- Down:
+--   DELETE FROM plans WHERE code IN ('free', 'founder_comp');
+
+INSERT INTO plans (code, name, credits, refresh_kind, period_length, is_active)
+VALUES
+    ('free',         'Free',          1000,    'lifetime', NULL, true),
+    ('founder_comp', 'Founder/Comp',  1000000, 'lifetime', NULL, true)
+ON CONFLICT (code) DO NOTHING;

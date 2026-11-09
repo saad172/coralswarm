@@ -1,0 +1,28 @@
+-- Migration: 0044_supersession_edge_created_at
+-- Description: `supersession_edge.created_at` (T4, slice 0, 2026-08-08). The
+--   table has never carried its own creation timestamp: every reader
+--   (`Store::upsert_supersession_edge{,_with_kind}{,_scoped}` /
+--   `SupersessionEdge`) has always synthesized `created_at` as the server
+--   clock AT UPSERT TIME — see the "NOTE: `supersession_edge` has no
+--   creation-timestamp column" comments those methods carry in
+--   `backend/src/store/mod.rs`. This adds a REAL stored column so a future
+--   reader (review-queue age, the 7-day deadline sweep in
+--   `workers::review_deadline`, or an audit query) can ask "when was this
+--   edge actually detected" instead of only ever being told "now".
+-- Depends on: 0001_tenant_baseline (supersession_edge)
+-- PAIRED WITH: migrations_control/0137_supersession_edge_created_at.sql — the
+--              DDL in the two files is IDENTICAL and must stay that way
+--              (`scripts/check_schema_parity.sh`).
+-- Down:
+--   ALTER TABLE supersession_edge DROP COLUMN IF EXISTS created_at;
+--
+-- WHY `DEFAULT now()` FOR EXISTING ROWS TOO. No prior producer ever recorded
+-- a real creation instant for this table (see above), so there is nothing to
+-- backfill from — `now()` at migration time is not a guess standing in for a
+-- lost true value, it is the same fallback every existing caller already
+-- uses today. Every row from this migration forward gets its GENUINE insert
+-- time instead, since `ADD COLUMN ... DEFAULT now()` only evaluates once (at
+-- ALTER TABLE time) for pre-existing rows; new INSERTs each get their own
+-- `now()` at write time via the column default.
+ALTER TABLE supersession_edge
+  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();

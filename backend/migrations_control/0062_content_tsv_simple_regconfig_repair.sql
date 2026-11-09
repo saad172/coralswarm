@@ -1,0 +1,113 @@
+-- Migration: 0062_content_tsv_simple_regconfig_repair
+-- (Originally authored/numbered 0060; renumbered to 0062 — main took 0060
+-- (`0060_mcp_user_prefs.sql`) and 0061 (`0061_mcp_tool_calls.sql`) via PR
+-- #195 while this branch was open. sqlx's migrator rejects duplicate
+-- version numbers even when filenames differ, and that collision isn't
+-- something `git` itself would flag on merge.)
+--
+-- Description: Repair `atoms.content_tsv` rows built with a stemming
+--   regconfig so keyword_search (BM25) stops silently missing matches.
+--
+--   `Store::keyword_search` (backend/src/store/mod.rs) has ALWAYS queried
+--   `content_tsv` with `websearch_to_tsquery('simple', $1)` — 'simple' does
+--   no stemming, so a search for "running" stays the literal token
+--   "running". Until this migration's companion code fix
+--   (backend/src/workers/embed.rs, `update_content_tsv_and_clear_failure`),
+--   the WRITE side built `content_tsv` with the atom's PER-ATOM
+--   `fts_language` regconfig (e.g. "english"), which DOES stem — "running"
+--   is indexed as the lexeme "run". A stemmed tsvector compared against an
+--   unstemmed tsquery via `@@` silently returns false on any word whose
+--   stemmed form differs from its surface form: `content_tsv @@
+--   websearch_to_tsquery('simple', 'running')` never matches a row indexed
+--   as `to_tsvector('english', 'we are running late')`, with no error —
+--   just a missing search result. The code fix makes the write side always
+--   use 'simple' too, matching the query side that was already 'simple'.
+--
+--   This is the one-time repair for every row already written under the
+--   old per-language regconfig (and, as a superset, any row that never got
+--   a `content_tsv` at all). There is no reliable way to detect which
+--   specific rows were tokenised with a stemming regconfig — Postgres does
+--   not record which regconfig produced a stored tsvector — so per the plan
+--   the repair rebuilds `content_tsv` for every atom whose plaintext is
+--   available to Postgres, rather than trying to selectively target
+--   suspect rows.
+--
+-- ── Why this migration itself does NOT run that rebuild (CodeRabbit
+--   review, PR #190 round 1, "Major") ──────────────────────────────────────
+--
+--   The original version of this migration ran the rebuild as a single
+--   unbounded `UPDATE atoms SET content_tsv = ... WHERE content_inline IS
+--   NOT NULL`. On a populated deployment `atoms` is a live, read/write-heavy
+--   production table (Fly/Supabase Postgres — every Slack/email/transcript
+--   ingest writes to it): one UPDATE touching every row takes row-level
+--   locks as it goes and holds ALL of them until the migration's single
+--   transaction commits, plus a large single WAL burst — lock/bloat risk on
+--   a large table, the same class of concern that made migration 0059
+--   switch to `CREATE INDEX CONCURRENTLY` instead of a plain `CREATE INDEX`.
+--
+--   The natural mitigation — batch the UPDATE with a `LIMIT` inside a
+--   `plpgsql` loop — does NOT actually bound anything here: sqlx wraps a
+--   migration file's statements in one transaction (`BEGIN`/`COMMIT` around
+--   the whole file), and `COMMIT`/transaction-control statements are only
+--   usable inside a PROCEDURE invoked via a top-level `CALL`, never inside a
+--   plain `DO $$ ... $$` block or a function. A `DO`-block loop would issue
+--   many small UPDATEs, but every row lock any of them takes is still held
+--   until the SAME final `COMMIT` that a single unbatched UPDATE would have
+--   needed — no reduction in lock duration, no reduction in total WAL, just
+--   more round-trips. A real per-batch `COMMIT` would need a stored
+--   PROCEDURE called at the top level outside any transaction (mirroring
+--   the `-- no-transaction` directive 0059 uses for `CREATE INDEX
+--   CONCURRENTLY`) — but per 0059's own header, Postgres implicitly wraps
+--   MULTIPLE statements sent in a single wire-protocol Query message in a
+--   transaction, which is exactly how sqlx sends a migration file's SQL; a
+--   `CREATE PROCEDURE` + `CALL` combination bundled in the same file would
+--   therefore still run inside one implicit transaction, and any `COMMIT`
+--   the procedure attempted would error out. Splitting `CREATE PROCEDURE`
+--   and `CALL` across separate migration files would work, but introduces a
+--   stored-procedure mechanism with no precedent anywhere else in this
+--   migration history, purely to reimplement bounded background sweeping —
+--   something this codebase already has a proven, reviewed, tested pattern
+--   for.
+--
+--   Instead, the repair now runs as a bounded, cursor-paginated sweep —
+--   `workers::content_tsv_backfill`, the SAME shape as
+--   `workers::slack_name_backfill` (keyset `after_atom_id` cursor, a small
+--   fixed batch size per job execution, always-advance-the-cursor
+--   termination guarantee) — which this migration's own prior revision
+--   already flagged as the right tool for the R2-blob case
+--   (`content_inline IS NULL`) and is now used for the WHOLE repair, not
+--   just that one gap. Each job execution issues one small, quickly
+--   committed UPDATE instead of the whole table at once, bounding both row
+--   lock duration and per-transaction WAL volume, and the worker is not
+--   wired to any automatic trigger — it is a one-time repair, so an operator
+--   hand-inserts a single unscoped sweep job after deploying this PR (see
+--   that module's doc comment for the exact `INSERT INTO jobs` statement,
+--   mirroring `workers::slack_name_backfill`'s documented standalone
+--   one-shot pattern).
+--
+--   This migration file is kept (renumbered, not deleted) purely as the
+--   historical/changelog anchor for the regconfig bug and its fix — it
+--   performs no data mutation itself.
+--
+--   Scope note (unchanged from the original plan): as of this migration, R2
+--   blob storage is not yet enabled in this deployment (see store/mod.rs's
+--   `copy_atoms_to_graph` comment — "today R2 is off and content_inline is
+--   served directly"), so `content_inline` holds plaintext for effectively
+--   every atom; the worker sweep's `content_inline IS NOT NULL` filter
+--   covers the whole table today. If R2 is enabled before the sweep is run,
+--   atoms whose content only lives in an R2 blob are not covered by
+--   `content_inline IS NOT NULL` and need the R2-aware repair path
+--   (decrypt from R2 first, same shape as
+--   `workers::slack_name_backfill::run_batch`'s R2 fetch) added to that
+--   worker before the sweep job is enqueued in that environment.
+--
+-- Down:
+--   -- No data mutation to reverse; this migration is a changelog anchor
+--   -- only. See `workers::content_tsv_backfill` for the (out-of-migration)
+--   -- repair sweep itself.
+
+-- Intentionally a no-op statement: sqlx's migrator requires at least one
+-- statement per migration file, and this migration performs no schema or
+-- data change (see header above for why the rebuild moved to
+-- `workers::content_tsv_backfill`, a code-side job sweep, instead).
+SELECT 1;

@@ -1,0 +1,16 @@
+/* Host-specific layout only; common progress/evidence/frame presentation is
+   implemented in packages/answer-ui, shared with the React app. */
+.csau-widget .csau-frame-header { padding: 10px var(--csau-widget-gutter, 14px); background: var(--csau-bg-header); }
+.csau-widget .csau-frame-body { padding: 0; }
+.csau-widget .csau-frame-footer { padding: 0; border: 0; }
+.csau-widget button.csau-evidence-card { min-height: var(--csau-target-size, 0px); }
+.csau-widget .csau-evidence-detail { scroll-margin: 12px; }
+.csau-widget button.csau-evidence-card-active:hover { background: var(--csau-accent-soft); }
+.csau-widget .widget-search-card .csau-source-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--csau-search-title-lines, 1); white-space: normal; }
+
+/* Static reef excerpts have no detail action, so keep their supplied text readable. */
+.csau-widget .widget-reef-timeline .csau-source-title,
+.csau-widget .widget-reef-timeline .csau-source-preview {
+  display: block; overflow: visible; white-space: pre-wrap;
+  overflow-wrap: break-word; overflow-wrap: anywhere; -webkit-line-clamp: unset;
+}

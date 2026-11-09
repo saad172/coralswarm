@@ -1,0 +1,20 @@
+{
+  "id": "1738368000000",
+  "messageType": "message",
+  "subject": "Sprint planning kickoff",
+  "createdDateTime": "2026-02-01T09:00:00Z",
+  "from": {
+    "user": {
+      "id": "aad-user-priya-0001",
+      "displayName": "Priya Nair"
+    }
+  },
+  "body": {
+    "contentType": "html",
+    "content": "<p>Let&#39;s lock the sprint scope by Friday. Ping me with blockers.</p>"
+  },
+  "channelIdentity": {
+    "teamId": "19:team-eng@thread.tacv2",
+    "channelId": "19:channel-sprint@thread.tacv2"
+  }
+}

@@ -1,0 +1,28 @@
+-- no-transaction
+-- The OceanHealth scheduler (`workers/ocean_health.rs`) reads every
+-- OceanHealth row that is active or finished in the last 6 hours. With only
+-- 0418 the done half kept the whole query on a full scan at 145,668 shared
+-- buffers per run; with both indexes it reads 13 to 14 (measured on a copy of
+-- tenant-coralswarm, 2026-11-02). The same index serves the retention sweep
+-- that a later PR adds: a batch of 5,000 done rows older than the window
+-- deleted in 8 ms on the prototype.
+-- Partial on done rows, about 1.24 million; each finished job inserts once.
+--
+-- `CREATE INDEX CONCURRENTLY` cannot run in a transaction, so it is alone in
+-- a `-- no-transaction` file. Under `apply_tree`'s session lock_timeout of
+-- 5 s the build fails with 55P03 whenever any transaction in the database
+-- stays open longer than that, and leaves an INVALID index. `apply_tree`'s
+-- own 55P03 retry then re-runs this file, `IF NOT EXISTS` skips the
+-- leftover with a notice, and sqlx records the migration as applied with
+-- the index still INVALID (#1668). Recover by hand, with no lock timeout:
+--   SET lock_timeout = 0;
+--   DROP INDEX CONCURRENTLY IF EXISTS jobs_done_kind_finished;
+--   CREATE INDEX CONCURRENTLY jobs_done_kind_finished ON jobs (kind, finished_at) WHERE status = 'done';
+--   SELECT indisvalid FROM pg_index WHERE indexrelid = 'jobs_done_kind_finished'::regclass;
+-- Run each statement on its own, outside a transaction. The CREATE has no
+-- IF NOT EXISTS, so it fails loudly if the DROP did not finish.
+-- PAIRED WITH: tenant 0230 (DDL byte-identical). `jobs` is a shared table
+-- and `check_schema_parity.sh` diffs its schema.
+-- Down: DROP INDEX CONCURRENTLY IF EXISTS jobs_done_kind_finished;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_done_kind_finished ON jobs (kind, finished_at) WHERE status = 'done';

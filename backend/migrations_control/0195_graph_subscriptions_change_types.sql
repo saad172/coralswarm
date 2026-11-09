@@ -1,0 +1,45 @@
+-- Migration: 0195_graph_subscriptions_change_types
+-- Description: m365 enterprise train PR 4.4 ("upstream deletion
+--   propagation"), CodeRabbit round 1 finding 1 — persist the `changeType`
+--   capability a subscription was actually CREATED with, so a subscription
+--   created under an older capability set can be detected and replaced.
+--
+--   The bug this closes: `connectors::microsoft::ensure_subscription_for`
+--   reuses an existing subscription whenever its stored `expires_at` is
+--   still beyond the refresh window, and `workers::graph_subscriptions`'
+--   renewal tick extends that expiry with `PATCH /subscriptions/{id}`
+--   (`renew_subscription`), which changes ONLY `expirationDateTime` — Graph
+--   has no way to widen an existing subscription's `changeType`. So every
+--   subscription that existed before PR 4.4 shipped would be renewed
+--   forever at `changeType: "created"` and would NEVER deliver the
+--   `deleted` notifications this whole PR is built to propagate. Deletion
+--   propagation would have appeared to work (new installs fine, tests
+--   green) while silently doing nothing for every EXISTING install — the
+--   worst shape of failure, since nothing reports it.
+--
+--   `change_types TEXT NOT NULL DEFAULT 'created'`: the exact string sent
+--   as `changeType` at create time (`connectors::microsoft::
+--   subscription_change_types`, e.g. `'created,updated,deleted'` for mail
+--   and Teams channel/chat, `'created'` for the transcript stream). The
+--   default is deliberately `'created'` rather than today's widened value:
+--   every row that already exists WAS created with `created`-only, so the
+--   default states the truth about the existing fleet and makes the
+--   comparison in `ensure_subscription_for` fire for exactly those rows —
+--   a default of the new value would silently mark the whole legacy fleet
+--   as already-upgraded and re-open this same hole. No backfill (the
+--   default IS the backfill).
+--
+--   The comparison is a plain string equality against the value
+--   `subscription_change_types(resource)` returns TODAY, not a version
+--   number: the capability set is derived from the resource kind in one
+--   place, so the string itself is the version. Widening (or narrowing)
+--   that function later automatically re-triggers replacement for every
+--   affected row, with no second bookkeeping column to keep in step.
+--
+-- Depends on: 0190_graph_subscriptions_owner_user_id (last structural change
+--             to this table).
+--
+-- Down: ALTER TABLE graph_subscriptions DROP COLUMN IF EXISTS change_types;
+
+ALTER TABLE graph_subscriptions
+    ADD COLUMN IF NOT EXISTS change_types TEXT NOT NULL DEFAULT 'created';

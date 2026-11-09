@@ -1,0 +1,116 @@
+{
+  "toolkit": "zendesk",
+  "label": "Zendesk",
+  "version": "20260916_00",
+  "scopes": {
+    "required": [
+      "read"
+    ]
+  },
+  "read_tools": [
+    "ZENDESK_GET_SEARCH_EXPORT",
+    "ZENDESK_GET_TICKETS_CONVERSATION_LOG"
+  ],
+  "namespace": {
+    "kind": "host",
+    "source": {
+      "connection": {
+        "id": [
+          "/params/base_url",
+          "/data/base_url"
+        ],
+        "host": true
+      }
+    }
+  },
+  "streams": [
+    {
+      "kind": "ticket",
+      "change": "filter",
+      "call": {
+        "tool": "ZENDESK_GET_SEARCH_EXPORT",
+        "args": {
+          "query": "updated>{{since_minutes}}minutes",
+          "filter_type": "ticket",
+          "page_size": "{{page_size}}",
+          "page_after": "{{cursor}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "has_more": "/meta/has_more",
+        "next": "/meta/after_cursor"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updated_at",
+          "/created_at"
+        ],
+        "title": "/subject",
+        "body": "/description",
+        "state": "/status"
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "{title}"
+        ]
+      },
+      "children": {
+        "kind": "comment",
+        "call": {
+          "tool": "ZENDESK_GET_TICKETS_CONVERSATION_LOG",
+          "args": {
+            "ticket_id": "{{parent}}",
+            "page_size": 100,
+            "page_after": "{{cursor}}"
+          }
+        },
+        "page": "",
+        "items": "/events",
+        "paging": {
+          "style": "cursor",
+          "has_more": "/meta/has_more",
+          "next": "/meta/after_cursor"
+        },
+        "fields": {
+          "id": "/id",
+          "updated_at": "/created_at",
+          "body": {
+            "path": "/content/body",
+            "format": "html"
+          },
+          "author": {
+            "object": "/author",
+            "id": [],
+            "name": "/display_name"
+          }
+        },
+        "capture": {
+          "chunk": "document",
+          "title": [
+            "Comment on {parent_title}",
+            "Comment: {excerpt}"
+          ]
+        }
+      }
+    }
+  ],
+  "limits": {
+    "coverage": "every ticket the connected agent can see, changed after you connect, with its full conversation log (public replies and internal notes) re-read whenever the ticket changes",
+    "history": "nothing from before you connect is imported",
+    "description_history": "each captured change keeps the previous version as evidence",
+    "state_history": "statuses observed at each change; ticket audits are not read",
+    "search_lag": "tickets are found through Zendesk search, which can take a few minutes to index a change; the 5-minute poll overlap covers typical lag",
+    "archives": "archived tickets (closed more than 120 days) are not returned by search exports",
+    "problems_and_requests": "problem tickets and end-user requests are tickets and are captured once, as tickets",
+    "help_center": "Help Center articles are not captured"
+  },
+  "references": [
+    "https://docs.composio.dev/toolkits/zendesk.md",
+    "https://developer.zendesk.com/api-reference/ticketing/ticket-management/search/#export-search-results",
+    "https://support.zendesk.com/hc/en-us/articles/4408886879258-Zendesk-Support-search-reference",
+    "https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#list-tickets"
+  ]
+}

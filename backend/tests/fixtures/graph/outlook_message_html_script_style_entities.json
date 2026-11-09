@@ -1,0 +1,29 @@
+{
+  "id": "AAMkAGI2TG94BBB=",
+  "subject": "Deploy window reminder",
+  "from": {
+    "emailAddress": {
+      "name": "Priya Nair",
+      "address": "priya.nair@acme-corp.example"
+    }
+  },
+  "toRecipients": [
+    {
+      "emailAddress": {
+        "name": "Eng Team",
+        "address": "eng-team@acme-corp.example"
+      }
+    }
+  ],
+  "ccRecipients": [],
+  "receivedDateTime": "2026-02-03T08:00:00Z",
+  "bodyPreview": "Deploy at 5pm...",
+  "body": {
+    "contentType": "html",
+    "content": "<style>.warn{color:red}</style><script>alert('x');</script><p>Deploy at 5&nbsp;pm &amp; watch dashboards &mdash; don&#39;t forget the &lt;prod&gt; flag.</p>"
+  },
+  "conversationId": "AAQkAGI2_conv_002",
+  "categories": [],
+  "hasAttachments": false,
+  "parentFolderId": "AAMkAGI2_inbox_folder"
+}

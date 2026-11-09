@@ -1,0 +1,50 @@
+{
+  "id": "18c9f2a1b3d4e5f6",
+  "threadId": "18c9f1a0b2c3d4e5",
+  "labelIds": ["INBOX", "IMPORTANT", "CATEGORY_PERSONAL"],
+  "snippet": "Thanks, this looks great — let's lock it in. On Fri, Aug 21, 2026 at 3:15 PM Sam Rivera wrote: Draft attached...",
+  "historyId": "9876500",
+  "internalDate": "1787576400000",
+  "sizeEstimate": 4321,
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      { "name": "Delivered-To", "value": "sam.rivera@acme-corp.example" },
+      { "name": "From", "value": "\"Priya Nair\" <priya.nair@acme-corp.example>" },
+      { "name": "To", "value": "sam.rivera@acme-corp.example" },
+      { "name": "Cc", "value": "eng-team@acme-corp.example" },
+      { "name": "Subject", "value": "Re: Q3 roadmap review" },
+      { "name": "Date", "value": "Mon, 24 Aug 2026 09:00:00 -0400" },
+      { "name": "Message-ID", "value": "<CAexample-reply-18c9f2a1b3d4e5f6@mail.gmail.com>" }
+    ],
+    "body": { "size": 0 },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "text/plain",
+        "filename": "",
+        "headers": [
+          { "name": "Content-Type", "value": "text/plain; charset=\"UTF-8\"" }
+        ],
+        "body": {
+          "size": 182,
+          "data": "VGhhbmtzLCB0aGlzIGxvb2tzIGdyZWF0IOKAlCBsZXQncyBsb2NrIGl0IGluLgoKT24gRnJpLCBBdWcgMjEsIDIwMjYgYXQgMzoxNSBQTSBTYW0gUml2ZXJhIDxzYW0ucml2ZXJhQGFjbWUtY29ycC5leGFtcGxlPiB3cm90ZToKPiBEcmFmdCBhdHRhY2hlZCwgbGV0IG1lIGtub3cgd2hhdCB5b3UgdGhpbmsuCj4KPiBTYW0"
+        }
+      },
+      {
+        "partId": "1",
+        "mimeType": "text/html",
+        "filename": "",
+        "headers": [
+          { "name": "Content-Type", "value": "text/html; charset=\"UTF-8\"" }
+        ],
+        "body": {
+          "size": 321,
+          "data": "PGRpdiBkaXI9Imx0ciI-VGhhbmtzLCB0aGlzIGxvb2tzIGdyZWF0IOKAlCBsZXQncyBsb2NrIGl0IGluLjwvZGl2Pjxicj48ZGl2IGNsYXNzPSJnbWFpbF9xdW90ZSI-T24gRnJpLCBBdWcgMjEsIDIwMjYgYXQgMzoxNSBQTSBTYW0gUml2ZXJhICZsdDs8YSBocmVmPSJtYWlsdG86c2FtLnJpdmVyYUBhY21lLWNvcnAuZXhhbXBsZSI-c2FtLnJpdmVyYUBhY21lLWNvcnAuZXhhbXBsZTwvYT4mZ3Q7IHdyb3RlOjxicj48YmxvY2txdW90ZT5EcmFmdCBhdHRhY2hlZCwgbGV0IG1lIGtub3cgd2hhdCB5b3UgdGhpbmsuPGJyPjxicj5TYW08L2Jsb2NrcXVvdGU-PC9kaXY-"
+        }
+      }
+    ]
+  }
+}

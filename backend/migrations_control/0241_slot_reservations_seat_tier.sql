@@ -1,0 +1,80 @@
+-- Migration: 0241_slot_reservations_seat_tier
+-- Description: CS-442 (org-onboarding plan §3 item 40, D8/D1/D7/D9,
+--   `docs/plans/org-onboarding-from-the-invite.md`) — makes the slot pool
+--   tier-aware. `billing::slot_pool::reserve_slot` (0233) reserved against
+--   the account's TOTAL pool only — a `pro` join-request approval could
+--   silently consume a slot the org bought as `standard`, and
+--   `grant_seat_tiers` (the per-tier purchase ledger, 0168) would then
+--   disagree with reality (a `standard` slot marked purchased-but-unused
+--   while a `pro` member sits on it with no `pro` purchase to show for it).
+--
+--   ── WHAT ──
+--   One nullable `seat_tier_id` column on `slot_reservations`, FK to
+--   `seat_tiers(id)` (0165) with `ON DELETE RESTRICT` — the same posture
+--   0169's `account_members.seat_tier_id`/`pending_seat_tier_id` FKs take
+--   (a seat tier is deactivated via `is_active`, per `seat_tier_price`'s own
+--   doc comment in `billing::seat_lifecycle`, never deleted; nothing in this
+--   schema ever deletes a `seat_tiers` row, so `RESTRICT` costs nothing and
+--   documents the intent explicitly rather than leaving the FK's default
+--   `NO ACTION` to say it implicitly).
+--
+--   ── WHY NULLABLE, NOT BACKFILLED (the NULL semantics CS-442's own build
+--   note requires stating) ──
+--   Every `slot_reservations` row written before this migration predates
+--   per-tier reservations entirely — `reserve_slot`'s only caller before
+--   this PR (`routes::org_join_requests::approve`) always reserved against
+--   the account's TOTAL pool, with no tier concept in the reservation at
+--   all. A `NULL seat_tier_id` on one of those pre-migration rows means
+--   exactly that: "reserved before this migration, against the total pool,
+--   for whatever tier the approval ultimately resolved to" — which was
+--   ALWAYS `standard` in practice (CS-437/CS-438/CS-439/CS-440 shipped
+--   before CS-442's own tier-control UI, so every join-request approval to
+--   date used the `tier` field's `standard` default). `billing::slot_pool`'s
+--   own per-tier reader (`read_slot_pool_for_tier`, this PR) therefore
+--   treats `NULL` as `standard`, not as "unknown" or "excluded from every
+--   tier's count" — a `COALESCE(seat_tier_id, <standard's id>)` in that
+--   function's own `reserved` query, not a migration-time UPDATE, because
+--   resolving `standard`'s `seat_tiers.id` at MIGRATION time would bake a
+--   specific catalog id into a schema migration for what is, by the time
+--   any reservation is old enough to still be live when this runs, already
+--   a live-window-bounded row (`slot_reservations.expires_at`, D9's own
+--   "expiry is load-bearing" — a reservation this old has already resolved
+--   to `fulfilled`/`released`/`expired` well before a migration could ever
+--   reach it in practice; the `COALESCE` exists for correctness-on-paper,
+--   not because a live pre-migration row is expected to be found).
+--
+--   ── WHAT THIS DOES NOT DO ──
+--   Does not touch `account_members.seat_tier_id`/`pending_seat_tier_id`
+--   (0169, unchanged) or `grant_seat_tiers` (0168, unchanged) — those two
+--   already carry a real tier and are untouched by this PR's plumbing
+--   change (`clerk_provision::ensure_org_membership` gains a `seat_tier_id`
+--   PARAMETER, not a schema change). This migration's own scope is exactly
+--   the one place D9's reservation mechanism was tier-blind.
+--
+--   ── INDEX ──
+--   `slot_reservations_live_tier_idx (account_id, seat_tier_id) WHERE
+--   released_at IS NULL` — backs `read_slot_pool_for_tier`'s own `reserved`
+--   count, the per-tier sibling of 0233's `slot_reservations_live_account_
+--   idx`. Not a UNIQUE index: 0233's own `slot_reservations_live_member_idx
+--   UNIQUE (account_id, user_id) WHERE released_at IS NULL` already
+--   enforces "one live reservation per person per org" — this index is a
+--   plain lookup accelerator, covering the same live-rows-only shape as
+--   every other index this table carries.
+--
+--   Not added to `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` list —
+--   `slot_reservations` is already there (0233), and this is a column
+--   addition to an existing control-only table, not a new one.
+--
+-- Depends on: 0233_slot_reservations (the table), 0165_seat_tiers (the FK
+--             target), 0169_account_members_seat_tier (the FK-then-RESTRICT
+--             precedent this migration follows for a seat-tier reference).
+-- Down:
+--   DROP INDEX IF EXISTS slot_reservations_live_tier_idx;
+--   ALTER TABLE slot_reservations DROP COLUMN IF EXISTS seat_tier_id;
+
+ALTER TABLE slot_reservations
+    ADD COLUMN IF NOT EXISTS seat_tier_id UUID NULL REFERENCES seat_tiers(id) ON DELETE RESTRICT;
+
+CREATE INDEX IF NOT EXISTS slot_reservations_live_tier_idx
+    ON slot_reservations (account_id, seat_tier_id)
+    WHERE released_at IS NULL;

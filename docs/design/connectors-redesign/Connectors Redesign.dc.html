@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="stylesheet" href="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/styles.css"><script src="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/_ds_bundle.js"></script><script src="connectors-kit.js"></script><style>body{margin:0;background:#f0eee9;font-family:system-ui,sans-serif}a{color:var(--brand-2)}a:hover{color:var(--ink)}.dv-turn{padding:40px 44px 36px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 15px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;max-width:760px;font:400 11.5px/1.4 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-notes{margin:0 0 22px;max-width:900px;font:12.5px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.62);display:flex;flex-direction:column;gap:4px}.dv-map{display:grid;grid-template-columns:220px minmax(0,1fr) minmax(0,1fr);max-width:1180px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;font:12.5px/1.5 system-ui,sans-serif;color:#1a1a1a}.dv-map>div{padding:9px 14px;border-top:1px solid rgba(0,0,0,.06)}.dv-map .h{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,0,0,.45);border-top:none}.dv-map code{font:11.5px ui-monospace,Menlo,monospace;background:rgba(0,0,0,.05);padding:1px 4px;border-radius:3px}</style></helmet>
+
+<section class="dv-turn" id="s0">
+  <div class="dv-thd"><a class="dv-tid" href="#s0">0</a><span class="dv-tname">Connectors redesign: chosen direction (<a href="Connectors%20Directions.dc.html#1a">1a</a> grid + <a href="Connectors%20Directions.dc.html#4b">4b</a> MCP band)</span></div>
+  <div class="dv-notes">
+    <span>Every screen from the brief, at 1280 and 390. Sections: <a class="dv-oid" href="#s1">1</a> page · <a class="dv-oid" href="#s2">2</a> card statuses · <a class="dv-oid" href="#s3">3</a> connect wizard · <a class="dv-oid" href="#s4">4</a> detail page · <a class="dv-oid" href="#s5">5</a> onboarding · <a class="dv-oid" href="#s7">7</a> component map.</span>
+    <span>Data is illustrative. The card, wizard and detail page are each one component, driven by status and screen props.</span>
+  </div>
+</section>
+
+<section class="dv-turn" id="s1">
+  <div class="dv-thd"><a class="dv-tid" href="#s1">1</a><span class="dv-tname">Connectors page — /connectors</span></div>
+  <div class="dv-notes"><span>One grid, one card shape. Toolkits differ only by the Beta tag. The MCP band moved here from Settings → Connections and sits above the grid. Removed from today's page: the desktop tile, "other ways in", the Zoom tile, and the standalone Gmail add-on and followed-threads sections, which now live in source detail (<a class="dv-oid" href="#4b">4b</a>).</span></div>
+  <div class="dv-opts">
+    <div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop · 1280</div><div class="dv-card" style="width:1280px"><dc-import name="ConnectorsPage" hint-size="1280px,1400px"></dc-import></div></div>
+    <div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Narrow · 390. One column; the sidebar sits behind the header button; the Seg scrolls sideways.</div><div class="dv-card" style="width:390px"><dc-import name="ConnectorsPage" narrow="{{ true }}" hint-size="390px,2400px"></dc-import></div></div>
+  </div>
+</section>
+
+<section class="dv-turn" id="s2">
+  <div class="dv-thd"><a class="dv-tid" href="#s2">2</a><span class="dv-tname">Connector card — every status</span></div>
+  <div class="dv-notes">
+    <span>Statuses and actions: <b>Not connected</b> → Connect · <b>Setting up</b> → Continue setup (shown after the wizard is closed midway) · <b>Active</b> → Manage · <b>Importing history</b> → Manage, with a Meter · <b>Needs attention</b> → Manage · <b>Reconnect needed</b> → Reconnect.</span>
+    <span>Pills use the Verdict treatment: the word and glyph carry the meaning, and the tone colours only the glyph and border. When a connector is unhealthy, the backend's message replaces the mono freshness line.</span>
+  </div>
+  <div class="dv-opts">
+    <div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Desktop: Slack (one source), then Microsoft (five sources)</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);padding:24px 28px;box-sizing:border-box"><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:stretch"><sc-for list="{{ matrix }}" as="c" hint-placeholder-count="12"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for></div></div></div>
+    <div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Narrow · Slack's six statuses</div>
+      <div class="dv-card" style="width:390px;background:var(--bg-2);padding:16px;box-sizing:border-box"><div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ slackStates }}" as="c" hint-placeholder-count="6"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,150px"></dc-import></sc-for></div></div></div>
+    <div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Narrow · Microsoft’s six statuses</div>
+      <div class="dv-card" style="width:390px;background:var(--bg-2);padding:16px;box-sizing:border-box"><div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ msStates }}" as="c" hint-placeholder-count="6"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,150px"></dc-import></sc-for></div></div></div>
+  </div>
+</section>
+
+<section class="dv-turn" id="s3">
+  <div class="dv-thd"><a class="dv-tid" href="#s3">3</a><span class="dv-tname">Connect wizard (modal)</span></div>
+  <div class="dv-notes">
+    <span><b>Step indicator</b> reuses the onboarding StepRail. Multi-source connectors run five steps: Sign in · Sources · Scope · History · Done. Single-source connectors (Slack, GitHub, Jira) drop Sources and run four. At 390 only the current step keeps its label.</span>
+    <span>The close button works on every step. Closing before Done leaves the card at <b>Setting up</b> with <b>Continue setup</b> (<a class="dv-oid" href="#2a">2a</a>). Continue setup reopens on the step where you left off.</span>
+  </div>
+  <div class="dv-opts">
+    <sc-for list="{{ wizDesktop }}" as="w" hint-placeholder-count="10">
+      <div class="dv-opt" id="{{ w.id }}"><div class="dv-olabel"><a class="dv-oid" href="#{{ w.id }}">{{ w.id }}</a>{{ w.label }}</div><div class="dv-card" style="width:760px"><dc-import name="ConnectWizard" screen="{{ w.screen }}" hint-size="760px,640px"></dc-import></div></div>
+    </sc-for>
+  </div>
+  <div class="dv-opts" style="margin-top:36px">
+    <sc-for list="{{ wizNarrow }}" as="w" hint-placeholder-count="10">
+      <div class="dv-opt" id="{{ w.id }}"><div class="dv-olabel"><a class="dv-oid" href="#{{ w.id }}">{{ w.id }}</a>{{ w.label }}</div><div class="dv-card" style="width:390px"><dc-import name="ConnectWizard" screen="{{ w.screen }}" narrow="{{ true }}" hint-size="390px,800px"></dc-import></div></div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="dv-turn" id="s4">
+  <div class="dv-thd"><a class="dv-tid" href="#s4">4</a><span class="dv-tname">Connector detail — /connectors/[provider]</span></div>
+  <div class="dv-notes"><span>Layout from <a href="Connector%20Detail%20v2.dc.html#1c">detail option 1c</a>. Topics run as a chip strip, sources stack on the left, and a large capture feed on the right can be filtered by source. Each source card shows its status, scope, 7-day sparkline and last captured, plus import progress while history imports. Edit opens the card in place; Pause lives inside. Clicking a capture opens it in place, with no jump to Library. Problems show only in the Notice at the top. Disconnect uses one confirm dialog for every provider. The previous table layout is kept in ConnectorDetail v1.</span></div>
+  <div class="dv-opts">
+    <sc-for list="{{ detDesktop }}" as="d" hint-placeholder-count="4">
+      <div class="dv-opt" id="{{ d.id }}"><div class="dv-olabel"><a class="dv-oid" href="#{{ d.id }}">{{ d.id }}</a>{{ d.label }}</div><div class="dv-card" style="width:1280px"><dc-import name="ConnectorDetail" screen="{{ d.screen }}" hint-size="1280px,1100px"></dc-import></div></div>
+    </sc-for>
+  </div>
+  <div class="dv-opts" style="margin-top:36px">
+    <sc-for list="{{ detNarrow }}" as="d" hint-placeholder-count="4">
+      <div class="dv-opt" id="{{ d.id }}"><div class="dv-olabel"><a class="dv-oid" href="#{{ d.id }}">{{ d.id }}</a>{{ d.label }}</div><div class="dv-card" style="width:390px"><dc-import name="ConnectorDetail" screen="{{ d.screen }}" narrow="{{ true }}" hint-size="390px,844px"></dc-import></div></div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="dv-turn" id="s5">
+  <div class="dv-thd"><a class="dv-tid" href="#s5">5</a><span class="dv-tname">Onboarding step — /onboarding/connectors</span></div>
+  <div class="dv-notes"><span>The same cards and the same wizard, inside OnboardingChrome and StepCard. Slack is recommended: it gets the "start here" tag, an ink border and the one coral button on the screen. Connect opens wizard <a class="dv-oid" href="#3a">3a</a> over this canvas.</span></div>
+  <div class="dv-opts">
+    <div class="dv-opt" id="5a"><div class="dv-olabel"><a class="dv-oid" href="#5a">5a</a>Desktop · 1280</div>
+      <div class="dv-card" style="width:1280px">
+        <div style="position:relative;min-height:980px;background-color:var(--bg-2);background-image:radial-gradient(var(--line) 1px, transparent 1px);background-size:24px 24px;font-family:var(--sans);color:var(--ink)">
+          <div style="display:flex;height:56px;align-items:center;gap:18px;border-bottom:1px solid var(--line);background:color-mix(in srgb, var(--bg-2) 84%, transparent);padding:0 22px">
+            <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Wordmark" size="{{ 17 }}" hint-size="120px,20px"></x-import>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:18px">
+              <div style="display:flex;align-items:center;gap:8px"><sc-for list="{{ obRail }}" as="r" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:8px"><sc-if value="{{ r.sep }}" hint-placeholder-val="{{ false }}"><span style="height:1px;width:18px;background:var(--line)"></span></sc-if><span style="display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-full);font-family:var(--mono);font-size:9.5px;font-weight:500;background:{{ r.bg }};color:{{ r.fg }};border:{{ r.border }};box-sizing:border-box">{{ r.glyph }}</span><span style="white-space:nowrap;font-size:12px;font-weight:{{ r.weight }};color:{{ r.color }}">{{ r.label }}</span></div></sc-for></div>
+              
+            </div>
+          </div>
+          <div style="display:grid;place-items:center;padding:36px 24px 48px">
+            <div style="width:980px;max-width:100%;border-radius:var(--r-frame);border:1px solid var(--line);background:var(--bg);padding:26px;box-shadow:var(--shadow-pop);box-sizing:border-box">
+              <div style="margin-bottom:10px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">step 2 of 3</div>
+              <h1 style="margin:0 0 8px;font-family:var(--display);font-weight:400;font-size:29px;line-height:1.2">Connect where your work already happens</h1>
+              <p style="margin:0 0 18px;font-size:13.5px;line-height:1.6;color:var(--ink-2);max-width:66ch">Each connection is yours alone, and you choose exactly what it captures. Start with Slack, where most decisions get made. You can add the rest any time from Connectors.</p>
+              <dc-import name="ConnectorsPage" chrome="{{ false }}" grid-only="{{ true }}" cards="fresh" recommend="slack" hint-size="928px,560px"></dc-import>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:20px">
+                <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="primary" hint-size="170px,36px">Ask your first question</x-import>
+                <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" hint-size="110px,36px">Skip for now</x-import>
+                <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)">nothing connected yet</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dv-opt" id="5b"><div class="dv-olabel"><a class="dv-oid" href="#5b">5b</a>Narrow · 390. The step rail shrinks to a mono count.</div>
+      <div class="dv-card" style="width:390px">
+        <div style="min-height:900px;background-color:var(--bg-2);background-image:radial-gradient(var(--line) 1px, transparent 1px);background-size:24px 24px;font-family:var(--sans);color:var(--ink)">
+          <div style="display:flex;height:56px;align-items:center;gap:12px;border-bottom:1px solid var(--line);background:color-mix(in srgb, var(--bg-2) 84%, transparent);padding:0 16px">
+            <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Wordmark" size="{{ 16 }}" hint-size="110px,20px"></x-import>
+            <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">step 2 of 3 · connectors</span>
+          </div>
+          <div style="padding:16px 12px 32px">
+            <div style="border-radius:var(--r-frame);border:1px solid var(--line);background:var(--bg);padding:18px 16px;box-shadow:var(--shadow-pop)">
+              <h1 style="margin:0 0 8px;font-family:var(--display);font-weight:400;font-size:25px;line-height:1.2">Connect where your work already happens</h1>
+              <p style="margin:0 0 16px;font-size:13.5px;line-height:1.6;color:var(--ink-2)">Each connection is yours alone. Start with Slack. You can add the rest later.</p>
+              <dc-import name="ConnectorsPage" chrome="{{ false }}" grid-only="{{ true }}" narrow="{{ true }}" cards="fresh" recommend="slack" hint-size="324px,1500px"></dc-import>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+                <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="primary" full="{{ true }}" hint-size="100%,36px">Ask your first question</x-import>
+                <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" full="{{ true }}" hint-size="100%,36px">Skip for now</x-import>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="dv-turn" id="s7">
+  <div class="dv-thd"><a class="dv-tid" href="#s7">7</a><span class="dv-tname">Component map</span></div>
+  <div class="dv-notes"><span>Each element maps to its <code>web/components/ui/</code> part. No new colour values. The proposals are listed last.</span></div>
+  <div class="dv-map">
+    <div class="h">element</div><div class="h">built from</div><div class="h">notes</div>
+    <div>Connectors page</div><div><code>PageHead</code> · CSS grid (3 col / 1 col) · <code>Card</code></div><div>Replaces SlackConnector, ProviderTile, GoogleWorkspaceConnector, ComposioToolkitLinks.</div>
+    <div>Connector card</div><div><code>Card</code> · <code>ProviderMark</code> (settings/ProviderIcon) · <code>Verdict</code> · <code>Button sm</code> · <code>Meter</code> · <code>Mono</code></div><div>One component with a <code>status</code> prop. Action variant: secondary, or primary for Continue setup and Reconnect. Brand only when recommended in onboarding.</div>
+    <div>Status pill</div><div><code>Verdict</code> tones ok / warn / bad / muted</div><div>Glyphs: ○ Not connected · ◐ Setting up · ✓ Active · ↓ Importing · ! Needs attention · × Reconnect. Source rows add ‖ Paused, × Stopped, ○ Off.</div>
+    <div>Beta tag</div><div><code>Badge outline</code></div><div>Proposed: a quiet outline variant (<code>--line</code> border, <code>--ink-3</code> text). Today's outline uses the tone colour.</div>
+    <div>Provider logos</div><div><code>ProviderMark</code> (settings/ProviderIcon)</div><div>Real marks for every connector. Inline SVG: Slack, Microsoft, Gmail, Google, GitHub. Jira, Confluence, Linear, HubSpot and Zendesk come from Simple Icons, and Dart from its favicon. Inline these as SVG in ProviderIcon too, so connector screens make no third-party requests.</div>
+    <div>MCP band</div><div><code>Card flush</code> · <code>Mono</code> · display title with one coral-italic word</div><div>The address only: no per-client steps. Proposed: <b>SwarmStream</b>, a canvas using DotMandala's ring geometry. Motion exception, still under prefers-reduced-motion.</div>
+    <div>Address pill</div><div><code>Chip</code> shape + <code>Icon copy</code></div><div>Proposed: <b>CopyPill</b>, where the whole pill is the button. Label goes copy → copied ✓ for 1.8s, as CopyAdminRequest does today.</div>
+    <div>Wizard</div><div><code>Modal</code> · <code>StepRail</code> (onboarding) · <code>Button</code></div><div>Proposed: a <code>header</code> slot on Modal for the rail. Title in <code>font-display</code>. At 390 it becomes a bottom sheet (top corners <code>--r-frame</code>).</div>
+    <div>Sign-in hand-off</div><div><code>Loading</code> text style · <code>ErrorNote</code> · <code>Button ghost</code></div><div>Waiting state re-checks when the window regains focus (<code>useReturnRefetch</code>). Expired after 10 min.</div>
+    <div>Choose sources</div><div><code>Toggle</code> (label + hint)</div><div>No locked state. Every source can be turned on. If Microsoft needs IT approval, that happens on Microsoft's side, outside CoralSwarm.</div>
+    <div>Scope picker</div><div><code>Seg</code> · <code>SearchInput</code> · <code>Button ghost</code> · <code>CountPill</code>-style count · <code>Empty</code></div><div>Proposed: <b>Checkbox</b> (15px, ink fill with ✓). The kit has none. Multi-source rail uses NavRow's selection anatomy.</div>
+    <div>Import history</div><div>Single source: option tiles · Multi-source: <code>Seg</code> per row</div><div>Proposed: <b>OptionTile</b>. Selected = <code>--brand-soft</code> fill + <code>--brand</code> border, per the "selected tiles" rule.</div>
+    <div>Detail page</div><div><code>ProviderMark 44</code> · <code>Verdict</code> · <code>Notice</code> (ui/States) · topic chips (<code>ScopePill</code> shape) · <b>SourceCard</b> · capture feed (<code>Card flush</code> rows) · <code>Seg</code> filter</div><div>Proposed: <b>SourceCard</b> (status, scope, 7-day sparkline in teal, last captured, Meter, inline edit). The feed opens items in place. Notice is in the codebase but missing from the DS bundle.</div>
+    <div>Gmail / Outlook extras</div><div>FollowedThreads list · GmailAddonTokens</div><div>Moved inside the open source row, below the scope picker.</div>
+    <div>Disconnect</div><div><code>Modal</code> (ConfirmDialog) · <code>Button danger</code></div><div>One copy for every provider: "Stop capturing from {provider}? What's already captured stays in your ocean."</div>
+    <div>Narrow shell</div><div>52px header + <code>IconButton sidebar</code></div><div>Proposed: no mobile shell exists today. The sidebar opens as an overlay from the header button.</div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { client: "claude-code", r: 0 };
+  componentDidMount() { this._t = setInterval(() => { if (window.CSKit && window.CoralSwarmDesignSystem_451767) { clearInterval(this._t); this.setState({ r: 1 }); } }, 80); }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const K = window.CSKit;
+    const order = ["not", "setup", "active", "importing", "attention", "reconnect"];
+    const client = this.state.client;
+    const clients = K ? K.clients : [];
+    const obRail = ["Secure it", "Connectors", "First answer"].map((label, k) => {
+      const st = k < 1 ? "done" : k === 1 ? "current" : "up";
+      return { label, sep: k > 0, glyph: st === "done" ? "✓" : String(k + 1), bg: st === "done" ? "var(--ok)" : st === "current" ? "var(--ink)" : "var(--bg)", fg: st === "up" ? "var(--ink-4)" : "#fff", border: st === "up" ? "1px solid var(--line)" : "none", weight: st === "current" ? 500 : 400, color: st === "current" ? "var(--ink)" : "var(--ink-4)" };
+    });
+    return {
+      matrix: K ? [...order.map(s => K.slack(s)), ...order.map(s => K.ms(s))] : [],
+      slackStates: K ? order.map(s => K.slack(s)) : [],
+      msStates: K ? order.map(s => K.ms(s)) : [],
+      wizDesktop: [
+        ["3a", "connect", "Connect: Slack, the four-step rail (no Sources step). Says what it captures and what it never does."],
+        ["3b", "waiting", "Sign-in hand-off: waiting for Microsoft."],
+        ["3c", "expired", "Sign-in hand-off: expired, try again."],
+        ["3d", "sources", "Choose sources: Microsoft. Every source can be turned on; any approval your IT team needs happens on Microsoft's side."],
+        ["3e", "scopeLong", "Choose scope, long list: Slack's 200 channels, with search, select all visible and a selected count."],
+        ["3f", "scopeEmpty", "Choose scope, empty list: Google Chat has no spaces yet."],
+        ["3g", "scopeEverything", "Choose scope with Everything I can see: Microsoft Calendar, plus one line on what that includes."],
+        ["3h", "history", "Import history: single source, four options."],
+        ["3i", "historyMulti", "Import history: multi-source. Teams meetings skips the question and says why."],
+        ["3j", "done", "Done: what it captures and what history is importing, with a link to the detail page."],
+      ].map(([id, screen, label]) => ({ id, screen, label })),
+      wizNarrow: [["3k", "sources", "Narrow · sources"], ["3l", "scopeLong", "Narrow · long list"], ["3m", "history", "Narrow · history (2×2 tiles)"], ["3n", "historyMulti", "Narrow · history, multi-source"], ["3o", "done", "Narrow · done"], ["3p", "connect", "Narrow · connect"], ["3q", "waiting", "Narrow · waiting for Microsoft"], ["3r", "expired", "Narrow · sign-in expired"], ["3s", "scopeEmpty", "Narrow · empty scope"], ["3t", "scopeEverything", "Narrow · Everything I can see"]].map(([id, screen, label]) => ({ id, screen, label })),
+      detDesktop: [["4a", "ms", "Microsoft: Teams chats stopped (Notice at the top), Calendar importing, two sources off with Connect. Click a capture to open it."], ["4b", "gmailOpen", "Google: the Gmail card open for editing, with the threads it follows and the Gmail add-on token. Chat is paused."], ["4c", "slackReconnect", "Unhealthy: a Notice with the backend message and Reconnect."], ["4d", "disconnect", "Disconnect confirm: the same dialog for every provider."]].map(([id, screen, label]) => ({ id, screen, label })),
+      detNarrow: [["4e", "ms", "Narrow · Microsoft"], ["4f", "gmailOpen", "Narrow · Gmail open"], ["4g", "slackReconnect", "Narrow · reconnect"], ["4h", "disconnect", "Narrow · disconnect as a sheet"]].map(([id, screen, label]) => ({ id, screen, label })),
+      obRail,
+      clients, client, clientName: (clients.find(c => c.key === client) || { label: "" }).label,
+      setClient: (k) => this.setState({ client: k }),
+      can: K ? K.can[client] : { add: "", ask: "" },
+      steps: K ? K.steps[client].map((s, i) => ({ ...s, n: String(i + 1).padStart(2, "0") })) : [],
+      mcpFrames: [
+        { id: "6a", label: "Desktop", w: "720px", h: "620px", align: "center", pad: "40px", radius: "var(--r-frame)" },
+        { id: "6b", label: "Narrow · bottom sheet", w: "390px", h: "760px", align: "flex-end", pad: "0", radius: "var(--r-frame) var(--r-frame) 0 0" },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

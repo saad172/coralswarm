@@ -1,0 +1,59 @@
+-- no-transaction
+-- Migration: 0152_llm_usage_source_query_id_cursor_index_concurrently
+-- Description: usage-metering PR9 — build a partial index backing the
+--   derivation worker's QUERY-axis keyset cursor, WITHOUT blocking writes on
+--   `llm_usage` while it builds.
+--
+--   Merged PR2 (control `0143`/tenant `0050`) added
+--   `idx_llm_usage_source_query_id` on `(source_query_id) WHERE
+--   source_query_id IS NOT NULL` — an equality-lookup index (one query's
+--   rows), not a range/order index. PR9's query-axis cursor needs the SAME
+--   shape PR7 already gave the journal axis in
+--   `0147_llm_usage_journal_period_cursor_index_concurrently.sql`: a
+--   time-ordered walk ACROSS every query-attributed row on the plane (or, on
+--   the consumer plane, across one account's rows at a time — see
+--   `backend/src/workers/billing_derivation.rs`'s module doc), which
+--   `idx_llm_usage_source_query_id` cannot serve — it has no leading
+--   time/order column at all.
+--
+--   Column order: `created_at` leads (the cursor's own advancing axis, same
+--   non-monotonic-commit-order hazard `0145`'s `jobs.finished_at` and
+--   `0147`'s `source_journal_period` both carry — `llm_usage.created_at` is
+--   `DEFAULT now()`, assigned at INSERT, and concurrent finalize
+--   transactions can therefore commit out of that order); `id` is the
+--   tie-breaker, same role as `0145`/`0147`'s trailing `id` column. Partial
+--   on `WHERE source_query_id IS NOT NULL` — the identical predicate
+--   `idx_llm_usage_source_query_id` and `0147`'s journal cursor index use,
+--   for the identical reason: every OTHER row (job-attributed, unattributed,
+--   or the `*_cached` zero-token class) would only add index entries this
+--   cursor never queries.
+--
+--   `llm_usage` is a live, high-write production table — same `CREATE INDEX
+--   CONCURRENTLY` / `-- no-transaction` / single-statement-file mechanics as
+--   `0145`/`0146`/`0147` and the established precedent those files cite
+--   (0059, 0074, 0075, 0099, `migrations_tenant/0012`, PR2's own
+--   0142-0144/0049-0051 split).
+--
+--   `IF NOT EXISTS` + `CONCURRENTLY`: a failed concurrent build leaves an
+--   INVALID index behind, and `IF NOT EXISTS` will then happily skip it
+--   forever. If this migration errors, drop
+--   `idx_llm_usage_source_query_id_cursor` before re-running rather than
+--   reading the skip as success — same operational caveat as every other
+--   `CONCURRENTLY` migration in this tree.
+--
+-- PAIRED WITH: backend/migrations_tenant/0056_llm_usage_source_query_id_cursor_index_concurrently.sql
+--   — `llm_usage` is a SHARED table, present in both trees and NOT in
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster, so the DDL
+--   statement below (below this header) must stay byte-for-byte identical to
+--   that file's. Only this header's prose is control-tree-specific.
+--
+-- Depends on: 0141_llm_usage_provider_cost.sql (creates `source_query_id`);
+--   0143_llm_usage_source_query_id_index_concurrently.sql (the sibling
+--   equality-lookup index this one deliberately complements rather than
+--   replaces, same relationship `0147` has to `0144`).
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_llm_usage_source_query_id_cursor;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_llm_usage_source_query_id_cursor
+    ON llm_usage (created_at, id)
+    WHERE source_query_id IS NOT NULL;

@@ -1,0 +1,9 @@
+{
+  "message": {
+    "data": "eyJ0eXBlIjoiQURERURfVE9fU1BBQ0UiLCJldmVudFRpbWUiOiIyMDI2LTA4LTIwVDEyOjAwOjAwLjAwMDAwMFoiLCJzcGFjZSI6eyJuYW1lIjoic3BhY2VzL0ZGRkZGRkZGRkZGIiwic3BhY2VUeXBlIjoiU1BBQ0UiLCJkaXNwbGF5TmFtZSI6Im5ldy10ZWFtLXNwYWNlIiwic2luZ2xlVXNlckJvdERtIjpmYWxzZX0sInVzZXIiOnsibmFtZSI6InVzZXJzLzEwMDEiLCJkaXNwbGF5TmFtZSI6IkFsaWNlIE5nIiwidHlwZSI6IkhVTUFOIn19",
+    "messageId": "9871234560099",
+    "publishTime": "2026-08-20T12:00:00.456Z",
+    "attributes": {}
+  },
+  "subscription": "projects/coralswarm-prod/subscriptions/chat-app-events-sub"
+}

@@ -1,0 +1,102 @@
+# The Org-arm scope baseline (scripts/check_org_arm_scope.sh).
+#
+# Every line here is one `JobScope::Org(..) =>` or `TenantId::Org(..) =>` match
+# arm that reaches the database and fails the guard, and is allowed to stay
+# that way for now. The key is `<path>::<enclosing fn>#<n>` so line drift above
+# an arm does not invalidate the file.
+#
+# THIS IS A RATCHET. The file may shrink and may not grow without a hand edit
+# and a reviewer. The guard fails on a STALE entry too — an entry whose arm no
+# longer fires — because a baseline that is too big is headroom the next defect
+# lands in without anyone deciding anything.
+#
+# ── EVERY REASON STANDS ALONE ───────────────────────────────────────────────
+#
+# Each entry needs a `# reason:` line DIRECTLY above it, carrying at least one
+# non-space character (the guard checks both; a bare `# reason:` used to pass
+# on the prefix alone). A rationale nobody wrote is a rationale nobody can
+# check: that is exactly how scripts/tenant_rls_coverage.manifest ended up
+# justifying eleven exemptions with a connection-startup GUC that PR #388 had
+# already deleted.
+#
+# A reason must also be READABLE ON ITS OWN. No "same as the entry above", no
+# "identical statement, identical table, identical purpose" with the antecedent
+# left to the reader. Two reasons why, and the second is the sharp one:
+#
+#   1. THIS FILE IS DESIGNED TO SHRINK. A pointer at a sibling entry is a
+#      pointer at a line whose deletion is the goal. When the antecedent goes,
+#      the dependent reason does not fail — it just quietly stops meaning
+#      anything, and the guard keeps passing.
+#   2. IT IS HOW A FALSE STATUS SURVIVES REVIEW. Look at
+#      scripts/tenant_rls_coverage.manifest's entry for
+#      workers/review_deadline.rs: it opens "exempt: Same as
+#      workers/mcp_task_sweep.rs above — the single call is inside
+#      consumer_tick()". That sentence is true, it is about a different file,
+#      and it carried an `exempt` status across a live unscoped Org arm in
+#      `tick()` for as long as nobody re-derived it. A reason that borrows its
+#      evidence borrows the reviewing too.
+#
+# So: name the statement, the table, the migration and the plane, in the entry
+# itself, even when the entry two lines up says the same words. The duplication
+# is the point — it is what makes each line independently falsifiable.
+#
+# A BASELINED ARM IS NOT A CORRECT ARM. Every one of the eight entries below
+# is nevertheless genuinely fine, and its reason line says why: the tables it
+# touches carry no `member_ocean_isolation` policy, or the statement runs on
+# the CONTROL plane where tenant RLS does not exist. There is no LIVE DEFECT
+# on this list. Keep it that way — a new entry that describes a defect belongs
+# in a fix, not here.
+#
+# HISTORY. The file shipped with sixteen entries: these eight, plus eight live
+# instances of the same defect PRs #840 and #843 fixed 88 of, in
+# `workers/journal_sweep.rs` (7) and `workers/review_deadline.rs` (1). Those
+# eight were outside the earlier slices and were recorded so they were tracked
+# rather than silent. The ninth slice converted all eight and deleted their
+# entries; each org arm in those two files now opens
+# `begin_tenant_system_scoped_without_account` and calls the same `_scoped`
+# twin its own consumer arm calls.
+#
+# Note for whoever merges this against PR #847: that PR converts all eight LIVE
+# DEFECT arms and deletes their entries. If it lands first, this file's answer
+# to the conflict is to take #847's deletion of those eight and keep the
+# rewritten reasons for the eight that remain.
+#
+# Committed at the guard's introduction, stacked on PR #843. Reasons made
+# self-contained when SCOPE-BYPASSED was made a failing verdict.
+
+# reason: OK. `crypto::fetch_wrapped_dek`'s org arm reads the wrapped DEK out of `account_keys`. That table is one of the ten migrations_tenant/0009_tenant_rls.sql section 3f lists as deliberately NOT covered ("account_keys, connector_identities, graph_subscriptions, jobs, oauth_tokens, queries, slack_huddle_captures, slack_integrations, sync_cursors, tenant_meta -- no policy added"). It is keyed by account_id with no ocean dimension, and it holds the wrapped DEK the scope machinery itself needs; making DEK resolution depend on a scoped transaction would be circular.
+backend/src/crypto.rs::fetch_wrapped_dek#1
+# reason: OK. `slack_events::persist_identity_and_enqueue_backfill`'s org arm writes `connector_identities`, which is also on 0009_tenant_rls.sql section 3f's deliberately-not-covered list — PK (provider, workspace_id, external_user_id), no account or graph column and no FK to either, shared external-id-to-display-name reference data. The plain `content_pool.begin()` in this arm is a transaction for atomicity, not for scope, and there is no policy for a GUC to satisfy.
+backend/src/routes/slack_events.rs::persist_identity_and_enqueue_backfill#1
+# reason: OK, CONTROL plane. `atom_title_backfill::fan_out_per_account`'s `TenantId::Org` arm issues `SELECT account_id FROM tenant_databases WHERE clerk_org_id = $1` with `.fetch_optional(control_pool)`, resolving which account this org tenant serves before any tenant work starts. `tenant_databases` is created by migrations_control/0078_tenant_databases.sql and lives on the CONTROL database, which tenant RLS does not reach at all — 0009_tenant_rls.sql is a migrations_tenant migration and never runs there. The guard flags this arm because it is an Org arm containing a query; the query is on the wrong plane to be a tenant-RLS problem.
+backend/src/workers/atom_title_backfill.rs::fan_out_per_account#1
+# reason: OK, CONTROL plane. `slack_name_backfill::fan_out_per_account`'s `TenantId::Org` arm issues `SELECT account_id FROM tenant_databases WHERE clerk_org_id = $1` with `.fetch_optional(control_pool)`, resolving which account this org tenant serves before any tenant work starts. `tenant_databases` is created by migrations_control/0078_tenant_databases.sql and lives on the CONTROL database, which tenant RLS does not reach at all. This file's tenant-plane work is separate and is marked `converted` in scripts/tenant_rls_coverage.manifest.
+backend/src/workers/slack_name_backfill.rs::fan_out_per_account#1
+# reason: OK, CONTROL plane. `slack_seat_reconcile::accounts_to_sweep`'s `TenantId::Org` arm issues `SELECT account_id FROM tenant_databases WHERE clerk_org_id = $1` with `.fetch_optional(control_pool)`, then refuses any payload account_id that is not the one it resolved. `tenant_databases` is created by migrations_control/0078_tenant_databases.sql and lives on the CONTROL database, which tenant RLS does not reach at all. This file's real tenant-plane work — `teams`, `team_members`, `team_seat_grants` — is elsewhere and already opens `begin_tenant_system_scoped` (slack_seat_reconcile.rs:195, and the module doc at :54-63 explains why the system form rather than `begin_account_scoped`).
+backend/src/workers/slack_seat_reconcile.rs::accounts_to_sweep#1
+# reason: OK, CONTROL plane. `teams_seat_reconcile::accounts_to_sweep`'s `TenantId::Org` arm issues `SELECT account_id FROM tenant_databases WHERE clerk_org_id = $1` with `.fetch_optional(control_pool)`, then refuses any payload account_id that is not the one it resolved. `tenant_databases` is created by migrations_control/0078_tenant_databases.sql and lives on the CONTROL database, which tenant RLS does not reach at all. This file's real tenant-plane work — `teams_watched_resources`, `teams`, `team_members`, `team_seat_grants` — is elsewhere and already opens `begin_tenant_system_scoped` (teams_seat_reconcile.rs:175, module doc at :64-66).
+backend/src/workers/teams_seat_reconcile.rs::accounts_to_sweep#1
+# reason: OK, NOT A DATABASE STATEMENT. `self_context::build_system_context`'s `Some(TenancyDecision::Org(ctx)) => Some(&ctx.pool)` arm SELECTS a pool; it does not use one. The detector reads `&ctx.pool` in the arm body as a pool-as-executor because `ctx` is the pattern binding, but the body is a `let content_pool = match decision { .. }` expression whose value is a `&PgPool`, and no query is issued inside the arm at all. The database call sits AFTER the match: `store.ocean_stats_scoped(account_id, user_id, graph_id)`, which opens `begin_tenant_scoped` in its Postgres impl (backend/src/store/mod.rs:30271) — verified, not assumed. The `else` branch calls the unscoped `ocean_stats` and is reached only when `content_pool` is None, i.e. a pool-less backend (test builds only). So the scoped call is the Postgres path and the unscoped call is the no-policy path. Stated in full: if the arm ever grows a statement of its own, this reason stops applying and the entry must be re-earned.
+backend/src/self_context.rs::build_system_context#1
+
+# reason: OK. polling_accounts_for_tenant uses the explicit control_pool only: resolve_tenant_account reads control-only tenant_databases routing, and its direct query joins teams_container_watchers with teams_container_subscriptions (migrations_control/0255_teams_container_doorbell.sql). These are subscription election/doorbell routing metadata, not tenant ocean content; neither table carries member_ocean_isolation, so no member-ocean scope applies.
+backend/src/workers/graph_subscriptions.rs::polling_accounts_for_tenant#1
+
+# reason: OK. `requester_allowed_tx`'s Org arm runs `SELECT EXISTS(... org_revocations ...) OR NOT EXISTS(... accounts ...)` on `control_tx`, a transaction opened with `begin_account_scoped(control, ..)` on the CONTROL pool (`state.control_db()`), where tenant RLS does not exist. `org_revocations` and `accounts` are control-plane-only tables (migrations_control, no tenant twin), so there is no `member_ocean_isolation` policy for a tenant scope to satisfy. Content-plane reads in this file go through `tenant.begin_member_scoped`.
+backend/src/corpus_enrichment.rs::requester_allowed_tx#1
+# reason: OK, CONTROL plane. `member_scope` opens `begin_account_scoped(control, account)` before matching the tenant, reads account_members membership on that transaction, and its Org arm checks accounts with `.fetch_one(&mut *tx)`. Both tables are control-only (migrations_control/0001, no tenant twin), so no tenant member-ocean policy applies. The transaction commits before a tenant TenancyDecision is constructed.
+backend/src/workers/composio_capture.rs::member_scope#1
+
+# reason: OK. Both fresh_cohort_fence callers in reserve_inner pass the actual content transaction opened by begin_plane, which selects begin_tenant_system_scoped_without_account for Org. The fence uses that same system-scoped transaction for resolve_tenant_graph_reachable_by_user with explicit graph, account, and requester arguments. Its separately account-scoped CONTROL transaction checks the execution-owner account, accounts.clerk_org_id binding, membership, and org_revocations before content resolution.
+backend/src/managed/gate/funded.rs::fresh_cohort_fence#1
+
+# reason: OK, already-scoped content transaction. reachable is private and both calls are in executor, whose content parameter is &mut Transaction<Postgres>; deref coercion supplies reachable's &mut PgConnection, never a bare pool. The production preparation/revalidation paths acquire that transaction through operation::begin, selecting begin_tenant_system_scoped_without_account for Org. This arm only calls resolve_tenant_graph_reachable_by_user with explicit graph/account/user arguments on that same held transaction; executor also checks the account/org binding and revocations on its separately account-scoped CONTROL transaction. No new ambient executor is introduced here.
+backend/src/managed/embedding/operation.rs::reachable#1
+
+# reason: OK, NOT A DATABASE STATEMENT. UnsentCleanup::new synchronously copies the FundingRequest and clones pool handles; JobScope::Org(pool) => OwnedPlane::Org((*pool).clone()) neither acquires a connection nor runs a query. The handle is retained only so cleanup may outlive a dropped admission. Separate async UnsentCleanup::run opens begin_plane before managed_cancel_unsent_v1 on &mut content; begin_plane selects begin_tenant_system_scoped_without_account for Org. reconcile_funding also opens begin_plane for its receipt read, then begin_account_scoped(control_pool, funding.account) for Org financial release/settlement. This exception covers only the constructor handle clone, not ambient database work; adding I/O there invalidates this reason.
+backend/src/managed/gate/funded.rs::new#1
+
+# reason: No SQL or table access: reads pool options to size the class-specific admission cap. Pool references trigger the textual executor detector.
+backend/src/admission.rs::pool_key_size_and_cap#1
+# reason: No SQL or table access: selects and clones the page/work pool handle, then constructs PostgresStore. Scoped transactions are opened later by Tenant methods.
+backend/src/tenancy/extractor.rs::from_request_parts#1

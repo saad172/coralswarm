@@ -1,0 +1,204 @@
+name: Retrieval eval (real embedder, weekly)
+
+# Weekly real-embedder companion to ci.yml's `retrieval-eval` job.
+#
+# ci.yml's blocking `retrieval-eval` job runs on every PR but uses the
+# deterministic `hash` embedder (no 133 MB ONNX download on every PR run) and
+# gates on `backend/eval/baseline.json`. That leaves a blind spot: a
+# regression that only shows up with the REAL embedding model (semantic
+# matching, not the hash embedder's shallow lexical signal) would never fail
+# that gate.
+#
+# This workflow closes the blind spot WITHOUT slowing down or blocking PRs:
+#   - Runs on a weekly cron + manual workflow_dispatch only — NOT on push or
+#     pull_request, so it can never appear as a PR status check.
+#   - Compares against a SEPARATE baseline file, backend/eval/baseline.ort.json
+#     (via `--baseline-path`), never touching backend/eval/baseline.json (the
+#     file ci.yml's blocking gate reads).
+#   - Is not referenced by any `needs:` in ci.yml or any other workflow, and
+#     this repo has no branch-protection required-checks list (verified via
+#     `gh api repos/.../branches/main/protection` -> 404 "Branch not
+#     protected") for it to be added to — it cannot block a merge or a deploy.
+#   - On failure, files/updates a tracking GitHub issue (see the last job)
+#     instead of just leaving a red run that's easy to miss in the Actions
+#     tab for a weekly cron.
+#
+# See backend/eval/README.md ("Weekly real-embedder eval") for the full
+# rationale and the local-run / re-baseline commands.
+
+on:
+  schedule:
+    # Mondays 09:00 UTC. Cron minute/hour deliberately offset from the top of
+    # the hour to avoid the scheduling pile-up GitHub documents for `0 * * * *`
+    # -style crons.
+    - cron: "17 9 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retrieval-eval-ort
+  cancel-in-progress: false
+
+jobs:
+  eval-ort:
+    name: Retrieval eval (ort embedder vs baseline.ort.json)
+    runs-on: ubuntu-latest
+    # Non-blocking by construction (see header): nothing else `needs:` this
+    # job, and this workflow has no `pull_request`/`push` triggers, so it can
+    # never surface as a required PR check even if branch protection is added
+    # later — but it must never accidentally become "required" either, so:
+    # DO NOT add a `pull_request` or `push` trigger to this file, and DO NOT
+    # add this job's name to any branch-protection required-status-checks
+    # list or to another workflow's `needs:`.
+    outputs:
+      conclusion: ${{ job.status }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: coralswarm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/coralswarm
+      EVAL_EMBEDDER: ort
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Enable required Postgres extensions
+        run: |
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+      - name: Cache sqlx-cli
+        id: cache-sqlx
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/sqlx
+          key: sqlx-cli-0.8-${{ runner.os }}
+
+      - name: Install sqlx-cli
+        if: steps.cache-sqlx.outputs.cache-hit != 'true'
+        run: cargo install sqlx-cli --version '^0.8' --no-default-features --features postgres,rustls --locked
+
+      # Control tree only, matching ci.yml's `retrieval-eval` job: the eval
+      # reads the consumer plane, and no tenant DB is provisioned here.
+      #
+      # This path was `backend/migrations` until #256 (2026-07-22) split the
+      # tree into migrations_control/ + migrations_tenant/. Every caller was
+      # updated except this one, and because the job runs WEEKLY the break did
+      # not surface until the following Sunday -- then failed every week after
+      # (2026-07-27, 08-03, 08-10) with
+      # `error: while resolving migrations: No such file or directory`.
+      # It filed issue #400 correctly on the first failure; nobody was looking.
+      - name: Run database migrations
+        run: ~/.cargo/bin/sqlx migrate run --source backend/migrations_control
+
+      # bge-small-en-v1.5 (~33 MB ONNX + tokenizer). No pinned checksum exists
+      # for this model in-repo — key on the model name/version, which changes rarely
+      # enough that a stale cache is not a practical concern for a weekly
+      # diagnostic job.
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: models/bge-small-en-v1.5*
+          key: eval-ort-model-bge-small-en-v1.5
+
+      - name: Download embedding model (cache miss only)
+        run: |
+          if [ ! -f models/bge-small-en-v1.5.onnx ] || [ ! -f models/bge-small-en-v1.5-tokenizer.json ]; then
+            bash scripts/download_model.sh
+          else
+            echo "models/bge-small-en-v1.5* present from cache — skipping download"
+          fi
+
+      - name: Run retrieval eval (ort embedder) + baseline.ort.json gate
+        # `is_ci()` in retrieval_eval.rs treats a missing/mismatched baseline
+        # as a hard failure under CI — intentional here too: if
+        # baseline.ort.json is ever deleted or gets an embedder mismatch, this
+        # job should fail loudly (and file the tracking issue below) rather
+        # than silently no-op.
+        run: |
+          cargo run -p coralswarm-backend --bin retrieval_eval -- \
+            --baseline-path backend/eval/baseline.ort.json
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-eval-ort-report
+          path: backend/eval/last_report.json
+          if-no-files-found: ignore
+
+  file-issue-on-failure:
+    name: File/update tracking issue on failure
+    needs: eval-ort
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Find or create the tracking issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = "retrieval-eval-ort";
+            const title = "Weekly real-embedder retrieval eval (ort) failed";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `The weekly real-embedder retrieval eval (\`.github/workflows/retrieval-eval-ort.yml\`) failed or regressed against \`backend/eval/baseline.ort.json\`.`,
+              ``,
+              `This is a non-blocking quality signal — it does not affect any PR or deploy — but it means the real (\`ort\`) embedder's retrieval quality may have regressed since the last check.`,
+              ``,
+              `Latest failing run: ${runUrl}`,
+              ``,
+              `See \`backend/eval/README.md\` ("Weekly real-embedder eval") for how to reproduce locally and how to re-baseline if the change was intentional.`,
+            ].join("\n");
+
+            const { owner, repo } = context.repo;
+
+            // Ensure the label exists (idempotent — ignore "already exists").
+            try {
+              await github.rest.issues.createLabel({
+                owner, repo, name: label, color: "d93f0b",
+                description: "Weekly real-embedder (ort) retrieval-eval failures",
+              });
+            } catch (e) {
+              if (e.status !== 422) throw e;
+            }
+
+            const existing = await github.rest.issues.listForRepo({
+              owner, repo, state: "open", labels: label,
+            });
+
+            if (existing.data.length > 0) {
+              const issue = existing.data[0];
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number, body,
+              });
+              core.info(`Updated existing issue #${issue.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner, repo, title, body, labels: [label],
+              });
+              core.info(`Filed new issue #${created.data.number}`);
+            }

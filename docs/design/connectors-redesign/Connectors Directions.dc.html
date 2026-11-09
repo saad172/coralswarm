@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="stylesheet" href="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/styles.css"><script src="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/_ds_bundle.js"></script><style>body{margin:0;background:#f0eee9;font-family:system-ui,sans-serif}a{color:var(--brand-2)}a:hover{color:var(--ink)}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 14px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.dv-notes{margin:0 0 24px;max-width:860px;font:12.5px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.62);display:flex;flex-direction:column;gap:4px}</style></helmet>
+<section class="dv-turn" id="t4">
+  <div class="dv-thd"><a class="dv-tid" href="#t4">4</a><span class="dv-tname">MCP band with motion: the swarm mark takes in context and sends out answers</span></div>
+  <div class="dv-notes">
+    <span>All three animate the real mark's geometry (rings at radii 0/.14/.25/.35/.45, the five hues). In every version, multi-hue dots come in from your tools and coral dots go out as answers, so the motion acts out the in/out lines.</span>
+    <span><b>Flag:</b> the system allows almost no motion (two animations exist in the product). These would be a third, a deliberate exception for this one band. They hold still for users who turn on reduced motion.</span>
+  </div>
+  <div class="dv-opts">
+    <div class="dv-opt" id="4a">
+      <div class="dv-olabel"><a class="dv-oid" href="#4a">4a</a>Orbit — a living mandala beside the copy, dots spiral in and stream out</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px"><sc-for list="{{ tailConnectors }}" as="c" hint-placeholder-count="3"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for></div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 440px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+            <div style="display:flex;flex-direction:column;gap:16px;padding:22px 22px 18px;min-width:0">
+              <span style="font-family:var(--display);font-size:28px;line-height:1.15">Use CoralSwarm <i style="color:var(--brand)">anywhere</i></span>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">Your tools add notes, decisions and session summaries to your ocean.</span></div>
+                <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">They ask it questions and get answers that cite their sources.</span></div>
+              </div>
+              <button type="button" onClick="{{ copy }}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--bg-2);border-radius:var(--r-full);padding:7px 8px 7px 14px;font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover);border-color:var(--ink-3)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 8px;font-size:10.5px;color:var(--ink-2)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+              <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line-3);padding-top:14px">
+                <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+                <span style="font-size:12.5px;color:var(--ink-3)">Tool not listed? Anything that speaks MCP can add to your ocean.</span>
+              </div>
+            </div>
+            <div style="position:relative;border-left:1px solid var(--line-2);background:var(--bg-subtle)">
+              <div style="position:absolute;inset:0">{{ animOrbit }}</div>
+              <span style="position:absolute;left:14px;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">in · your tools</span>
+              <span style="position:absolute;right:14px;bottom:12px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out · answers</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="4b">
+      <div class="dv-olabel"><a class="dv-oid" href="#4b">4b</a>Current: lanes of dots flow across the top of the band, merge into the mark, and leave as coral</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px"><sc-for list="{{ tailConnectors }}" as="c" hint-placeholder-count="3"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for></div>
+          <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+            <div style="position:relative;height:150px;border-bottom:1px solid var(--line-2);background:var(--bg-subtle)">
+              <div style="position:absolute;inset:0">{{ animStream }}</div>
+              <span style="position:absolute;left:18px;bottom:12px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in · notes, decisions, sessions</span>
+              <span style="position:absolute;right:18px;bottom:12px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out · cited answers</span>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:start;padding:20px 22px 18px">
+              <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <span style="font-family:var(--display);font-size:28px;line-height:1.15">Use CoralSwarm <i style="color:var(--brand)">anywhere</i></span>
+                <span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">Your AI tools add context to your ocean and ask it questions. Tool not listed? Anything that speaks MCP can add to it.</span>
+              </div>
+              <button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--bg-2);border-radius:var(--r-full);padding:7px 8px 7px 14px;font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover);border-color:var(--ink-3)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 8px;font-size:10.5px;color:var(--ink-2)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 22px;border-top:1px solid var(--line-2)">
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">pick one to set it up</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="4c">
+      <div class="dv-olabel"><a class="dv-oid" href="#4c">4c</a>Reef pulse: the reef dot grid fills the band and lights up in ripples from the mark, with the copy on a white panel</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px"><sc-for list="{{ tailConnectors }}" as="c" hint-placeholder-count="3"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for></div>
+          <div style="position:relative;border:1px solid var(--line);border-radius:var(--r-card);background:var(--bg-subtle);overflow:hidden">
+            <div style="position:absolute;inset:0">{{ animRipple }}</div>
+            <div style="position:relative;display:grid;grid-template-columns:560px minmax(0,1fr);padding:22px">
+              <div style="display:flex;flex-direction:column;gap:14px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-pop);padding:20px">
+                <span style="font-family:var(--display);font-size:28px;line-height:1.15">Use CoralSwarm <i style="color:var(--brand)">anywhere</i></span>
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">Your tools add notes, decisions and session summaries to your ocean.</span></div>
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">They ask it questions and get answers that cite their sources.</span></div>
+                </div>
+                <button type="button" onClick="{{ copy }}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--bg-2);border-radius:var(--r-full);padding:7px 8px 7px 14px;font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover);border-color:var(--ink-3)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 8px;font-size:10.5px;color:var(--ink-2)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+                <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line-3);padding-top:14px">
+                  <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+                  <span style="font-size:12.5px;color:var(--ink-3)">Tool not listed? Anything that speaks MCP can add to your ocean.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="dv-next">Try next: "<a class="dv-oid" href="#4a">4a</a> but slower" · "<a class="dv-oid" href="#4b">4b</a>'s stream behind <a class="dv-oid" href="#4c">4c</a>'s panel" · "go with <a class="dv-oid" href="#4c">4c</a> and build every screen"</p>
+</section>
+<section class="dv-turn" id="t3">
+  <div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">More contrast for the MCP band — <a class="dv-oid" href="#2a">2a</a>'s layout, three ways</span></div>
+  <div class="dv-notes">
+    <span><a class="dv-oid" href="#3a">3a</a> breaks a system rule: the overlay is meant to be the only dark surface. It borrows the overlay's own tokens (<code>--ink</code>, <code>--overlay-ink</code>), so it adds no new values, but it needs a sign-off. <a class="dv-oid" href="#3b">3b</a> and <a class="dv-oid" href="#3c">3c</a> stay inside the rules.</span>
+  </div>
+  <div class="dv-opts">
+    <div class="dv-opt" id="3a">
+      <div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a>Ink band — the one dark block on the page, in the overlay's palette</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px"><sc-for list="{{ tailConnectors }}" as="c" hint-placeholder-count="3"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for></div>
+          <div style="background:var(--ink);border-radius:var(--r-card);box-shadow:var(--shadow-pop);overflow:hidden;color:var(--overlay-ink)">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:start;padding:22px 22px 20px">
+              <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+                <span style="font-family:var(--display);font-size:28px;line-height:1.15;color:var(--overlay-ink)">Use CoralSwarm <i style="color:var(--brand)">anywhere</i></span>
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in</span><span style="font-size:13.5px;line-height:1.5;color:var(--overlay-ink)">Your tools add notes, decisions and session summaries to your ocean.</span></div>
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand)">out</span><span style="font-size:13.5px;line-height:1.5;color:var(--overlay-ink)">They ask it questions and get answers that cite their sources.</span></div>
+                </div>
+              </div>
+              <button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;gap:10px;border:1px solid color-mix(in srgb, var(--overlay-ink) 22%, transparent);background:color-mix(in srgb, var(--overlay-ink) 8%, transparent);border-radius:var(--r-full);padding:8px 8px 8px 15px;font-family:var(--mono);font-size:13px;color:var(--overlay-ink);cursor:pointer;transition:var(--transition-control)" style-hover="border-color:var(--brand)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--brand);border-radius:var(--r-full);padding:3px 9px;font-size:10.5px;color:var(--ink)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 22px;border-top:1px solid color-mix(in srgb, var(--overlay-ink) 14%, transparent)">
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+              <span style="font-family:var(--mono);font-size:11px;color:color-mix(in srgb, var(--overlay-ink) 65%, transparent)">pick one to set it up</span>
+            </div>
+            <div style="padding:12px 22px;border-top:1px solid color-mix(in srgb, var(--overlay-ink) 14%, transparent);font-size:12.5px;color:color-mix(in srgb, var(--overlay-ink) 78%, transparent)">Tool not listed? Anything that speaks MCP can add to your ocean — point it at the address above.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="3b">
+      <div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a>Coral wash — brand-soft band, coral-italic title word, ink copy button</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px"><sc-for list="{{ tailConnectors }}" as="c" hint-placeholder-count="3"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for></div>
+          <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb, var(--brand) 35%, transparent);border-radius:var(--r-card);overflow:hidden;color:var(--ink)">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:start;padding:22px 22px 20px">
+              <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+                <span style="font-family:var(--display);font-size:28px;line-height:1.15">Use CoralSwarm <i style="color:var(--brand-2)">anywhere</i></span>
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">in</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink)">Your tools add notes, decisions and session summaries to your ocean.</span></div>
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink)">They ask it questions and get answers that cite their sources.</span></div>
+                </div>
+              </div>
+              <button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--ink);background:var(--bg);border-radius:var(--r-full);padding:8px 8px 8px 15px;font-family:var(--mono);font-size:13px;color:var(--ink);cursor:pointer;box-shadow:var(--shadow-card);transition:var(--transition-control)" style-hover="background:var(--bg-2)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--ink);border-radius:var(--r-full);padding:3px 9px;font-size:10.5px;color:var(--bg)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 22px;background:var(--bg);border-top:1px solid color-mix(in srgb, var(--brand) 35%, transparent)">
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+              <span style="flex:1;font-family:var(--mono);font-size:11px;color:var(--ink-3)">pick one to set it up</span>
+              <span style="font-size:12.5px;color:var(--ink-2)">Tool not listed? Anything that speaks MCP can add to your ocean.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="3c">
+      <div class="dv-olabel"><a class="dv-oid" href="#3c">3c</a>Recessed well: band set into the deeper bg-3 backdrop, with a white card and an ink rule on top</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans)">
+        <div style="padding:24px 28px 0">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px"><sc-for list="{{ tailConnectors }}" as="c" hint-placeholder-count="3"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for></div>
+        </div>
+        <div style="background:var(--bg-3);border-top:1px solid var(--line);padding:28px">
+          <div style="background:var(--bg);border:1px solid var(--line);border-top:3px solid var(--ink);border-radius:var(--r-card);box-shadow:var(--shadow-pop);overflow:hidden;color:var(--ink)">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:start;padding:22px 22px 20px">
+              <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+                <span style="font-family:var(--display);font-size:30px;line-height:1.15">Use CoralSwarm <i style="color:var(--brand)">anywhere</i></span>
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink)">Your tools add notes, decisions and session summaries to your ocean.</span></div>
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink)">They ask it questions and get answers that cite their sources.</span></div>
+                </div>
+              </div>
+              <button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;gap:10px;border:none;background:var(--ink);border-radius:var(--r-full);padding:9px 9px 9px 16px;font-family:var(--mono);font-size:13px;color:var(--bg);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--ink-2)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--brand);border-radius:var(--r-full);padding:3px 9px;font-size:10.5px;color:var(--ink)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 22px;border-top:1px solid var(--line-2)">
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">pick one to set it up</span>
+            </div>
+            <div style="padding:11px 22px;background:var(--bg-subtle);border-top:1px solid var(--line-2);font-size:12.5px;color:var(--ink-2)">Tool not listed? Anything that speaks MCP can add to your ocean — point it at the address above.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="dv-next">Try next: "<a class="dv-oid" href="#3a">3a</a>, approved — build every screen" · "<a class="dv-oid" href="#3c">3c</a> but with <a class="dv-oid" href="#3a">3a</a>'s dark pill" · "tone <a class="dv-oid" href="#3b">3b</a>'s wash down"</p>
+</section>
+<section class="dv-turn" id="t2">
+  <div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">MCP band under <a class="dv-oid" href="#1a">1a</a> — three treatments</span></div>
+  <div class="dv-notes">
+    <span><b>Common to all three:</b> the band sits below the grid with more weight than before. The address is a pill you click to copy, not a field. Labelled in and out lines say it both adds context and answers questions. Picking a client in the Seg opens a setup modal, and one line invites tools that aren't listed.</span>
+    <span>The Seg works: pick a client and the modal under each band updates. The address pill copies on click.</span>
+  </div>
+  <div class="dv-opts">
+    <div class="dv-opt" id="2a">
+      <div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Stacked — title, in/out lines and address in one card, clients underneath</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px">
+            <sc-for list="{{ connectors }}" as="c" hint-placeholder-count="9"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:start;padding:20px 20px 18px">
+              <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+                <span style="font-family:var(--display);font-size:26px;line-height:1.15;color:var(--ink)">Use CoralSwarm anywhere</span>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">Your tools add notes, decisions and session summaries to your ocean.</span></div>
+                  <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">They ask it questions and get answers that cite their sources.</span></div>
+                </div>
+              </div>
+              <button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--bg-2);border-radius:var(--r-full);padding:7px 8px 7px 14px;font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover);border-color:var(--ink-3)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 8px;font-size:10.5px;color:var(--ink-2)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-top:1px solid var(--line-2)">
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">pick one to set it up</span>
+            </div>
+            <div style="padding:11px 20px;background:var(--bg-subtle);border-top:1px solid var(--line-2);font-size:12.5px;color:var(--ink-2)">Tool not listed? Anything that speaks MCP can add to your ocean — point it at the address above.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="2b">
+      <div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Reef band — dot-grid texture, explanation left, address and clients on a white panel right</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px">
+            <sc-for list="{{ connectors }}" as="c" hint-placeholder-count="9"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:24px;align-items:center;padding:24px;border:1px solid var(--line);border-radius:var(--r-card);background-color:var(--bg-subtle);background-image:radial-gradient(var(--line) 1px, transparent 1px);background-size:24px 24px">
+            <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+              <span style="font-family:var(--display);font-size:28px;line-height:1.15;color:var(--ink)">Use CoralSwarm anywhere</span>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in · add context</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">Notes, decisions and session summaries from the tool you're working in.</span></div>
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out · ask</span><span style="font-size:13.5px;line-height:1.5;color:var(--ink-2)">Questions answered from your ocean, citing where each answer came from.</span></div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:16px">
+              <button type="button" onClick="{{ copy }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);background:var(--bg-2);border-radius:var(--r-full);padding:8px 8px 8px 16px;font-family:var(--mono);font-size:13.5px;color:var(--ink);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover);border-color:var(--ink-3)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 9px;font-size:10.5px;color:var(--ink-2)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+              <div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">set it up in</span><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import></div>
+              <span style="font-size:12.5px;line-height:1.5;color:var(--ink-3);border-top:1px solid var(--line-3);padding-top:12px">Tool not listed? Anything that speaks MCP can add to your ocean.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="2c">
+      <div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Ledger — clients in the header, in/out as two ruled rows, address in a footer bar</div>
+      <div class="dv-card" style="width:1096px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+        <div style="padding:24px 28px 32px">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px">
+            <sc-for list="{{ connectors }}" as="c" hint-placeholder-count="9"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:16px;padding:18px 20px 14px">
+              <span style="flex:1;font-family:var(--display);font-size:26px;line-height:1.15;color:var(--ink)">Use CoralSwarm anywhere</span>
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+            </div>
+            <div style="display:grid;grid-template-columns:72px minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:center;padding:14px 20px;border-top:1px solid var(--line-3)">
+              <span style="justify-self:start;font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;padding:2px 9px;border-radius:var(--r-full);background:color-mix(in srgb, var(--hue-teal) 18%, transparent);color:var(--hue-teal)">in</span>
+              <span style="font-size:14px;font-weight:500;color:var(--ink)">Add context from wherever you work</span>
+              <span style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">A coding session, a doc, a script — saved as corals, private until you promote them.</span>
+            </div>
+            <div style="display:grid;grid-template-columns:72px minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:center;padding:14px 20px;border-top:1px solid var(--line-3)">
+              <span style="justify-self:start;font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;padding:2px 9px;border-radius:var(--r-full);background:var(--brand-soft);color:var(--brand-2)">out</span>
+              <span style="font-size:14px;font-weight:500;color:var(--ink)">Ask your ocean without leaving the tool</span>
+              <span style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">Answers cite their sources, and say so when two sources disagree.</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--bg-subtle);border-top:1px solid var(--line-2)">
+              <button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--bg);border-radius:var(--r-full);padding:6px 7px 6px 13px;font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer;transition:var(--transition-control)" style-hover="background:var(--bg-hover);border-color:var(--ink-3)">https://api.coralswarm.example/mcp<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 8px;font-size:10.5px;color:var(--ink-2)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="copy" size="{{ 12 }}" hint-size="12px,12px"></x-import>{{ copyLabel }}</span></button>
+              <span style="font-size:12.5px;color:var(--ink-2)">Tool not listed? Anything that speaks MCP can add to your ocean.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="2-modal">
+      <div class="dv-olabel"><span class="dv-oid">all</span>Setup modal: opens when you pick a client in any band. Showing {{ clientName }}.</div>
+      <div class="dv-card" style="width:640px;height:620px;display:grid;place-items:center;background:var(--bg-2);position:relative;font-family:var(--sans)">
+        <div style="position:absolute;inset:0;background:var(--overlay-scrim)"></div>
+        <div role="dialog" style="position:relative;width:520px;max-width:100%;overflow:hidden;border-radius:var(--r-frame);border:1px solid var(--line);background:var(--bg);box-shadow:var(--shadow-frame)">
+          <div style="display:flex;align-items:flex-start;gap:12px;border-bottom:1px solid var(--line-2);padding:14px 18px">
+            <div style="min-width:0;flex:1"><h2 style="margin:0;font-size:15px;font-weight:500;line-height:1.35;color:var(--ink)">Connect {{ clientName }}</h2><p style="margin:4px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-2)">No key to copy. {{ clientName }} asks you to sign in with your CoralSwarm account.</p></div>
+            <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.IconButton" label="Close" size="{{ 26 }}" style="border-color:transparent" hint-size="26px,26px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="close" size="{{ 14 }}" hint-size="14px,14px"></x-import></x-import>
+          </div>
+          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;flex-direction:column">
+              <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);padding-bottom:7px">what {{ clientName }} can do</span>
+              <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line-3)"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--hue-teal)">in</span><span style="font-size:13px;line-height:1.5;color:var(--ink)">{{ can.add }}</span></div>
+              <div style="display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line-3)"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-2)">out</span><span style="font-size:13px;line-height:1.5;color:var(--ink)">{{ can.ask }}</span></div>
+            </div>
+            <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+                <li style="display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;align-items:start">
+                  <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);padding-top:2px">{{ s.n }}</span>
+                  <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:13px;line-height:1.5;color:var(--ink)">{{ s.t }}</span><sc-if value="{{ s.code }}" hint-placeholder-val="{{ false }}"><code style="font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-field);padding:7px 10px;white-space:pre-wrap;word-break:break-all">{{ s.code }}</code></sc-if></div>
+                </li>
+              </sc-for>
+            </ol>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;border-top:1px solid var(--line-2);background:var(--bg-2);padding:12px 18px">
+            <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="primary" size="sm" hint-size="70px,30px">Done</x-import>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="dv-next">Try next: "<a class="dv-oid" href="#2b">2b</a> but with the in/out rows from <a class="dv-oid" href="#2c">2c</a>" · "go with <a class="dv-oid" href="#2a">2a</a> and build every screen" · "show which clients are already signed in"</p>
+</section>
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Connectors page + card — three directions</span></div>
+  <div class="dv-notes">
+    <span><b>Same everywhere:</b> one card per sign-in, the six-status pill set (Verdict treatment, recreated from <code>.verdict</code> in globals.css), one action per status, toolkits differ only by a Beta tag. MCP section moved in from Settings.</span>
+    <span><b>What changes:</b> <a class="dv-oid" href="#1a">1a</a> uniform tile grid (closest to today) · <a class="dv-oid" href="#1b">1b</a> one borderless ledger, scannable by status · <a class="dv-oid" href="#1c">1c</a> connected vs. available, with each connector's sources visible on its card.</span>
+    <span><b>Flags:</b> no Google mark exists in the repo — Google uses the Gmail mark until one is added. Toolkit hues proposed: Jira teal, Confluence teal, Linear plum, HubSpot amber, Zendesk pink, Dart coral. Toolkit capture lines and MCP client steps are draft copy to verify.</span>
+  </div>
+  <div class="dv-opts">
+    <sc-for list="{{ directions }}" as="d" hint-placeholder-count="3">
+      <div class="dv-opt" id="{{ d.id }}">
+        <div class="dv-olabel"><a class="dv-oid" href="#{{ d.id }}">{{ d.id }}</a>{{ d.label }}</div>
+        <div class="dv-card" style="width:1280px">
+          <div style="display:flex;min-height:860px;background:var(--bg-2);font-family:var(--sans);color:var(--ink)">
+            <nav style="display:flex;width:224px;flex:none;flex-direction:column;border-right:1px solid var(--line);background:var(--bg-2)">
+              <div style="padding:12px 11px 9px"><div style="display:flex;align-items:center;gap:8px;padding:0 1px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.DotMandala" size="{{ 22 }}" density="{{ 0.8 }}" hint-size="22px,22px"></x-import><span style="flex:1;font-size:13px;font-weight:600">Acme</span><span style="color:var(--ink-3);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="chevronUpDown" size="{{ 14 }}" hint-size="14px,14px"></x-import></span></div></div>
+              <div style="display:flex;flex-direction:column;gap:5px;padding:0 11px 8px">
+                <div style="display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12.5px;color:var(--ink-3)"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="search" size="{{ 14 }}" hint-size="14px,14px"></x-import>Search<span style="margin-left:auto;font-family:var(--mono);font-size:10px">⌘K</span></div>
+                <div style="display:flex;align-items:center;gap:7px;border-radius:var(--r-field);border:1px solid var(--line);background:var(--bg);padding:7px 10px;font-size:13px;font-weight:500;box-shadow:var(--shadow-card)"><span style="color:var(--brand);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="add" size="{{ 15 }}" stroke-width="{{ 2 }}" hint-size="15px,15px"></x-import></span>New chat<span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-4)">⌘N</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:1px;padding:0 11px 6px">
+                <sc-for list="{{ places }}" as="p" hint-placeholder-count="5"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" icon="{{ p.icon }}" label="{{ p.label }}" count="{{ p.count }}" hint-size="100%,30px"></x-import></sc-for>
+              </div>
+              <div style="flex:1;padding:6px 11px">
+                <div style="padding:0 10px 7px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">recent</div>
+                <div style="display:flex;flex-direction:column;gap:1px"><sc-for list="{{ chats }}" as="ch" hint-placeholder-count="4"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" label="{{ ch }}" style="font-size:12.5px" hint-size="100%,30px"></x-import></sc-for></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:1px;padding:0 11px 8px">
+                <sc-for list="{{ utilities }}" as="p" hint-placeholder-count="2"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.NavRow" icon="{{ p.icon }}" label="{{ p.label }}" active="{{ p.active }}" hint-size="100%,30px"></x-import></sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding:9px 11px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Avatar" name="Dana Ross" size="{{ 24 }}" hint-size="24px,24px"></x-import><span style="flex:1;font-size:12.5px;font-weight:500">Dana Ross</span><span style="color:var(--ink-3);display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="settings" size="{{ 15 }}" hint-size="15px,15px"></x-import></span></div>
+            </nav>
+            <div style="display:flex;min-width:0;flex:1;flex-direction:column">
+              <header style="display:flex;height:52px;flex:none;align-items:center;border-bottom:1px solid var(--line-2);background:var(--bg);padding:0 20px"><span style="font-size:14px;font-weight:500;letter-spacing:-0.01em">Connectors</span></header>
+              <main style="flex:1;background:var(--bg-2)">
+                <div style="margin:0 auto;max-width:1040px;padding:24px 28px 40px">
+                  <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.PageHead" title="Connectors" hint-size="100%,80px">Sign in to the tools you already use and choose exactly what CoralSwarm captures from each.</x-import>
+
+                  <sc-if value="{{ d.isA }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:36px">
+                      <sc-for list="{{ connectors }}" as="c" hint-placeholder-count="9"><dc-import name="ConnectorCard" c="{{ c }}" variant="tile" hint-size="100%,170px"></dc-import></sc-for>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ d.isB }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden;margin-bottom:36px">
+                      <div style="display:grid;grid-template-columns:30px minmax(0,1.1fr) 150px minmax(0,2.2fr) 128px;gap:14px;padding:10px 16px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)"><span></span><span>connector</span><span>status</span><span>activity</span><span></span></div>
+                      <sc-for list="{{ connectedList }}" as="c" hint-placeholder-count="4"><dc-import name="ConnectorCard" c="{{ c }}" variant="row" hint-size="100%,58px"></dc-import></sc-for>
+                      <div style="padding:16px 16px 8px;border-top:1px solid var(--line-2);background:var(--bg-subtle);font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">not connected yet</div>
+                      <sc-for list="{{ availableList }}" as="c" hint-placeholder-count="6"><dc-import name="ConnectorCard" c="{{ c }}" variant="row" hint-size="100%,58px"></dc-import></sc-for>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ d.isC }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:baseline;gap:8px;margin:0 0 10px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">connected</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">4</span></div>
+                    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:28px">
+                      <sc-for list="{{ connectedList }}" as="c" hint-placeholder-count="4"><dc-import name="ConnectorCard" c="{{ c }}" variant="rich" hint-size="100%,220px"></dc-import></sc-for>
+                    </div>
+                    <div style="display:flex;align-items:baseline;gap:8px;margin:0 0 10px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">available</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-4)">6</span></div>
+                    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:36px">
+                      <sc-for list="{{ availableList }}" as="c" hint-placeholder-count="6"><dc-import name="ConnectorCard" c="{{ c }}" variant="compact" hint-size="100%,60px"></dc-import></sc-for>
+                    </div>
+                  </sc-if>
+
+                  <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">
+                    <span style="font-family:var(--display);font-size:22px;line-height:1.2;color:var(--ink)">Use CoralSwarm anywhere</span>
+                    <span style="font-size:13px;color:var(--ink-2)">Your AI tools can ask your ocean questions and save context back to it, over MCP.</span>
+                  </div>
+                  <div style="background:var(--bg);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line-2)">
+                      <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">address</span>
+                      <span style="flex:1;font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-field);padding:7px 10px">https://api.coralswarm.example/mcp</span>
+                      <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" icon="{{ copyIcon }}" hint-size="80px,30px">Copy</x-import>
+                    </div>
+                    <div style="padding:14px 14px 16px;display:flex;flex-direction:column;gap:14px">
+                      <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ clients }}" value="{{ client }}" on-change="{{ setClient }}" hint-size="420px,32px"></x-import>
+                      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px">
+                        <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+                          <li style="display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;align-items:start">
+                            <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);padding-top:2px">{{ s.n }}</span>
+                            <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:13px;line-height:1.5;color:var(--ink)">{{ s.t }}</span><sc-if value="{{ s.code }}" hint-placeholder-val="{{ false }}"><code style="font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-field);padding:7px 10px;white-space:pre-wrap;word-break:break-all">{{ s.code }}</code></sc-if></div>
+                          </li>
+                        </sc-for>
+                      </ol>
+                      <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);border-top:1px solid var(--line-3);padding-top:12px">no key to copy — you sign in with your CoralSwarm account when {{ clientName }} asks</span>
+                    </div>
+                  </div>
+                </div>
+              </main>
+            </div>
+          </div>
+        </div>
+        <div class="dv-olabel" style="margin-top:14px"><a class="dv-oid" href="#{{ d.id }}">{{ d.id }}</a>Card in every status — Slack (one source) and Microsoft (five, two locked)</div>
+        <div class="dv-card" style="width:1280px;background:var(--bg-2);padding:24px 28px;box-sizing:border-box">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start">
+            <sc-for list="{{ d.matrix }}" as="m" hint-placeholder-count="12"><dc-import name="ConnectorCard" c="{{ m.c }}" variant="{{ m.variant }}" hint-size="100%,170px"></dc-import></sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <p class="dv-next">Try next: "go with <a class="dv-oid" href="#1c">1c</a>, but use the tile from <a class="dv-oid" href="#1a">1a</a> for available connectors" · "<a class="dv-oid" href="#1b">1b</a>, build every screen" · "show the source list from 1c inside 1a's tile"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { client: "claude", ready: !!window.CoralSwarmDesignSystem_451767 };
+  static Swarm() {
+    if (window.__csSwarm3) return window.__csSwarm3;
+    const RINGS = [{ r: 0, n: 1, s: 0.085 }, { r: 0.14, n: 6, s: 0.06 }, { r: 0.25, n: 10, s: 0.05 }, { r: 0.35, n: 14, s: 0.042 }, { r: 0.45, n: 18, s: 0.034 }];
+    const HUES = ["coral", "pink", "amber", "teal", "plum"];
+    function Swarm({ mode }) {
+      const ref = React.useRef(null);
+      React.useEffect(() => {
+        const cv = ref.current; if (!cv) return;
+        const ctx = cv.getContext("2d");
+        const FB = ["#f77764", "#eb7290", "#f4b860", "#2a9d8f", "#7c5295"];
+        let hue = FB.slice(), line = "#e3e5e9", coral = hue[0], lastRead = -1;
+        const readTokens = () => { const cs = getComputedStyle(document.documentElement); hue = HUES.map((h, i) => cs.getPropertyValue("--hue-" + h).trim() || FB[i]); line = cs.getPropertyValue("--line").trim() || line; coral = hue[0]; };
+        const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+        let W = 0, H = 0, raf, parts = [], last = 0;
+        const fit = () => { const r = cv.parentElement.getBoundingClientRect(); const d = window.devicePixelRatio || 1; W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0); };
+        fit();
+        const ro = new ResizeObserver(fit); ro.observe(cv.parentElement);
+        const mandala = (cx, cy, S, t, pulse) => {
+          RINGS.forEach((ring, ri) => {
+            const dir = ri % 2 ? -1 : 1, w = ri ? (0.22 / ri) * dir : 0;
+            for (let i = 0; i < ring.n; i++) {
+              const a = ri === 0 ? 0 : (i / ring.n) * Math.PI * 2 + ri * 0.4 + t * w;
+              const br = 1 + 0.04 * Math.sin(t * 1.6 - ri * 0.7) + (pulse || 0) * (ri === 0 ? 0.25 : 0.06);
+              ctx.fillStyle = `${hue[(i + ri) % 5]}`;
+              ctx.beginPath(); ctx.arc(cx + Math.cos(a) * ring.r * S * br, cy + Math.sin(a) * ring.r * S * br, ring.s * S, 0, Math.PI * 2); ctx.fill();
+            }
+          });
+        };
+        const bez = (p0, c, p1, u) => [(1 - u) ** 2 * p0[0] + 2 * (1 - u) * u * c[0] + u * u * p1[0], (1 - u) ** 2 * p0[1] + 2 * (1 - u) * u * c[1] + u * u * p1[1]];
+        let pulse = 0, waves = [], lastWave = -10;
+        const frame = (ms) => {
+          const t = ms / 1000, dt = Math.min(0.05, t - (last || t)); last = t;
+          if (Math.abs(t - lastRead) > 1) { readTokens(); lastRead = t; }
+          ctx.clearRect(0, 0, W, H);
+          pulse = Math.max(0, pulse - dt * 2.5);
+          if (mode === "orbit") {
+            const cx = W * 0.55, cy = H * 0.5, S = Math.min(H * 0.62, W * 0.5);
+            if (Math.random() < dt * 5) parts.push({ k: "in", u: 0, sp: 0.35 + Math.random() * 0.25, y0: H * (0.1 + Math.random() * 0.8), c: hue[Math.floor(Math.random() * 5)], r: 2 + Math.random() * 1.4 });
+            if (Math.random() < dt * 2.2) parts.push({ k: "out", u: 0, sp: 0.3 + Math.random() * 0.2, y1: H * (0.25 + Math.random() * 0.6), c: coral, r: 2.4 + Math.random() * 1.2 });
+            parts = parts.filter(p => p.u < 1);
+            parts.forEach(p => {
+              p.u += dt * p.sp;
+              const pos = p.k === "in" ? bez([-6, p.y0], [cx * 0.55, p.y0 < cy ? H * 0.95 : H * 0.05], [cx, cy], p.u) : bez([cx, cy], [cx + (W - cx) * 0.4, p.y1 < cy ? 0 : H], [W + 6, p.y1], p.u);
+              if (p.k === "in" && p.u >= 1) pulse = Math.min(1, pulse + 0.25);
+              ctx.globalAlpha = p.k === "in" ? Math.min(1, (1 - p.u) * 4, p.u * 6) : Math.min(1, p.u * 5);
+              ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(pos[0], pos[1], p.r, 0, Math.PI * 2); ctx.fill();
+            });
+            ctx.globalAlpha = 1; mandala(cx, cy, S, t, pulse);
+          } else if (mode === "stream") {
+            const cx = W * 0.5, cy = H * 0.46, S = H * 0.62, lanes = 9, gap = 13;
+            if (parts.length < 150 && Math.random() < dt * 22) { const lane = Math.floor(Math.random() * lanes); parts.push({ x: -8, lane, sp: 70 + Math.random() * 50, c: hue[lane % 5], r: 1.8 + Math.random() * 1.3 }); }
+            parts = parts.filter(p => p.x < W + 10);
+            parts.forEach(p => {
+              p.x += p.sp * dt * (Math.abs(p.x - cx) < S * 0.4 ? 0.55 : 1);
+              const bump = Math.exp(-(((p.x - cx) / (W * 0.16)) ** 2));
+              const y = cy + (p.lane - (lanes - 1) / 2) * gap * (1 - bump);
+              const hidden = Math.abs(p.x - cx) < S * 0.36;
+              if (hidden && !p.hit) { p.hit = true; pulse = Math.min(1, pulse + 0.12); }
+              if (hidden) return;
+              ctx.globalAlpha = Math.min(1, (p.x + 8) / 60, (W + 10 - p.x) / 60);
+              ctx.fillStyle = p.x > cx ? coral : p.c;
+              ctx.beginPath(); ctx.arc(p.x, y, p.x > cx ? p.r * 1.15 : p.r, 0, Math.PI * 2); ctx.fill();
+            });
+            ctx.globalAlpha = 1; mandala(cx, cy, S, t, pulse);
+          } else {
+            const ox = W * 0.79, oy = H * 0.5, sp = 24, S = Math.min(H * 0.5, 170);
+            if (t - lastWave > 2.2) { waves.push(t); lastWave = t; }
+            waves = waves.filter(w => (t - w) * 190 < Math.hypot(W, H));
+            for (let x = sp / 2; x < W; x += sp) for (let y = sp / 2; y < H; y += sp) {
+              const d = Math.hypot(x - ox, y - oy); let k = 0;
+              waves.forEach(w => { const R = (t - w) * 190; const q = 1 - Math.abs(d - R) / 26; if (q > k) k = q; });
+              if (d < S * 0.55) continue;
+              if (k > 0) { const ang = (Math.atan2(y - oy, x - ox) + Math.PI) / (Math.PI * 2); ctx.fillStyle = hue[Math.floor(ang * 10) % 5]; ctx.globalAlpha = Math.min(1, 0.35 + k); ctx.beginPath(); ctx.arc(x, y, 1 + k * 2.2, 0, Math.PI * 2); ctx.fill(); }
+              else { ctx.globalAlpha = 1; ctx.fillStyle = line; ctx.beginPath(); ctx.arc(x, y, 1.1, 0, Math.PI * 2); ctx.fill(); }
+            }
+            ctx.globalAlpha = 1; mandala(ox, oy, S, t, Math.max(0, 1 - (t - lastWave) * 3));
+          }
+          if (!reduce) schedule();
+        };
+        let fb, alive = true;
+        const schedule = () => { raf = requestAnimationFrame(frame); clearTimeout(fb); fb = setTimeout(() => { if (alive) { cancelAnimationFrame(raf); frame(performance.now()); } }, 200); };
+        const t0 = performance.now() / 1000; waves = [t0 - 1.1]; lastWave = t0 - 1.1;
+        for (let i = 0; i < 90; i++) frame(performance.now() - (90 - i) * 33);
+        if (!reduce) schedule();
+        return () => { alive = false; cancelAnimationFrame(raf); clearTimeout(fb); ro.disconnect(); };
+      }, [mode]);
+      return React.createElement("canvas", { ref, "aria-hidden": true, style: { display: "block", width: "100%", height: "100%" } });
+    }
+    window.__csSwarm3 = Swarm;
+    return Swarm;
+  }
+  componentDidMount() {
+    if (!this.state.ready) this._t = setInterval(() => { if (window.CoralSwarmDesignSystem_451767) { clearInterval(this._t); this.setState({ ready: true }); } }, 100);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const NS = window.CoralSwarmDesignSystem_451767;
+    const ic = (name, size = 15) => (NS ? React.createElement(NS.Icon, { name, size }) : null);
+    const pill = NS ? React.createElement(NS.CountPill, null, "3") : null;
+
+    const ms = (status) => {
+      const base = { name: "Microsoft", provider: "microsoft", letter: "M", hue: "plum", status, sourcesShort: "Outlook mail, Calendar, Teams", what: "Outlook mail, Calendar, Teams chats, channels and meetings." };
+      const S = (mail, cal, chats) => [
+        { n: "Outlook mail", s: mail[0], meta: mail[1] }, { n: "Calendar", s: cal[0], meta: cal[1] }, { n: "Teams chats", s: chats[0], meta: chats[1] },
+        { n: "Teams channels", s: "locked", meta: "requires your IT admin" }, { n: "Teams meetings", s: "locked", meta: "requires your IT admin" }];
+      return ({
+        not: { ...base, sources: S(["off", "—"], ["off", "—"], ["off", "—"]) },
+        setup: { ...base, fresh: "2 of 5 sources chosen · scope not set yet", sources: S(["on", "not set"], ["on", "not set"], ["off", "off"]) },
+        active: { ...base, fresh: "3 of 5 sources · last captured 3 min ago", sources: S(["on", "4 threads"], ["on", "everything"], ["on", "6 chats"]) },
+        importing: { ...base, fresh: "3 of 5 sources · importing 30 days of mail · 18%", progress: 18, sources: S(["importing", "18%"], ["on", "everything"], ["on", "6 chats"]) },
+        attention: { ...base, message: "Teams chats stopped on Oct 28 — Microsoft returned a permission error. Open Microsoft and retry.", sources: S(["on", "4 threads"], ["on", "everything"], ["error", "stopped Oct 28"]) },
+        reconnect: { ...base, message: "Your Microsoft sign-in expired on Oct 27. Reconnect to resume all 3 sources.", sources: S(["paused", "stopped"], ["paused", "stopped"], ["paused", "stopped"]) },
+      })[status];
+    };
+    const slack = (status) => {
+      const base = { name: "Slack", provider: "slack", letter: "S", hue: "amber", status, sourcesShort: "Channels", what: "Messages and threads in channels you pick. Never DMs." };
+      const ch = (s, meta) => [{ n: "Channels", s, meta }];
+      return ({
+        not: { ...base, sources: ch("off", "—") },
+        setup: { ...base, fresh: "No channels picked yet · nothing captured", sources: ch("off", "none picked") },
+        active: { ...base, fresh: "14 channels · last captured 3 min ago", sources: ch("on", "14 channels") },
+        importing: { ...base, fresh: "14 channels · importing 30 days · 41%", progress: 41, sources: ch("importing", "41%") },
+        attention: { ...base, message: "3 channels were archived in Slack on Oct 26 and stopped capturing. Pick others or remove them.", sources: ch("error", "3 archived") },
+        reconnect: { ...base, message: "Slack revoked access on Oct 27. Reconnect to resume.", sources: ch("paused", "stopped") },
+      })[status];
+    };
+    const tk = (name, letter, hue, what, extra = {}) => ({ name, provider: name.toLowerCase(), letter, hue, beta: true, status: "not", sourcesShort: "Everything I can see", what, sources: [{ n: "Workspace", s: "off", meta: "—" }], ...extra });
+
+    const connectors = [
+      slack("active"),
+      ms("attention"),
+      { name: "Google", provider: "gmail", letter: "G", hue: "coral", status: "importing", fresh: "3 of 4 sources · importing 30 days · 62%", progress: 62, sourcesShort: "Gmail, Calendar, Meet, Chat", what: "Gmail, Calendar, Meet and Chat.", sources: [{ n: "Gmail", s: "on", meta: "5 threads" }, { n: "Calendar", s: "importing", meta: "62%" }, { n: "Meet", s: "on", meta: "everything" }, { n: "Chat", s: "off", meta: "off" }] },
+      { name: "GitHub", provider: "github", letter: "GH", hue: "pink", status: "setup", fresh: "No repos picked yet · nothing captured", sourcesShort: "Repositories", what: "Pull requests, reviews, issues, releases and commits. Never your source code.", sources: [{ n: "Repositories", s: "off", meta: "none picked" }] },
+      tk("Linear", "L", "plum", "Issues, projects and comments across your workspace.", { status: "active", fresh: "Everything I can see · last captured 1h ago", sources: [{ n: "Workspace", s: "on", meta: "everything" }] }),
+      tk("Jira", "J", "teal", "Issues, comments and status changes across your site."),
+      tk("Confluence", "C", "teal", "Pages and comments in the spaces you can see."),
+      tk("HubSpot", "H", "amber", "Deals, notes and logged emails on your records."),
+      tk("Zendesk", "Z", "pink", "Tickets with their public and internal replies."),
+      tk("Dart", "D", "coral", "Tasks, docs and comments in your workspace."),
+    ];
+    const connectedList = connectors.filter(c => c.status !== "not");
+    const availableList = connectors.filter(c => c.status === "not");
+    const order = ["not", "setup", "active", "importing", "attention", "reconnect"];
+    const mk = (variantFor) => [...order.map(s => slack(s)), ...order.map(s => ms(s))].map(c => ({ c, variant: variantFor(c) }));
+
+    const directions = [
+      { id: "1a", label: "Tile grid — one card shape, three across, status under the name", isA: true, matrix: mk(() => "tile") },
+      { id: "1b", label: "Ledger — one borderless list, connected first, status in its own column", isB: true, matrix: mk(() => "tile") },
+      { id: "1c", label: "Split by state — connected cards show their sources; available ones stay compact", isC: true, matrix: mk(c => (c.status === "not" ? "compact" : "rich")) },
+    ];
+    directions[1].matrix = [...order.map(s => slack(s)), ...order.map(s => ms(s))].map(c => ({ c, variant: "row" }));
+
+    const STEPS = {
+      claude: [{ t: "In Claude, open Settings → Connectors and choose Add custom connector." }, { t: "Name it CoralSwarm and paste the address above." }, { t: "Click Connect, then sign in with your CoralSwarm account." }],
+      "claude-code": [{ t: "In your terminal, add the server:", code: "claude mcp add --transport http coralswarm https://api.coralswarm.example/mcp" }, { t: "Start Claude Code and run /mcp, then choose CoralSwarm to sign in." }],
+      chatgpt: [{ t: "In ChatGPT, open Settings → Connectors → Advanced and turn on developer mode." }, { t: "Choose Create, name it CoralSwarm, and paste the address above." }, { t: "Sign in with your CoralSwarm account when ChatGPT asks." }],
+      cursor: [{ t: "Open Cursor Settings → MCP and choose Add new server." }, { t: "Add this to mcp.json:", code: "{ \"mcpServers\": { \"coralswarm\": { \"url\": \"https://api.coralswarm.example/mcp\" } } }" }, { t: "Click Needs login beside CoralSwarm and sign in." }],
+      codex: [{ t: "In your terminal, add the server:", code: "codex mcp add coralswarm --url https://api.coralswarm.example/mcp" }, { t: "Then sign in:", code: "codex mcp login coralswarm" }],
+    };
+    const clients = [{ key: "claude", label: "Claude" }, { key: "claude-code", label: "Claude Code" }, { key: "chatgpt", label: "ChatGPT" }, { key: "cursor", label: "Cursor" }, { key: "codex", label: "Codex" }];
+    const client = this.state.client;
+
+    return {
+      directions, connectors, connectedList, availableList, tailConnectors: connectors.slice(6, 9),
+      animOrbit: React.createElement(Component.Swarm(), { mode: "orbit" }),
+      animStream: React.createElement(Component.Swarm(), { mode: "stream" }),
+      animRipple: React.createElement(Component.Swarm(), { mode: "ripple" }),
+      places: [["chats", "Chats"], ["library", "Library"], ["today", "Today"], ["review", "Review"], ["workspaces", "Workspaces"]].map(([k, l]) => ({ icon: ic(k), label: l, count: k === "review" ? pill : undefined })),
+      utilities: [{ icon: ic("connectors"), label: "Connectors", active: true }, { icon: ic("settings"), label: "Settings", active: false }],
+      chats: ["Why did billing move to usage-based?", "Who owns the EU rollout?", "What did we decide about seat caps?", "Auth rewrite — where did it land?"],
+      copyIcon: ic("copy", 13),
+      clients, client, clientName: clients.find(c => c.key === client).label,
+      setClient: (k) => this.setState({ client: k }),
+      copyLabel: this.state.copied ? "copied ✓" : "copy",
+      copy: () => { try { navigator.clipboard.writeText("https://api.coralswarm.example/mcp"); } catch (e) {} this.setState({ copied: true }); clearTimeout(this._c); this._c = setTimeout(() => this.setState({ copied: false }), 1800); },
+      can: ({
+        claude: { add: "Save a conversation's decisions and notes to your ocean when you ask it to.", ask: "Answer from your ocean inside a chat, with the sources it used." },
+        "claude-code": { add: "Save what a coding session decided and why, alongside the session summary.", ask: "Look up what the team decided before it changes code." },
+        chatgpt: { add: "Save notes and decisions from a chat when you ask it to.", ask: "Answer from your ocean inside a chat, with the sources it used." },
+        cursor: { add: "Save the reasoning behind a change from the editor.", ask: "Pull in decisions and context about the code you're editing." },
+        codex: { add: "Save what a task decided and why, when it finishes.", ask: "Look up the team's decisions before it starts a task." },
+      })[client],
+      steps: STEPS[client].map((s, i) => ({ ...s, n: String(i + 1).padStart(2, "0") })),
+    };
+  }
+}
+</script>
+</body>
+</html>

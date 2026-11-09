@@ -1,0 +1,28 @@
+-- Migration: 0066_atom_header_len
+-- Description: Track the byte length of the synthetic contextual chunk-header
+--   prefix (cs-phase0-chunk-headers) prepended to a meeting/transcript atom's
+--   persisted content before embedding + `content_tsv` tokenisation, so
+--   citation/preview/snippet code can strip it and quote only the ORIGINAL
+--   text — never the "Meeting: {title}, {date}. Participants: {names}."
+--   header.
+--
+--   NULL / 0 means "no header" (the vast majority of atoms — chat sources
+--   already carry their own intentionally user-visible "{sender} in
+--   #{channel} · {when}" header and are never stamped here; only
+--   `ChunkStrategy::Transcript`-shaped sources get a header — see
+--   `coralswarm_core::chunker::build_meeting_header`).
+--
+--   `header_len` is the byte length (`str::len()`, matching how the content
+--   is persisted as UTF-8) of the header text INCLUDING its trailing "\n\n"
+--   separator, i.e. `body[header_len..]` recovers the clean chunk text.
+--
+-- NOTE on migration numbering: this PR was originally stacked on #193
+-- (`cs-phase0-embed-versioning`) and its migration was numbered 0062 at
+-- that time. #190, #193, and #194 have since merged to main and claimed
+-- 0060-0065, so this file was renumbered to 0066 when the branch was
+-- rebased onto main.
+--
+-- Down:
+--   ALTER TABLE atoms DROP COLUMN IF EXISTS header_len;
+
+ALTER TABLE atoms ADD COLUMN IF NOT EXISTS header_len INT;

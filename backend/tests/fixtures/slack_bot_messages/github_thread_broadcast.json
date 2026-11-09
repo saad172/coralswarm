@@ -1,0 +1,105 @@
+{
+  "subtype": "thread_broadcast",
+  "bot_id": "B0TESTGIT0",
+  "thread_ts": "1788995027.836039",
+  "root": {
+    "user": "U0TESTGIT0",
+    "type": "message",
+    "ts": "1788995027.836039",
+    "edited": {
+      "user": "U0TESTGIT0",
+      "ts": "1788995028.000000"
+    },
+    "bot_id": "B0TESTGIT0",
+    "app_id": "A0TESTGIT0",
+    "text": "",
+    "team": "T0TESTWS0",
+    "bot_profile": {
+      "id": "B0TESTGIT0",
+      "app_id": "A0TESTGIT0",
+      "user_id": "U0TESTGIT0",
+      "name": "GitHub",
+      "icons": {
+        "image_36": "https://example.com/icons/github_36.png",
+        "image_48": "https://example.com/icons/github_48.png",
+        "image_72": "https://example.com/icons/github_72.png"
+      },
+      "deleted": false,
+      "updated": 1788403938,
+      "team_id": "T0TESTWS0"
+    },
+    "attachments": [
+      {
+        "id": 1,
+        "footer_icon": "https://example.com/static/img/favicon-neutral.png",
+        "ts": 1788995027,
+        "color": "24292f",
+        "fallback": "[example-org/example-repo] Pull request opened by octo-dev",
+        "text": "*The problem*\n\nA workspace guard reads its key from the per-process cache before consulting the request. On a miss it returns the default rather than the caller's own value, so the check passes and the caller sees a clean result. Nothing logs, nothing alerts, and the response is indistinguishable from a channel that genuinely has no messages.\n\nThis is the second time this shape has bitten us in this module. The first was the ordering bug in the dispatch table, where a guard that always answered `true` was mistaken for a guard that had been satisfied. The pattern is the same: an absence renders as a success.\n\n*Why the tests did not catch it*\n\nThe unit tests construct the cache themselves, seed it with the key under test, and then assert the guard answers `true`. That is a list checked against itself: the assertion cannot fail because the fixture supplies exactly what the assertion looks for. Inverting one case — seeding a DIFFERENT key and asserting the guard answers `false` — turns the test red on the old code.\n\nThe integration test does not cover it either, because it runs with a single workspace. Every key it could read is the right one.\n\n*The fix*\n\nKey the cache on the pair, not on the first half of it, and make the miss path explicit: return `None` and let the caller decide, rather than substituting a default that reads as agreement. The caller here fails closed.\n\nThe guard is now derived from its subject instead of accepting a pre-computed boolean parameter. A `bool` argument named after the property it asserts is not a guard; it is the caller's opinion, and the caller is exactly who we are trying to check.\n\n*Verification*\n\nAdded a two-workspace regression test that seeds both and asserts each resolves to its own value. Reverting the fix turns it red with a message that names the wrong value it read, so a future reader does not have to reconstruct the failure.\n\nRan the full suite locally against a real database. The negative control — reverting the key change — turns exactly one test red, which is the one added here.\n\n*What this does not cover*\n\nThe scheduled sweep resolves the same key by a different path and was not touched. It runs once an hour against a single workspace today, so the same bug is latent but unreachable; a comment at that call site records the dependency.\n\nNo migration. The cache is per-process and rebuilt on boot, so nothing persisted needs repair.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a test.\n\nFollow-up note: the same absence-renders-as-success shape is worth grepping for elsewhere in this crate — any guard whose miss path returns the permissive default rather than an explicit `None` is a candidate, and each one is cheap to invert in a tes",
+        "pretext": "Pull request opened by <https://example.com/octo-dev|octo-dev>",
+        "title": "<https://example.com/example-org/example-repo/pull/101|#101 cache(admission): the workspace guard read a stale key, returned OK, and the miss looked like an empty channel>",
+        "callback_id": "example_callback_1",
+        "footer": "<https://example.com/example-org/example-repo|example-org/example-repo>",
+        "fields": [
+          {
+            "value": "<https://example.com/apps/reviewbot|@reviewbot>",
+            "title": "Reviewers",
+            "short": true
+          },
+          {
+            "value": "1",
+            "title": "Comments",
+            "short": true
+          }
+        ],
+        "mrkdwn_in": [
+          "text"
+        ],
+        "actions": [
+          {
+            "id": "1",
+            "name": "",
+            "text": "Unsubscribe",
+            "type": "button",
+            "value": "unsubscribe",
+            "style": ""
+          }
+        ]
+      }
+    ],
+    "thread_ts": "1788995027.836039",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "latest_reply": "1788996204.954039",
+    "reply_users": [
+      "U0TESTGIT0"
+    ],
+    "is_locked": false,
+    "subscribed": false,
+    "metadata": {
+      "event_type": "pull_request",
+      "event_payload": {}
+    }
+  },
+  "user": "U0TESTGIT0",
+  "type": "message",
+  "ts": "1788996204.954039",
+  "app_id": "A0TESTGIT0",
+  "text": "",
+  "attachments": [
+    {
+      "id": 1,
+      "footer_icon": "https://example.com/static/img/favicon-neutral.png",
+      "ts": 1788996204,
+      "color": "6f42c1",
+      "fallback": "[example-org/example-repo] Pull request merged by octo-dev",
+      "pretext": "Pull request merged by <https://example.com/octo-dev|octo-dev>",
+      "title": "<https://example.com/example-org/example-repo/pull/101|#101 cache(admission): the workspace guard read a stale key, returned OK, and the miss looked like an empty channel>",
+      "footer": "<https://example.com/example-org/example-repo|example-org/example-repo>"
+    }
+  ],
+  "metadata": {
+    "event_type": "pull_request",
+    "event_payload": {}
+  }
+}

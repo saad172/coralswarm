@@ -1,0 +1,34 @@
+-- no-transaction
+-- The retention sweep (`workers/jobs_retention.rs`) locks and deletes dead
+-- rows one kind at a time: `kind = $1 AND status = 'dead' AND finished_at <
+-- now() - $2`. `jobs_dead_finished` is `(finished_at) WHERE status = 'dead'`,
+-- so for a kind with few dead rows the lock SELECT walked every old dead row
+-- and filtered on kind: 402,068 rows removed by filter and 110,000 to 112,000
+-- shared buffers in 403 to 886 ms, to return 3 rows (GraphMessageIngest,
+-- measured on a copy of tenant-coralswarm, 2026-11-03). The dry run's count
+-- made the same walk for each of the eight kinds, 518 ms each. With this
+-- index the lock reads 27 buffers in 0.2 ms and the count 1,166 buffers in
+-- 19 ms; a 5,000-row dead batch (IngestDoor) locks in 21 to 23 ms.
+-- The sweep sets `plan_cache_mode = force_generic_plan` inside its own
+-- transaction: the custom plan for a kind with few dead rows kept choosing
+-- `jobs_dead_finished`, with or without `ANALYZE` or extended statistics.
+-- Partial on dead rows, about 402,000; 4.5 MB; built in 1.3 s.
+--
+-- `CREATE INDEX CONCURRENTLY` cannot run in a transaction, so it is alone in
+-- a `-- no-transaction` file. Under `apply_tree`'s session lock_timeout of
+-- 5 s the build fails with 55P03 whenever any transaction in the database
+-- stays open longer than that, and leaves an INVALID index. `apply_tree`'s
+-- own 55P03 retry then re-runs this file, `IF NOT EXISTS` skips the
+-- leftover with a notice, and sqlx records the migration as applied with
+-- the index still INVALID (#1668). Recover by hand, with no lock timeout:
+--   SET lock_timeout = 0;
+--   DROP INDEX CONCURRENTLY IF EXISTS jobs_dead_kind_finished;
+--   CREATE INDEX CONCURRENTLY jobs_dead_kind_finished ON jobs (kind, finished_at) WHERE status = 'dead';
+--   SELECT indisvalid FROM pg_index WHERE indexrelid = 'jobs_dead_kind_finished'::regclass;
+-- Run each statement on its own, outside a transaction. The CREATE has no
+-- IF NOT EXISTS, so it fails loudly if the DROP did not finish.
+-- PAIRED WITH: tenant 0232 (DDL byte-identical). `jobs` is a shared table
+-- and `check_schema_parity.sh` diffs its schema.
+-- Down: DROP INDEX CONCURRENTLY IF EXISTS jobs_dead_kind_finished;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_dead_kind_finished ON jobs (kind, finished_at) WHERE status = 'dead';

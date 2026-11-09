@@ -1,0 +1,194 @@
+{
+  "user": "U0TESTSEN0",
+  "type": "message",
+  "ts": "1788994000.111111",
+  "bot_id": "B0TESTSEN0",
+  "app_id": "A0TESTSEN0",
+  "text": ":rotating_light: **Scheduled jobs are blocked on billing — everything stopped ~14:05Z (9:05am CT).** Not a code failure: every job is refused before it starts with *\"The job was not started because recent account payments have failed or your spending limit needs to be increased.\"*  What's already dead in the last 25 min: - **Deploy** on `main` — 5 failed runs (14:12→14:28Z), nothing shipping - **Nightly backup** 14:05Z — failed, so today has **no dump at all** (the gap we closed last week is effectively back, different cause) - **Health check** 14:19Z — failed to even run, so we are flying blind - Checks on the merge queue cannot run either → 7 open pull requests (#101–#109) cannot merge  **Fix is only yours:** provider console → Settings → Billing &amp; plans → update payment method / raise the spending limit. Nothing in the repository needs changing.  Ping me once it is paid and I will re-run Deploy, Nightly backup and Health check and verify the backup log body actually dumped.",
+  "team": "T0TESTWS0",
+  "bot_profile": {
+    "id": "B0TESTSEN0",
+    "deleted": false,
+    "name": "Sentinel",
+    "updated": 1788403938,
+    "app_id": "A0TESTSEN0",
+    "user_id": "U0TESTSEN0",
+    "icons": {
+      "image_36": "https://example.com/icons/sentinel_36.png",
+      "image_48": "https://example.com/icons/sentinel_48.png",
+      "image_72": "https://example.com/icons/sentinel_72.png"
+    },
+    "team_id": "T0TESTWS0"
+  },
+  "blocks": [
+    {
+      "type": "rich_text",
+      "block_id": "h5sQGW",
+      "elements": [
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "emoji",
+              "name": "rotating_light",
+              "unicode": "1f6a8"
+            },
+            {
+              "type": "text",
+              "text": " "
+            },
+            {
+              "type": "text",
+              "text": "Scheduled jobs are blocked on billing — everything stopped ~14:05Z (9:05am CT).",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " Not a code failure: every job is refused before it starts with "
+            },
+            {
+              "type": "text",
+              "text": "\"The job was not started because recent account payments have failed or your spending limit needs to be increased.\"",
+              "style": {
+                "italic": true
+              }
+            },
+            {
+              "type": "text",
+              "text": "\n\n"
+            },
+            {
+              "type": "text",
+              "text": "What's already dead in the last 25 min:"
+            }
+          ]
+        },
+        {
+          "type": "rich_text_list",
+          "style": "bullet",
+          "indent": 0,
+          "border": 0,
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Deploy",
+                  "style": {
+                    "bold": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " on "
+                },
+                {
+                  "type": "text",
+                  "text": "main",
+                  "style": {
+                    "code": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " — 5 failed runs (14:12→14:28Z), nothing shipping"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Nightly backup",
+                  "style": {
+                    "bold": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " 14:05Z — failed, so today has "
+                },
+                {
+                  "type": "text",
+                  "text": "no dump at all",
+                  "style": {
+                    "bold": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " (the gap we closed last week is effectively back, different cause)"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Health check",
+                  "style": {
+                    "bold": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " 14:19Z — failed to even run, so we are flying blind"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Checks on the merge queue cannot run either → 7 open pull requests (#101–#109) cannot merge"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "\n"
+            },
+            {
+              "type": "text",
+              "text": "Fix is only yours:",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " provider console → Settings → Billing "
+            },
+            {
+              "type": "text",
+              "text": "&amp;"
+            },
+            {
+              "type": "text",
+              "text": " plans → update payment method / raise the spending limit. Nothing in the repository needs changing."
+            },
+            {
+              "type": "text",
+              "text": "\n\n"
+            },
+            {
+              "type": "text",
+              "text": "Ping me once it is paid and I will re-run Deploy, Nightly backup and Health check and verify the backup log body actually dumped."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

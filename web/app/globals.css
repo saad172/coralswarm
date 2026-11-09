@@ -1,0 +1,579 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ============================================================
+     CoralSwarm design tokens.
+     Source of truth: the 2026-07 redesign handoff
+       (New UI Design/design_handoff_coralswarm_redesign/)
+     Mirrored in:     tailwind.config.ts (semantic class names)
+     These variables exist so components can use color-mix() and so
+     the mocks' inline styles port over verbatim.
+
+     The redesign flips the canvas from warm cream to cool neutral by
+     rewriting these VALUES in place. The coral brand, the five hues,
+     `ok` and `warn` are unchanged, so hue-keyed components carry over.
+     ============================================================ */
+  :root {
+    --bg: #ffffff;
+    --bg-2: #f5f6f8;
+    --bg-3: #ebecef;
+    --bg-hover: #edeef1;
+    --bg-subtle: #fcfcfd;
+    --bg-subtle-2: #fafbfc;
+
+    --ink: #14161a;
+    --ink-2: #4b5058;
+    --ink-3: #8a9099;
+    --ink-4: #a6abb3;
+
+    --line: #e4e6ea;
+    --line-2: #edeef1;
+    --line-3: #f2f3f5;
+
+    --brand: #f77764;
+    --brand-2: #d14a38;
+    /* Light coral wash (chips, citations, avatars, selected tiles). The
+       handoff calls this `brand-soft`; --brand-3 is kept as an alias because
+       ~15 call sites already read it as a BACKGROUND. Destructive red lives
+       on --bad, not here — see the note in tailwind.config.ts. */
+    --brand-soft: #ffe1d9;
+    --brand-3: #ffe1d9;
+    --accent: #2a9d8f;
+
+    --hue-coral: #f77764;
+    --hue-pink: #eb7290;
+    --hue-amber: #f4b860;
+    --hue-teal: #2a9d8f;
+    --hue-plum: #7c5295;
+
+    --ok: #3f8a5b;
+    --warn: #d89a3a;
+    --bad: #c24a3a;
+
+    /* Font stacks — --font-* vars are injected by next/font in app/layout.tsx */
+    --display: var(--font-display), Georgia, serif;
+    --sans: var(--font-sans), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: var(--font-mono), ui-monospace, monospace;
+
+    /* Spacing scale (matches Tailwind 0.5/1/2/3/4/6/8/12/16/24/32) */
+    --s-0: 2px;
+    --s-1: 4px;
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+    --s-5: 24px;
+    --s-6: 32px;
+    --s-7: 48px;
+    --s-8: 64px;
+    --s-9: 96px;
+    --s-10: 128px;
+
+    /* Redesign radius scale, named for what it wraps. --r-1..--r-5 are the
+       legacy scale remapped onto it (the old 16/24px steps have no equivalent;
+       the new system tops out at 14px, so both land there). */
+    --r-badge: 6px;
+    --r-bar: 2px;
+    --r-row: 8px;
+    --r-field: 9px;
+    --r-control: 10px;
+    --r-card: 12px;
+    --r-frame: 14px;
+    --r-hud: 24px;
+    --r-full: 999px;
+    --r-1: 6px;
+    --r-2: 8px;
+    --r-3: 12px;
+    --r-4: 14px;
+    --r-5: 14px;
+
+    /* Flatter than the cream system: 1px borders do the separating, shadow
+       only lifts a row or floats a surface. */
+    --shadow-row: 0 1px 2px rgba(20, 22, 26, 0.06);
+    --shadow-card: 0 1px 2px rgba(20, 22, 26, 0.05);
+    --shadow-pop: 0 12px 28px -12px rgba(20, 22, 26, 0.16);
+    --shadow-frame: 0 28px 56px -20px rgba(20, 22, 26, 0.22);
+    --shadow-overlay: 0 22px 54px -16px rgba(0, 0, 0, 0.5);
+    --shadow-1: 0 1px 2px rgba(20, 22, 26, 0.06);
+    --shadow-2: 0 12px 28px -12px rgba(20, 22, 26, 0.16);
+    --shadow-3: 0 28px 56px -20px rgba(20, 22, 26, 0.22);
+
+    /* Home + detail panel (2026-10 handoff). Every value the prototype
+       computed inline is a token here, so screens never mix colours. */
+
+    /* Scrim behind a modal (the hidden Cmd-K title search). */
+    --scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+    /* Source-type chart colours: three plain hues plus two 45% tints of the
+       amber / plum hues for the families that share a hue. */
+    --src-chat: var(--hue-amber);
+    --src-meetings: var(--hue-teal);
+    --src-agent-sessions: var(--hue-plum);
+    --src-docs-mail: color-mix(in srgb, var(--hue-amber) 45%, var(--bg));
+    --src-code-tickets: color-mix(in srgb, var(--hue-plum) 45%, var(--bg));
+
+    /* Activity heatmap shades, quietest to busiest (level 0 is --bg-2). */
+    --heat-1: color-mix(in srgb, var(--brand) 22%, var(--bg));
+    --heat-2: color-mix(in srgb, var(--brand) 45%, var(--bg));
+    --heat-3: color-mix(in srgb, var(--brand) 72%, var(--bg));
+    --heat-4: var(--brand);
+
+    /* Today (2026-10 handoff): the time-by-hour/day chart and time-split bar
+       colour by activity kind. Doc sessions and notes are 45% tints of the
+       hue they share with meetings / Slack. */
+    --kind-meeting: var(--hue-teal);
+    --kind-slack: var(--hue-amber);
+    --kind-agent: var(--hue-plum);
+    --kind-doc: color-mix(in srgb, var(--hue-teal) 45%, var(--bg));
+    --kind-note: color-mix(in srgb, var(--hue-amber) 45%, var(--bg));
+
+    /* Side-panel widths: detail panel and the (wider) connector panel. */
+    --panel-w: 460px;
+    --panel-w-lg: 480px;
+
+    --thread-max: 720px;
+    --composer-max-h: 168px;
+    --chat-header-h: 48px;
+    --r-cite: 5px;
+    --r-mark: 3px;
+    --on-brand: #ffffff;
+    --focus-ring: color-mix(in srgb, var(--brand) 22%, transparent);
+
+    /* Home launchpad (2026-11 handoff). The "needs attention" row tints
+       `--warn` with the same recipe as the hue tints: an 18% wash and a 45%
+       border. The Ask box sets its text at 16.5px, between the composer (15)
+       and the streamed answer (16). */
+    --warn-soft: color-mix(in srgb, var(--warn) 18%, transparent);
+    --border-warn: color-mix(in srgb, var(--warn) 45%, transparent);
+    --type-ask: 400 16.5px/1.5 var(--sans);
+    /* UI text roles under the display sizes (Home review, 2026-11): a lead
+       under a page title, an item's title in a list or checklist, secondary
+       copy (hints, notes, an empty section), and mono counts and markers.
+       The kit's PageHead lead, SectionHead and Modal descriptions,
+       OptionTile title and `Mono` already use these values. */
+    --type-lead: 400 13.5px/1.6 var(--sans);
+    --type-item: 400 13px/1.5 var(--sans);
+    --type-note: 400 12.5px/1.55 var(--sans);
+    --type-micro: 400 10px/1.5 var(--mono);
+
+    --type-greeting: 400 44px/1.08 var(--display);
+    --type-question: 400 28px/1.15 var(--display);
+    --type-detail-title: 400 26px/1.15 var(--display);
+    --tracking-eyebrow-wide: 0.18em;
+
+    --dur-fast: 150ms;
+    --dur-pop: 180ms;
+    --dur-exit: 200ms;
+    --dur-enter: 220ms;
+    --dur-collapse: 240ms;
+    --dur-drawer: 280ms;
+    --dur-reveal: 320ms;
+    --dur-settle: 380ms;
+    --dur-slow: 500ms;
+    --ease: ease;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+    --ease-pop: cubic-bezier(0.34, 1.32, 0.64, 1);
+    --transition-control: border-color var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+      box-shadow var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: var(--brand);
+    color: var(--bg);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 8px;
+  }
+}
+
+@layer components {
+  /* Mono micro-label — provenance, timestamps, section eyebrows.
+     Tracking tightened 0.18em → 0.13em to match the redesign's eyebrows. */
+  .lbl,
+  .label {
+    @apply font-mono text-[10px] uppercase tracking-[0.13em] text-ink-3;
+  }
+
+  /* Mono pill — small metadata token */
+  .pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-line bg-bg-2 px-[10px] py-[4px] font-mono text-[12px] tracking-[0.04em] text-ink-2;
+  }
+  /* Active/selected pill state (e.g. a toggled filter) — brand wash, matching
+     the .cite / .k-* hue-tint idiom. */
+  .pill--active {
+    border-color: var(--brand);
+    color: var(--brand-2);
+    background: color-mix(in srgb, var(--brand) 18%, transparent);
+  }
+
+  /* Search-match highlight — snippet excerpts in the meeting library. Same
+     brand-3 wash as .cite, for a <mark> rather than a chip. */
+  .cs-hl {
+    background: var(--brand-soft);
+    color: var(--brand-2);
+    border-radius: var(--r-badge);
+    padding: 0 2px;
+  }
+
+  /* Citation chip — numbered source references in synthesized answers */
+  .cite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin: 0 2px;
+    border-radius: var(--r-badge);
+    background: var(--brand-soft);
+    color: var(--brand-2);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-control);
+    vertical-align: 1px;
+    /* UA resets so a keyboard-focusable <button class="cite"> renders exactly
+       like the <span> variant (buttons carry their own border/appearance). */
+    border: none;
+    appearance: none;
+  }
+  .cite:hover,
+  .cite.hot {
+    background: var(--brand);
+    color: var(--on-brand);
+  }
+  /* A citation Jev flagged (unsupported / contradicted / not in source): the
+     chip keeps its coral wash and gains a status glyph after the number, so
+     the flag never relies on colour alone. */
+  .cite-flag {
+    margin-left: 2px;
+    color: var(--verdict-tone, var(--ink-2));
+    font-weight: 600;
+  }
+  .cite:hover .cite-flag,
+  .cite.hot .cite-flag {
+    color: inherit;
+  }
+
+  /* Verdict mark — a status word with its glyph on an 18% status tint
+     (the same recipe as hue chips). Ink text keeps it AA on every tint;
+     the tone colours the glyph and border only. Tones: ok, warn, bad,
+     muted. Used for Jev citation verdicts and fact history. */
+  .verdict {
+    --verdict-tone: var(--ink-3);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: var(--r-full);
+    border: 1px solid color-mix(in srgb, var(--verdict-tone) 40%, transparent);
+    background: color-mix(in srgb, var(--verdict-tone) 18%, transparent);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  /* Sparkline day-bar: teal mixed 55% into the surface. Today's bar is full
+     teal and an empty day is `line`; both are utilities on the element. */
+  .spark-bar {
+    background: color-mix(in srgb, var(--hue-teal) 55%, var(--bg));
+  }
+
+  .verdict-glyph {
+    color: var(--verdict-tone);
+    font-weight: 600;
+  }
+  .verdict-ok { --verdict-tone: var(--ok); }
+  .verdict-warn { --verdict-tone: var(--warn); }
+  .verdict-bad { --verdict-tone: var(--bad); }
+  .verdict-muted { --verdict-tone: var(--ink-3); background: transparent; color: var(--ink-2); }
+
+  /* Text input — brand focus ring. 9px radius per the redesign's field spec. */
+  .field,
+  .cs-input {
+    @apply w-full rounded-field border border-line bg-bg px-3 py-2 font-sans text-[14px] text-ink;
+    transition: var(--transition-control);
+  }
+  .field:focus,
+  .cs-input:focus,
+  .field:focus-within,
+  .cs-input:focus-within {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-r2 border border-transparent px-4 py-[9px] text-[14px] font-medium disabled:cursor-not-allowed disabled:opacity-50;
+    transition: var(--transition-control);
+  }
+  .btn-primary,
+  .btn-coral {
+    /* .btn-coral is the legacy name for primary — keep both */
+    @apply btn bg-brand text-white shadow-1 hover:bg-brand-2;
+  }
+  .btn-secondary {
+    @apply btn border-line bg-bg text-ink hover:border-ink-3;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink-2 hover:bg-bg-2;
+  }
+  .btn-danger {
+    @apply btn border-bad bg-transparent text-bad hover:bg-bad hover:text-white;
+  }
+
+  /* Surfaces */
+  .card {
+    @apply rounded-r3 border border-line bg-bg p-[18px];
+    transition: var(--transition-control);
+  }
+  .panel {
+    @apply rounded-r4 border border-line bg-bg p-6;
+  }
+
+  /* Kind badges — node-type chips.
+     Hue semantics (DESIGN_SYSTEM.md): entity→pink, decision→coral,
+     thread→amber, reference→plum, coral/atom→teal. Backgrounds are the
+     prototype's 18% color-mix tint; text is the hue (or its darker
+     companion — brand-2 for coral, warn for amber — for legibility). */
+  .kind {
+    @apply mb-3 inline-flex items-center gap-[6px] rounded-full px-[9px] py-[3px] font-mono text-[10px] uppercase tracking-[0.1em];
+  }
+  .k-entity {
+    color: var(--hue-pink);
+    background: color-mix(in srgb, var(--hue-pink) 18%, transparent);
+  }
+  .k-decision {
+    color: var(--brand-2);
+    background: color-mix(in srgb, var(--hue-coral) 18%, transparent);
+  }
+  .k-thread {
+    color: var(--warn);
+    background: color-mix(in srgb, var(--hue-amber) 18%, transparent);
+  }
+  .k-reference {
+    color: var(--hue-plum);
+    background: color-mix(in srgb, var(--hue-plum) 18%, transparent);
+  }
+  .k-coral {
+    color: var(--hue-teal);
+    background: color-mix(in srgb, var(--hue-teal) 18%, transparent);
+  }
+
+  /* Reef texture — subtle ambient dot grid */
+  .reef-bg {
+    background-image: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+}
+
+@keyframes cs-meter-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes cs-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(247, 119, 100, 0.5);
+  }
+  60% {
+    box-shadow: 0 0 0 5px rgba(247, 119, 100, 0);
+  }
+}
+
+@keyframes cs-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -150% 0;
+  }
+}
+
+@keyframes cs-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cs-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cs-skeleton {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* ============================================================
+   Clerk social-button logo fix.
+   clerk-js paints each provider logo as a CSS mask-image pointing at
+   img.clerk.com/static/<provider>.svg — but that CDN is an image optimizer
+   that refuses SVG (HTTP 415, "did not resolve to a supported image type"),
+   so the masked icons render as blank boxes. Re-point them at the .png assets
+   on the same CDN (which serve 200) via background-image.
+   Kept OUTSIDE @layer so these !important rules reliably win the cascade
+   against clerk-js's injected (unlayered) styles. Add a line per provider as
+   new social connections are enabled in the Clerk dashboard.
+   ============================================================ */
+.cl-socialButtonsProviderIcon.cl-socialButtonsProviderIcon__apple,
+.cl-socialButtonsProviderIcon.cl-socialButtonsProviderIcon__google,
+.cl-socialButtonsProviderIcon.cl-socialButtonsProviderIcon__x {
+  -webkit-mask: none !important;
+  mask: none !important;
+  /* clerk-js fills monochrome icons (e.g. Apple) with a dark background-color
+     that the mask normally clips to the logo shape. With the mask gone that
+     colour would fill the whole box behind our transparent .png — clear it. */
+  background-color: transparent !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: contain !important;
+}
+.cl-socialButtonsProviderIcon.cl-socialButtonsProviderIcon__apple {
+  background-image: url("https://img.clerk.com/static/apple.png") !important;
+}
+.cl-socialButtonsProviderIcon.cl-socialButtonsProviderIcon__google {
+  background-image: url("https://img.clerk.com/static/google.png") !important;
+}
+.cl-socialButtonsProviderIcon.cl-socialButtonsProviderIcon__x {
+  background-image: url("https://img.clerk.com/static/x.png") !important;
+}
+
+/* ============================================================
+   Sign-up plane: coral primary CTA.
+   4c's "Continue" button is coral (--brand), where every other Clerk
+   surface — 4a/4b sign-in, and Settings — uses the ink formButtonPrimary
+   set in lib/clerkAppearance.ts. app/signup/page.tsx adds .cs-signup-cta to
+   the <SignUp> wrapper.
+
+   WHY CSS AND NOT A SECOND `appearance` PROP: the appearance for every Clerk
+   surface is set once on <ClerkProvider> (lib/clerkAppearance.ts). Passing a
+   component-level `appearance` to <SignUp> as well would depend on clerk-js
+   MERGING the two rather than replacing the provider's — and that merge
+   happens inside the CDN-loaded clerk-js bundle, so it can't be verified from
+   this repo. A scoped rule here keeps exactly one appearance object and no
+   dependency on that behaviour. Outside @layer + !important for the same
+   cascade reason.
+   ============================================================ */
+.cs-signup-cta .cl-formButtonPrimary {
+  background: var(--brand) !important;
+}
+.cs-signup-cta .cl-formButtonPrimary:hover {
+  background: var(--brand-2) !important;
+}
+
+/* ============================================================
+   Graph canvas (app/(app)/graph): retoken @react-sigma's controls.
+
+   @react-sigma/core ships its own stylesheet driven by `--sigma-*` custom
+   properties (white boxes, 2px black-alpha borders, 4px radius). Repointing
+   those at the design tokens inside the graph stage makes the zoom buttons
+   and minimap read as ours without forking the library's CSS. Scoped to
+   .cs-graph-stage so nothing else can inherit them.
+   ============================================================ */
+.cs-graph-stage {
+  --sigma-background-color: transparent;
+  --sigma-controls-background-color: var(--bg);
+  --sigma-controls-background-color-hover: var(--bg-hover);
+  --sigma-controls-border-color: var(--line);
+  --sigma-controls-color: var(--ink-2);
+  --sigma-controls-margin: 14px;
+  --sigma-controls-size: 30px;
+  --sigma-controls-zindex: 50;
+}
+.cs-graph-stage .react-sigma-controls {
+  border-width: 1px;
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.cs-graph-stage .cs-graph-minimap {
+  padding: 0;
+}
+.cs-graph-stage .cs-graph-minimap .react-sigma-control {
+  width: auto;
+  height: auto;
+  line-height: normal;
+  border-bottom: none;
+}
+.cs-graph-stage .cs-graph-minimap .overlay > div {
+  opacity: 0.12 !important;
+  border-color: var(--ink-3) !important;
+}
+
+@keyframes cs-evidence-enter {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.cs-evidence-sheet {
+  /* Older WKWebView ignores dvh, retaining the viewport-height fallback. */
+  max-height: 85vh;
+  max-height: 85dvh;
+  animation: cs-evidence-enter var(--dur-fast) var(--ease-out);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cs-evidence-sheet { animation: none; }
+}
+
+/* Indeterminate Meter: a segment sliding along the track. Under reduced motion
+   it holds still as a partial fill, which still reads as "in progress". */
+.meter-indeterminate {
+  width: 40%;
+  animation: cs-meter-slide 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-indeterminate { animation: none; transform: none; }
+}

@@ -1,0 +1,49 @@
+{
+  "user": "U0TESTBOT0",
+  "type": "message",
+  "ts": "1788665069.928419",
+  "edited": {
+    "user": "U0TESTBOT0",
+    "ts": "1788665076.000000"
+  },
+  "bot_id": "B0TESTBOT0",
+  "app_id": "A0TESTAPP0",
+  "text": ":white_check_mark: Ingested 1 past messages from the last all history.",
+  "team": "T0TESTWS0",
+  "bot_profile": {
+    "id": "B0TESTBOT0",
+    "deleted": false,
+    "name": "CoralSwarm",
+    "updated": 1781112388,
+    "app_id": "A0TESTAPP0",
+    "user_id": "U0TESTBOT0",
+    "icons": {
+      "image_36": "https://example.com/icons/bot_36.png",
+      "image_48": "https://example.com/icons/bot_48.png",
+      "image_72": "https://example.com/icons/service_72.png"
+    },
+    "team_id": "T0TESTWS0"
+  },
+  "blocks": [
+    {
+      "type": "rich_text",
+      "block_id": "wX+",
+      "elements": [
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "emoji",
+              "name": "white_check_mark",
+              "unicode": "1f6a8"
+            },
+            {
+              "type": "text",
+              "text": " Ingested 1 past messages from the last all history."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

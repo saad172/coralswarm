@@ -1,0 +1,31 @@
+{
+  "kind": "calendar#events",
+  "etag": "\"p33g8n5r2q6k2o0000000001\"",
+  "summary": "sam.rivera@acme-corp.example",
+  "timeZone": "America/New_York",
+  "nextSyncToken": "example_7",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "etag": "\"3123456789000004\"",
+      "id": "1v3k9c2b8h6f4d2a0q8w6e4r2t0y8u6i",
+      "status": "confirmed",
+      "summary": "1:1 with Priya (rescheduled)",
+      "description": "Weekly check-in — moved to Thursday.",
+      "location": "Zoom",
+      "start": { "dateTime": "2026-08-27T15:00:00-04:00", "timeZone": "America/New_York" },
+      "end": { "dateTime": "2026-08-27T15:30:00-04:00", "timeZone": "America/New_York" },
+      "organizer": { "email": "sam.rivera@acme-corp.example", "self": true },
+      "attendees": [
+        { "email": "sam.rivera@acme-corp.example", "displayName": "Sam Rivera", "self": true, "responseStatus": "accepted" },
+        { "email": "priya.nair@acme-corp.example", "displayName": "Priya Nair", "responseStatus": "accepted" }
+      ]
+    },
+    {
+      "kind": "calendar#event",
+      "etag": "\"3123456789000005\"",
+      "id": "2w4l0d3c9i7g5e3b1r9x7f5s3u1z9v7j",
+      "status": "cancelled"
+    }
+  ]
+}

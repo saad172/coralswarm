@@ -1,0 +1,49 @@
+name: Backup key escrow
+
+# Gives the founder a password-manager copy of BACKUP_ENCRYPTION_KEY. COR-92.
+#
+# Every dump in the backup bucket is encrypted under that key, and GitHub never
+# shows a secret again once it is set. This run encrypts the secret to the
+# founder's PUBLIC key with `age` and prints the armored ciphertext plus a
+# fingerprint. The plaintext never appears in the log; only the founder's
+# private key can open the ciphertext. Steps: docs/runbooks/tenant-restore.md
+# §1.4.
+#
+# Main only, founder only. (Anyone who can push a workflow can already read
+# repository secrets, so the actor check is a guard against an accidental run,
+# not a security boundary.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: "Your PUBLIC key: an age recipient (age1...) or one ssh-ed25519 / ssh-rsa public key line"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  escrow:
+    name: Encrypt BACKUP_ENCRYPTION_KEY to the founder's public key
+    if: ${{ github.ref == 'refs/heads/main' && github.triggering_actor == 'example-founder' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install age
+        run: sudo apt-get update && sudo apt-get install -y age
+      - name: Self-test
+        run: bash scripts/escrow_backup_key.sh --self-test
+      - name: Encrypt
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          ESCROW_RECIPIENT: ${{ inputs.recipient }}
+        run: |
+          [ -n "$BACKUP_ENCRYPTION_KEY" ] || { echo "::error::BACKUP_ENCRYPTION_KEY is not set" >&2; exit 1; }
+          echo "----- copy everything between the markers into a file, e.g. key.age -----"
+          bash scripts/escrow_backup_key.sh
+          echo "----- end -----"

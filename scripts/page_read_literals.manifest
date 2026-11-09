@@ -1,0 +1,5 @@
+# Exact source path<TAB>reason. Only actual user actions or host add-in protocol.
+web/components/connectors/ConnectorDetail.tsx	User-requested connector recovery POST (not a mount read).
+web/components/connectors/ConnectorSourceCard.tsx	User-requested source pause/enable mutations.
+web/components/addin/MailboxSetting.tsx	Host add-in workspace setting protocol.
+web/components/addin/EmailPane.tsx	Host add-in email follow/capture protocol.

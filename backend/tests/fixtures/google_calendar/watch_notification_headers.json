@@ -1,0 +1,33 @@
+{
+  "sync_bootstrap": {
+    "comment": "Sent once, immediately after events.watch creates the channel. No body. ACK only — never triggers a sync pass.",
+    "headers": {
+      "X-Goog-Channel-ID": "5b1e6f2a-9c3d-4a8e-8b7a-2f1c9d6e4a3b",
+      "X-Goog-Channel-Expiration": "Tue, 01 Sep 2026 12:00:00 GMT",
+      "X-Goog-Resource-ID": "o3v9x1z7y5w3u1t9r7q5p3o1n9m7l5k3",
+      "X-Goog-Resource-URI": "https://www.googleapis.com/calendar/v3/calendars/sam.rivera%40acme-corp.example/events?alt=json",
+      "X-Goog-Resource-State": "sync",
+      "X-Goog-Channel-Token": "example_10"
+    }
+  },
+  "change_notification": {
+    "comment": "A real change notification — no payload, just a trigger to re-sync via syncToken.",
+    "headers": {
+      "X-Goog-Channel-ID": "5b1e6f2a-9c3d-4a8e-8b7a-2f1c9d6e4a3b",
+      "X-Goog-Channel-Expiration": "Tue, 01 Sep 2026 12:00:00 GMT",
+      "X-Goog-Resource-ID": "o3v9x1z7y5w3u1t9r7q5p3o1n9m7l5k3",
+      "X-Goog-Resource-URI": "https://www.googleapis.com/calendar/v3/calendars/sam.rivera%40acme-corp.example/events?alt=json",
+      "X-Goog-Resource-State": "exists",
+      "X-Goog-Message-Number": "4",
+      "X-Goog-Channel-Token": "example_10"
+    }
+  },
+  "wrong_token": {
+    "comment": "A forged/stale notification with the right channel id but the wrong token — must be rejected (403), never trusted.",
+    "headers": {
+      "X-Goog-Channel-ID": "5b1e6f2a-9c3d-4a8e-8b7a-2f1c9d6e4a3b",
+      "X-Goog-Resource-State": "exists",
+      "X-Goog-Channel-Token": "ffffffffffffffffffffffffffffffff"
+    }
+  }
+}

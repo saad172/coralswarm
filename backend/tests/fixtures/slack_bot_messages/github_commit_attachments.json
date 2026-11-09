@@ -1,0 +1,37 @@
+{
+  "user": "U0TESTGIT0",
+  "type": "message",
+  "ts": "1788996204.198089",
+  "bot_id": "B0TESTGIT0",
+  "app_id": "A0TESTGIT0",
+  "text": "",
+  "team": "T0TESTWS0",
+  "bot_profile": {
+    "id": "B0TESTGIT0",
+    "app_id": "A0TESTGIT0",
+    "user_id": "U0TESTGIT0",
+    "name": "GitHub",
+    "icons": {
+      "image_36": "https://example.com/icons/github_36.png",
+      "image_48": "https://example.com/icons/github_48.png",
+      "image_72": "https://example.com/icons/github_72.png"
+    },
+    "deleted": false,
+    "updated": 1788403938,
+    "team_id": "T0TESTWS0"
+  },
+  "attachments": [
+    {
+      "id": 1,
+      "footer_icon": "https://example.com/static/img/favicon-neutral.png",
+      "color": "24292f",
+      "fallback": "[example-org/example-repo] 1 new commit pushed to _main_ by octo-dev",
+      "text": "`<https://example.com/example-org/example-repo/commit/0000000000000000000000000000000000000001|00000001>` - cache(admission): the workspace guard read a stale key, returned OK, and the miss looked like an empty channel (#100)",
+      "pretext": "<https://example.com/example-org/example-repo/compare/000000000000...000000000001|1 new commit> pushed to `<https://example.com/example-org/example-repo/tree/main|main>` by <https://example.com/octo-dev|octo-dev>",
+      "footer": "<https://example.com/example-org/example-repo|example-org/example-repo>",
+      "mrkdwn_in": [
+        "text"
+      ]
+    }
+  ]
+}

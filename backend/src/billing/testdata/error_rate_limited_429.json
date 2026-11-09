@@ -1,0 +1,6 @@
+{
+  "error": {
+    "type": "rate_limit_error",
+    "message": "Too many requests hit the API too quickly. We recommend an exponential backoff of your requests."
+  }
+}

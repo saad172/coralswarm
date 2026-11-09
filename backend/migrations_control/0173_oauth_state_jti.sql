@@ -1,0 +1,77 @@
+-- Migration: 0173_oauth_state_jti
+-- Description: Consumed-`jti` replay store for signed OAuth `state` tokens
+--              (`backend/src/oauth/state.rs`, CS-110). Foundation train PR
+--              1.4 (`.scratch/m365-enterprise/plan.md`, "Train 1 —
+--              Foundation").
+--
+--              `state.rs` has minted a single-use `jti` nonce into every
+--              signed state token since CS-110 landed, but that module's own
+--              doc flagged it as "defence-in-depth; not yet checked against
+--              a store" — the signature and expiry were verified, but
+--              nothing stopped the SAME still-valid signed token from being
+--              replayed verbatim, any number of times, for its whole
+--              `STATE_TTL_SECS` (600s) validity window. This table is that
+--              store: `routes/oauth.rs::callback` claims a jti with exactly
+--              one `INSERT ... ON CONFLICT (jti) DO NOTHING`
+--              (`backend/src/oauth/jti_store.rs::consume`) before doing
+--              anything else with the state token it decoded — a genuine
+--              atomic check-and-consume, not a separate SELECT then INSERT
+--              (which would leave a TOCTOU race between two concurrent
+--              requests for the same jti). `rows_affected() == 1` means this
+--              call claimed it; `== 0` means it was already claimed and the
+--              callback rejects (400, same "invalid state parameter" message
+--              `verify_state` itself uses, deliberately not distinguishing
+--              the cause). Same idiom `routes/stripe_webhook.rs` already
+--              uses for `stripe_webhook_events` (see that module's own doc,
+--              "claimed == 0 -> replay").
+--
+--              CONTROL-ONLY, no tenant-tree counterpart: OAuth `state`
+--              tokens are minted and verified entirely against the control
+--              plane (`mint_state`/`callback` both resolve `account_id` off
+--              the control-only `accounts` table — see `routes/oauth.rs`'s
+--              own file-header route table: both routes carry no Clerk JWT
+--              and run on the consumer/control plane by design), so there is
+--              no per-tenant copy of this table, ever. Added to
+--              `CONTROL_TABLES` in `scripts/check_schema_parity.sh` in this
+--              same PR.
+--
+--              `jti` is the bare TEXT primary key (the nonce itself, minted
+--              as a fresh UUID string by `mint_state` — see
+--              `state.rs::sign_state`'s `nonce` parameter), not a surrogate
+--              id: the only operation this table ever performs is "does this
+--              exact jti already exist", so the nonce IS the natural key and
+--              a surrogate id would only add an extra unique index for no
+--              benefit. No `account_id` column and no foreign key to
+--              `accounts`: replay-checking is a property of the jti alone,
+--              never needs to be joined against the account it happened to
+--              be minted for, and the row is purged within roughly
+--              `STATE_TTL_SECS` anyway (see below) — not a durable audit
+--              trail.
+--
+--              `consumed_at` backs the TTL sweep
+--              (`backend/src/workers/oauth_state_jti_sweep.rs`): any signed
+--              state token whose `jti` could still pass `verify_state`'s own
+--              expiry check must have been minted within the last
+--              `STATE_TTL_SECS` (600s), so a consumed-jti row older than that
+--              (plus a clock-skew buffer) can never again match a
+--              still-valid token and is always safe to purge. Indexed for
+--              exactly that sweep's own access pattern (delete everything
+--              older than the cutoff) — same shape as
+--              `user_access_log_created_idx` (migration 0095) for its own
+--              purge worker.
+--
+-- Depends on: 0095_platform_metrics (the CONTROL-ONLY-table-with-its-own-
+--             purge-worker precedent this migration and its sweep worker
+--             follow).
+--
+-- Down:
+--   DROP INDEX IF EXISTS oauth_state_jti_consumed_at_idx;
+--   DROP TABLE IF EXISTS oauth_state_jti;
+
+CREATE TABLE oauth_state_jti (
+    jti         TEXT        PRIMARY KEY,
+    consumed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Sweep worker's own access pattern: delete everything older than the cutoff.
+CREATE INDEX oauth_state_jti_consumed_at_idx ON oauth_state_jti (consumed_at);

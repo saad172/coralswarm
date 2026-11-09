@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "subscriptionId": "c3e5f7a9-2345-4bcd-8ef0-123456789abc",
+      "clientState": "9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3928170f6e5d4c3b2a190807f6e5d4c",
+      "changeType": "created",
+      "resource": "teams/19:team-eng@thread.tacv2/channels/19:channel-sprint@thread.tacv2/messages/1738368000000",
+      "resourceData": {
+        "@odata.type": "#Microsoft.Graph.chatMessage",
+        "id": "1738368000000"
+      }
+    }
+  ]
+}

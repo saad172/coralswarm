@@ -1,0 +1,18 @@
+# Pin line endings so sqlx migration checksums stay stable across machines.
+# A prior CRLF->LF normalization of 0001-0023 diverged from the prod DB's
+# stored checksums and crashed the backend on boot (VersionMismatch). Keep
+# SQL (and shell scripts) LF-only everywhere.
+*.sql text eol=lf
+*.sh  text eol=lf
+
+# LLM prompt text, embedded verbatim into the binary via `include_str!` and,
+# in at least one case (relationships/predicates.rs's
+# extract_relationships_prompt_allowed_list_matches_the_registry), matched
+# against a hardcoded `\n`-based marker. On a Windows checkout with the
+# commonly-recommended `core.autocrlf=true`, that file silently checks out
+# as CRLF while the committed blob is LF — the marker search then finds
+# nothing and the test panics on a prompt file nobody actually edited.
+# Caught running the full workspace test suite on Windows for what looks
+# like the first time; same root cause as the *.sql/*.sh rule above, one
+# glob short of covering it.
+backend/prompts/*.txt text eol=lf

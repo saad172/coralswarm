@@ -1,0 +1,23 @@
+app = 'coralswarm-web'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  # Keep one machine warm. Measured against prod 2026-07-28: the first request
+  # after an idle period paid a machine + Node cold start at 8.11s TTFB, while
+  # warm requests to the same URL answered in 86-126ms. Every visitor arriving
+  # after a quiet stretch — which, pre-launch, is most of them — met that 8s as
+  # their first impression of the product. The backend keeps a warm machine for
+  # the same class of reason (see ../fly.toml); the web tier was simply never
+  # given the same treatment.
+  min_machines_running = 1
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

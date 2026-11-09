@@ -1,0 +1,37 @@
+-- Migration: 0234_slack_unmatched_email_notices_nullable_container
+-- Description: CS-436 (org-onboarding plan §3 item 49, D21) — the member-
+--   connect nudge (`services::unmatched_recipient_email::
+--   claim_member_connect_notice_slot`, `workers::member_connect_nudge`)
+--   reuses `slack_unmatched_email_notices` (migration 0227) as the SAME
+--   suppression list and cooldown table the unmatched-Slack-recipient nudge
+--   already writes, keyed the identical `(provider, email)` way (D4,
+--   migration 0230) with `provider = 'member_connect'` — no CHECK
+--   constraint on that column (0227) means a new provider value costs
+--   nothing there. What DOES need a migration: `workspace_id`/`channel_id`
+--   are `NOT NULL` with no default (0227). Both are genuinely inapplicable
+--   to this new provider — a member who has not connected any platform yet
+--   was never discovered by walking a Slack channel's roster; there is no
+--   container to record. Sending a sentinel value (the account id, say)
+--   would misrepresent this table's own documented meaning for those two
+--   columns ("the container whose roster walk most recently claimed/renewed
+--   this row" — 0227's header) rather than actually widen it, so this
+--   migration drops the `NOT NULL` instead.
+--
+--   `claim_member_connect_notice_slot` passes `NULL` for both on every
+--   claim/renewal it performs; every existing Slack-sourced row is
+--   untouched (this migration adds no default, changes no existing value).
+--
+-- Depends on: 0227_slack_unmatched_email_notices (the table),
+--             0230_slack_unmatched_email_notices_per_person_cooldown (the
+--             `(provider, email)` key this migration's new provider value
+--             claims against).
+-- Down:
+--   -- Only safe if no `workspace_id IS NULL OR channel_id IS NULL` row
+--   -- exists (i.e. every `member_connect` row has been backfilled or
+--   -- deleted first) — this down migration intentionally does NOT attempt
+--   -- that cleanup itself.
+--   ALTER TABLE slack_unmatched_email_notices ALTER COLUMN workspace_id SET NOT NULL;
+--   ALTER TABLE slack_unmatched_email_notices ALTER COLUMN channel_id SET NOT NULL;
+
+ALTER TABLE slack_unmatched_email_notices ALTER COLUMN workspace_id DROP NOT NULL;
+ALTER TABLE slack_unmatched_email_notices ALTER COLUMN channel_id DROP NOT NULL;

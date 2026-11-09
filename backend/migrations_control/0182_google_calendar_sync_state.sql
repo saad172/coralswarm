@@ -1,0 +1,95 @@
+-- Migration 0182: Google Calendar sync-token/backfill columns on
+--   google_watch_channels (gsuite Train G3 PR 1,
+--   `.scratch/gsuite-enterprise/plan.md`, `.scratch/m365-enterprise/plan.md`
+--   Train status "Google G3 PR 1 migration announcement").
+--
+--   Adds the state Calendar ingest needs to `google_watch_channels`
+--   (`migrations_control/0180_google_watch_channels.sql`) rather than a new
+--   table: one Calendar channel row (surface='calendar', resource_id=
+--   'primary') and its sync cursor share exactly one identity and one
+--   lifecycle — `UNIQUE (account_id, surface, resource_id)` already keys the
+--   row this state belongs on. A separate `google_calendar_sync_state` table
+--   would need to re-derive that same key and add a join everywhere the
+--   renewal worker or ingest path already has the row in hand.
+--
+--   ── Column choices ──
+--   `sync_token` — Google Calendar's incremental-sync cursor
+--   (`events.list?syncToken=...`). Empty string (not NULL, matching this
+--   table's existing "unused id columns default to ''" convention) means
+--   "never completed an initial full sync" — `connectors::google_calendar::
+--   sync` branches on emptiness to choose incremental vs. full-backfill.
+--
+--   `backfill_page_token` — resumable cursor for a budget-capped full-backfill
+--   pass (mirrors `outlook_watched_conversations.backfill_cursor`,
+--   `migrations_control/0179_graph_backfill_cursors.sql`): a single `sync()`
+--   call pages `events.list` up to a per-call budget, and if the calendar's
+--   full history exceeds it, this cursor is persisted so the NEXT call
+--   resumes exactly where the last one stopped — no page is silently
+--   dropped (contract §6 test #6, "no silent truncation"). NULL when there
+--   is nothing to resume.
+--
+--   `backfill_complete` — mirrors `outlook_watched_conversations.
+--   backfill_complete`: FALSE until the full backfill has paged through
+--   every event and Google has handed back a `nextSyncToken` (at which point
+--   `sync_token` is populated and this flips to TRUE). Distinguishes "still
+--   backfilling, resume via backfill_page_token" from "caught up, use
+--   sync_token for incremental sync" the same way the Outlook column pair
+--   already distinguishes those two states for conversation backfill.
+--
+--   ── Why NOT `owner_user_id`/`graph_id` here ──
+--   Calendar OAuth for this connector remains account-wide
+--   (`TokenOwner::AccountWide`) — see `connectors/google.rs`'s and
+--   `docs/connectors/google-workspace.md`'s own notes that per-member Google
+--   token isolation is Train G2+ work, not yet built, and every Google/
+--   connector route already refuses an org `TenancyDecision` outright
+--   (personal-workspace-only in v1: `routes::calendar::
+--   reject_org_calendar_access`, `routes::connectors::
+--   reject_org_connector_access`). A personal account has exactly one owner,
+--   so there is no member dimension to anchor here yet; adding one now would
+--   be speculative schema with no code path that could populate it
+--   differently per member.
+--
+--   ── Partial unique index on channel_id (CodeRabbit review finding on PR
+--   #677, round 2, residual on the round-1 empty-channel fix; edited into
+--   this not-yet-merged migration rather than a new number) ──
+--   The table's existing key, `UNIQUE (account_id, surface, resource_id)`,
+--   says nothing about `channel_id` being unique ACROSS accounts. Every
+--   `channel_id` this codebase mints is a fresh `Uuid::new_v4()`
+--   (`connectors::google_calendar::ensure_watch`), so a genuine collision
+--   is astronomically unlikely in practice — but nothing in the schema
+--   PREVENTS one, and `routes::google_calendar_push`'s bootstrap resolver
+--   (`resolve_google_watch_channel_account_id`, migration `0183`) reads
+--   `channel_id` back with `LIMIT 1` and no `ORDER BY`: if two rows ever
+--   did share a non-empty `channel_id`, that lookup would pick one
+--   arbitrarily — not a cross-tenant data leak (the push handler only ever
+--   acts within the resolved account's own data), but a real correctness
+--   bug: the notification would silently route to the WRONG account
+--   (a permanently missed sync for the right one, and a spurious no-op
+--   sync for the wrong one). This index makes that structurally
+--   impossible rather than merely unlikely. `WHERE channel_id <> ''`
+--   (partial, not table-wide) because every gmail/chat row — and every
+--   pre-`ensure_watch` calendar row — legitimately holds `channel_id = ''`
+--   (this table's own "unused id columns default to ''" convention,
+--   `0180`'s header), and a plain unique index would reject the SECOND
+--   such placeholder row outright. No `CONCURRENTLY`: this migration runs
+--   inside the sqlx migration runner's own transaction (same as every
+--   other index this table's migrations create, e.g. `0180`'s
+--   `idx_google_watch_channels_expiry`), and `CREATE UNIQUE INDEX
+--   CONCURRENTLY` cannot run inside a transaction block at all.
+--
+-- Depends on: 0180_google_watch_channels.sql
+-- Down:
+--   DROP INDEX IF EXISTS idx_google_watch_channels_channel_id_unique;
+--   ALTER TABLE google_watch_channels
+--       DROP COLUMN IF EXISTS sync_token,
+--       DROP COLUMN IF EXISTS backfill_page_token,
+--       DROP COLUMN IF EXISTS backfill_complete;
+
+ALTER TABLE google_watch_channels
+    ADD COLUMN IF NOT EXISTS sync_token           TEXT        NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS backfill_page_token   TEXT,
+    ADD COLUMN IF NOT EXISTS backfill_complete     BOOLEAN     NOT NULL DEFAULT FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_google_watch_channels_channel_id_unique
+    ON google_watch_channels (channel_id)
+    WHERE channel_id <> '';

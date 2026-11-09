@@ -1,0 +1,26 @@
+/* Spacing. Matches the Tailwind steps the app actually uses. */
+:root {
+  --s-0: 2px;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+  --s-10: 128px;
+
+  /* Layout constants lifted from the shell (web/components/AppShell.tsx). */
+  --sidebar-w: 224px;
+  --header-h: 52px;
+  --chat-header-h: 48px;
+  --content-max: 1040px;
+  --thread-max: 720px;      /* Focus mode */
+  --thread-max-bench: 660px; /* Workbench mode */
+  --drawer-w: 368px;
+  --source-rail-w: 44px;
+  --content-pad-x: 28px;
+  --content-pad-y: 24px;
+}

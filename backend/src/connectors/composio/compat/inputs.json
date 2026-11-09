@@ -1,0 +1,67 @@
+{
+  "_comment": "Mock Composio responses replayed through the capture engine. Each route answers the first response whose `op` (GraphQL operation name, when given) and `when` pointers all equal the request arguments (null = absent). golden.json was recorded from the pre-recipe hand-built Linear/Jira code on the same records served project-scoped; these scenarios serve them through the workspace-wide change queries, and the compat test requires identical identities and content (minus Linear's transition snapshot, which the change query does not return).",
+  "scenarios": {
+    "linear_workspace": {
+      "toolkit": "linear",
+      "golden": "linear",
+      "watermark": "2026-09-01T00:00:00Z",
+      "now": "2026-10-13T00:00:00Z",
+      "routes": {
+        "LINEAR_RUN_QUERY_OR_MUTATION": [
+          { "op": "CoralSwarmWorkspace", "when": {}, "data": { "data": { "organization": { "id": "9a8b7c6d-0000-4000-8000-00000000abcd" } }, "errors": null } },
+          { "op": "CoralSwarmIssuesChanged", "when": { "/variables/after": null }, "data": { "data": { "issues": { "nodes": [
+              { "id": "issue-a", "identifier": "ENG-12", "title": "Search rollout", "description": "Decision: pilot first.\n\n- owner: Morgan", "state": { "name": "In Progress" }, "createdAt": "2026-09-30T08:00:00.000Z", "updatedAt": "2026-10-04T08:20:00.000Z", "creator": null, "project": { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6", "name": "Search indexing" } },
+              { "id": "issue-b", "identifier": "ENG-13", "title": "No description yet", "description": null, "state": { "name": "Todo" }, "createdAt": "2026-10-02T08:00:00Z", "project": { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6", "name": "Search indexing" } }
+            ], "pageInfo": { "hasNextPage": true, "endCursor": "issues-2" } } }, "errors": null } },
+          { "op": "CoralSwarmIssuesChanged", "when": { "/variables/after": "issues-2" }, "data": { "data": { "issues": { "nodes": [
+              { "id": "issue-c", "identifier": "ENG-14", "title": "Archive cleanup", "description": "", "state": null, "updatedAt": "2026-10-06T00:00:00Z", "project": { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6", "name": "Search indexing" } }
+            ], "pageInfo": { "hasNextPage": false, "endCursor": null } } }, "errors": null } },
+          { "op": "CoralSwarmCommentsChanged", "when": { "/variables/after": null }, "data": { "data": { "comments": { "nodes": [
+              { "id": "comment-a1", "body": "We decided to ship behind a flag.", "createdAt": "2026-10-01T10:00:00.000Z", "updatedAt": "2026-10-02T11:30:00.000Z", "user": { "id": "user-1", "name": "Morgan" }, "issue": { "id": "issue-a", "project": { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6", "name": "Search indexing" } } },
+              { "id": "comment-a2", "body": "Bot sync note", "createdAt": "2026-10-03T09:00:00.000Z", "updatedAt": "2026-10-03T09:00:00.000Z", "user": null, "issue": { "id": "issue-a", "project": { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6", "name": "Search indexing" } } }
+            ], "pageInfo": { "hasNextPage": true, "endCursor": "comments-2" } } }, "errors": null } },
+          { "op": "CoralSwarmCommentsChanged", "when": { "/variables/after": "comments-2" }, "data": { "data": { "comments": { "nodes": [
+              { "id": "comment-a3", "body": "Rollback rehearsed — ✅ unicode body.\nSecond line.", "createdAt": "2026-10-04T08:00:00Z", "updatedAt": "2026-10-04T08:15:00+02:00", "user": { "id": "user-2", "name": "Casey" }, "issue": { "id": "issue-a", "project": { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6", "name": "Search indexing" } } },
+              { "id": "comment-c1", "body": "", "createdAt": "2026-10-05T12:00:00Z", "user": { "id": "user-3" }, "issue": { "id": "issue-c", "project": { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6" } } }
+            ], "pageInfo": { "hasNextPage": false, "endCursor": null } } }, "errors": null } },
+          { "op": "CoralSwarmProjectsChanged", "when": {}, "data": { "data": { "projects": { "nodes": [
+              { "id": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6", "name": "Search indexing", "description": "Improve search; pilot before rollout.", "updatedAt": "2026-10-01T00:00:00Z" }
+            ], "pageInfo": { "hasNextPage": false } } }, "errors": null } }
+        ]
+      }
+    },
+    "jira_workspace": {
+      "toolkit": "jira",
+      "golden": "jira_legacy_shape",
+      "watermark": "2026-09-01T00:00:00Z",
+      "now": "2026-10-13T00:00:00Z",
+      "routes": {
+        "JIRA_GET_SERVER_INFO": [ { "when": {}, "data": { "baseUrl": "https://acme.atlassian.net", "version": "1001.0.0" } } ],
+        "JIRA_WHO_AM_I": [ { "when": {}, "data": [
+            { "id": "11111111-2222-3333-4444-555555555555", "url": "https://other.atlassian.net", "name": "other" },
+            { "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "url": "https://acme.atlassian.net", "name": "acme" }
+          ] } ],
+        "JIRA_SEARCH_FOR_ISSUES_USING_JQL_GET": [
+          { "when": { "/next_page_token": null }, "data": { "issues": [
+              { "id": "10001", "key": "ACME-1", "fields": { "summary": "Adopt the recipe engine", "description": { "type": "doc", "version": 1, "content": [ { "type": "heading", "content": [ { "type": "text", "text": "Decision" } ] }, { "type": "paragraph", "content": [ { "type": "text", "text": "Use recipes, " }, { "type": "text", "text": "not code." } ] }, { "type": "bulletList", "content": [ { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Linear first" } ] } ] } ] } ] }, "status": { "name": "In Review" }, "project": { "id": "10000", "name": "Acme platform" }, "creator": { "accountId": "acct-1", "displayName": "Morgan" }, "created": "2026-10-01T09:00:00.000+0000", "updated": "2026-10-03T17:45:12.123+0200" } },
+              { "id": "10002", "key": "ACME-2", "fields": { "summary": "Plain description", "description": null, "status": { "name": "To Do" }, "project": { "id": "10000", "name": "Acme platform" }, "creator": null, "created": "2026-10-02T09:00:00.000+0000" } }
+            ], "isLast": false, "nextPageToken": "page-2-token" } },
+          { "when": { "/next_page_token": "page-2-token" }, "data": { "issues": [
+              { "id": "10003", "key": "ACME-3", "fields": { "summary": "Last page issue", "status": { "name": "Done" }, "project": { "id": "10000", "name": "Acme platform" }, "creator": { "accountId": "acct-2" }, "updated": "2026-10-05T00:00:00Z" } }
+            ], "isLast": true } }
+        ],
+        "JIRA_LIST_ISSUE_COMMENTS": [
+          { "when": { "/issue_id_or_key": "10001", "/start_at": 0 }, "data": { "comments": [
+              { "id": "20001", "body": { "type": "doc", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Agreed." } ] } ] }, "author": { "accountId": "acct-2", "displayName": "Casey" }, "created": "2026-10-03T10:00:00.000+0000", "updated": "2026-10-03T10:00:00.000+0000" },
+              { "id": "20002", "body": { "type": "doc", "content": [ { "type": "codeBlock", "content": [ { "type": "text", "text": "cargo test" } ] } ] }, "author": { "accountId": "acct-1", "displayName": "Morgan" }, "created": "2026-10-03T11:00:00.000+0000", "updated": "2026-10-04T11:00:00.000-0500" }
+            ], "startAt": 0, "maxResults": 2, "total": 3 } },
+          { "when": { "/issue_id_or_key": "10001", "/start_at": 2 }, "data": { "comments": [
+              { "id": "20003", "body": { "type": "doc", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Shipped." } ] } ] }, "author": { "accountId": "acct-3", "displayName": "Riley" }, "created": "2026-10-05T10:00:00.000+0000" }
+            ], "startAt": 2, "maxResults": 2, "total": 3 } },
+          { "when": { "/issue_id_or_key": "10002" }, "data": { "comments": [], "startAt": 0, "maxResults": 100, "total": 0 } },
+          { "when": { "/issue_id_or_key": "10003" }, "data": { "comments": [], "startAt": 0, "maxResults": 100, "total": 0 } }
+        ]
+      }
+    }
+  }
+}

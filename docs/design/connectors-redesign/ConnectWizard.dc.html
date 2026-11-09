@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/styles.css"><script src="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/_ds_bundle.js"></script></helmet>
+<div style="position:relative;display:flex;justify-content:center;align-items:{{ align }};width:{{ frameW }};min-height:{{ frameH }};padding:{{ framePad }};box-sizing:border-box;background:var(--bg-2);font-family:var(--sans);color:var(--ink);overflow:hidden">
+  <div style="position:absolute;inset:0;background:var(--overlay-scrim)"></div>
+  <div role="dialog" style="position:relative;width:{{ dialogW }};max-width:100%;overflow:hidden;border-radius:{{ dialogRadius }};border:1px solid var(--line);background:var(--bg);box-shadow:var(--shadow-frame);display:flex;flex-direction:column;min-height:{{ dialogMinH }}">
+    <div style="display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line-2);padding:12px 14px 12px 18px">
+      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden">
+        <sc-for list="{{ rail }}" as="r" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:8px;flex:none">
+            <sc-if value="{{ r.sep }}" hint-placeholder-val="{{ false }}"><span style="height:1px;width:{{ sepW }};background:var(--line);flex:none"></span></sc-if>
+            <span style="display:inline-flex;align-items:center;gap:6px">
+              <span style="display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-full);font-family:var(--mono);font-size:9.5px;font-weight:500;background:{{ r.bg }};color:{{ r.fg }};border:{{ r.border }};box-sizing:border-box">{{ r.glyph }}</span>
+              <sc-if value="{{ r.showLabel }}" hint-placeholder-val="{{ true }}"><span style="white-space:nowrap;font-size:12px;font-weight:{{ r.weight }};color:{{ r.color }}">{{ r.label }}</span></sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+      <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.IconButton" label="Close" size="{{ 26 }}" style="border-color:transparent" hint-size="26px,26px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="close" size="{{ 14 }}" hint-size="14px,14px"></x-import></x-import>
+    </div>
+
+    <div style="flex:1;padding:{{ bodyPad }};display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <dc-import name="ProviderMark" provider="{{ p.provider }}" letter="{{ p.letter }}" hue="{{ p.hue }}" box="{{ 34 }}" hint-size="34px,34px"></dc-import>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+          <h2 style="margin:0;font-family:var(--display);font-weight:400;font-size:{{ titleSize }};line-height:1.2;color:var(--ink);text-wrap:pretty">{{ title }}</h2>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--ink-2);text-wrap:pretty">{{ desc }}</p>
+        </div>
+      </div>
+
+      <sc-if value="{{ is.connect }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;border:1px solid var(--line-2);border-radius:var(--r-control);background:var(--bg-subtle)">
+          <div style="display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;padding:10px 12px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ok);padding-top:2px">captures</span><span style="font-size:13px;line-height:1.5">Messages and threads in the channels you pick next.</span></div>
+          <div style="display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;padding:10px 12px;border-top:1px solid var(--line-3)"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);padding-top:2px">never</span><span style="font-size:13px;line-height:1.5">Direct messages, or any channel you don't pick.</span></div>
+        </div>
+        <span style="font-size:12.5px;line-height:1.55;color:var(--ink-3)">The connection is yours alone. What it captures stays in your private space until you promote it.</span>
+      </sc-if>
+
+      <sc-if value="{{ is.waiting }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:28px 16px;border:1px dashed var(--line);border-radius:var(--r-card);text-align:center">
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">waiting for microsoft…</span>
+          <span style="max-width:40ch;font-size:13px;line-height:1.55;color:var(--ink-2)">The Microsoft sign-in opened in a new tab. Finish there, then come back. This screen moves on by itself.</span>
+          <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="ghost" size="sm" hint-size="160px,30px">Open the sign-in again</x-import>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ is.expired }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="display:flex;align-items:flex-start;gap:12px;border-radius:var(--r-control);border:1px solid color-mix(in srgb, var(--bad) 30%, transparent);background:var(--brand-soft);padding:10px 12px;font-size:12.5px;line-height:1.55;color:var(--brand-2)">The Microsoft sign-in was open for 10 minutes without finishing, so it was cancelled. Nothing was connected.</div>
+      </sc-if>
+
+      <sc-if value="{{ is.sources }}" hint-placeholder-val="{{ false }}">
+        <span style="align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 9px">signed in as dana@acme.com</span>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ msSources }}" as="s" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:{{ srcCols }};gap:10px 14px;align-items:start;padding:12px 0;border-top:1px solid var(--line-3)">
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Toggle" checked="{{ s.on }}" disabled="{{ s.locked }}" label="{{ s.n }}" hint="{{ s.hint }}" hint-size="100%,40px"></x-import>
+              <sc-if value="{{ s.locked }}" hint-placeholder-val="{{ false }}"><span style="justify-self:{{ lockJustify }};display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-full);padding:2px 9px;white-space:nowrap"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Icon" name="lock" size="{{ 11 }}" hint-size="11px,11px"></x-import>Requires your IT admin</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ is.scopeLong }}" hint-placeholder-val="{{ false }}">
+        <div style="align-self:flex-start;display:flex;max-width:100%"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ modes }}" value="pick" style="width:max-content;max-width:100%" hint-size="auto,32px"></x-import></div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px">
+          <div style="flex:{{ searchFlex }};min-width:180px;display:flex"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.SearchInput" placeholder="Search 200 channels…" icon="{{ searchIcon }}" style="width:100%" hint-size="100%,32px"></x-import></div>
+          <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="ghost" size="sm" hint-size="120px,30px">Select all visible</x-import>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink);background:var(--brand-soft);border-radius:var(--r-full);padding:2px 8px">12 selected</span>
+        </div>
+        <div style="display:flex;flex-direction:column;max-height:270px;overflow:hidden;border:1px solid var(--line);border-radius:var(--r-control)">
+          <sc-for list="{{ channels }}" as="ch" hint-placeholder-count="8">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:{{ ch.rule }};background:{{ ch.bg }}">
+              <span style="display:grid;place-items:center;width:15px;height:15px;flex:none;border-radius:4px;border:1px solid {{ ch.boxBorder }};background:{{ ch.boxBg }};color:#fff;font-size:10px;line-height:1">{{ ch.mark }}</span>
+              <span style="flex:1;min-width:0;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">#{{ ch.name }}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ ch.members }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ is.rail }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:{{ railCols }};gap:14px 18px;align-items:start">
+          <div style="display:flex;flex-direction:{{ railDir }};gap:4px;flex-wrap:wrap">
+            <sc-for list="{{ scopeRail }}" as="sr" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--r-row);border:1px solid {{ sr.border }};background:{{ sr.bg }};box-shadow:{{ sr.shadow }};font-size:12.5px;font-weight:{{ sr.weight }};color:{{ sr.color }}"><span style="flex:1;white-space:nowrap">{{ sr.n }}</span><span style="font-family:var(--mono);font-size:10px;color:var(--ink-3)">{{ sr.meta }}</span></div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+            <div style="align-self:flex-start;display:flex;max-width:100%"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ modes }}" value="{{ modeValue }}" style="width:max-content;max-width:100%" hint-size="auto,32px"></x-import></div>
+            <sc-if value="{{ is.scopeEmpty }}" hint-placeholder-val="{{ false }}">
+              <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Empty" title="You aren't in any spaces yet" hint="Spaces you join in Google Chat show up here to pick from. To capture spaces as you join them, switch to Everything I can see." hint-size="100%,170px"></x-import>
+            </sc-if>
+            <sc-if value="{{ is.scopeEverything }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:6px;border:1px solid var(--line-2);border-radius:var(--r-control);background:var(--bg-subtle);padding:12px 14px">
+                <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">this includes</span>
+                <span style="font-size:13px;line-height:1.55;color:var(--ink)">Every event on calendars you can see, yours and ones shared with you, plus new events as they appear.</span>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ is.history }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:{{ histCols }};gap:8px">
+          <sc-for list="{{ histOpts }}" as="h" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;gap:3px;padding:12px;border-radius:var(--r-control);border:1px solid {{ h.border }};background:{{ h.bg }}">
+              <span style="font-size:13.5px;font-weight:{{ h.weight }};color:var(--ink)">{{ h.label }}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;color:{{ h.subColor }}">{{ h.sub }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">imports in the background · new messages are captured right away</span>
+      </sc-if>
+
+      <sc-if value="{{ is.historyMulti }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ histRows }}" as="hr" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:{{ histRowCols }};gap:8px 14px;align-items:center;padding:11px 0;border-top:1px solid var(--line-3)">
+              <span style="font-size:13px;font-weight:500;color:var(--ink)">{{ hr.n }}</span>
+              <sc-if value="{{ hr.skip }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">Live meetings can't be imported. Capture starts with your next meeting.</span></sc-if>
+              <sc-if value="{{ hr.seg }}" hint-placeholder-val="{{ true }}"><div style="justify-self:start;display:flex;max-width:100%"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ histSeg }}" value="{{ hr.v }}" style="width:max-content;max-width:100%" hint-size="auto,32px"></x-import></div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">90 days is the limit for every source · imports run in the background</span>
+      </sc-if>
+
+      <sc-if value="{{ is.done }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden">
+          <div style="display:grid;grid-template-columns:{{ doneCols }};gap:12px;padding:8px 12px;background:var(--bg-2);font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)"><span>source</span><span>captures</span><sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}"><span>history</span></sc-if></div>
+          <sc-for list="{{ doneRows }}" as="d" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:{{ doneCols }};gap:4px 12px;align-items:baseline;padding:9px 12px;border-top:1px solid var(--line-3)">
+              <span style="font-size:13px;font-weight:500;color:{{ d.color }}">{{ d.n }}</span>
+              <span style="font-size:12.5px;color:{{ d.color2 }}">{{ d.scope }}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;color:{{ d.hColor }}">{{ d.hist }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-size:12.5px;line-height:1.55;color:var(--ink-3)">History keeps importing if you close this. Progress shows on the Microsoft page.</span>
+      </sc-if>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--line-2);background:var(--bg-2);padding:12px 18px;flex-wrap:wrap">
+      <span style="flex:1;min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ hint }}</span>
+      <sc-for list="{{ buttons }}" as="b" hint-placeholder-count="2"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="{{ b.variant }}" size="md" hint-size="100px,34px">{{ b.label }}</x-import></sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:640},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;connect&quot;,&quot;waiting&quot;,&quot;expired&quot;,&quot;sources&quot;,&quot;scopeLong&quot;,&quot;scopeEmpty&quot;,&quot;scopeEverything&quot;,&quot;history&quot;,&quot;historyMulti&quot;,&quot;done&quot;],&quot;default&quot;:&quot;connect&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;narrow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { r: 0 };
+  componentDidMount() { this._t = setInterval(() => { if (window.CoralSwarmDesignSystem_451767) { clearInterval(this._t); this.setState({ r: 1 }); } }, 80); }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const NS = window.CoralSwarmDesignSystem_451767;
+    const screen = this.props.screen ?? "connect";
+    const narrow = !!this.props.narrow;
+    const P = {
+      slack: { provider: "slack", letter: "S", hue: "amber", name: "Slack" },
+      microsoft: { provider: "microsoft", letter: "M", hue: "plum", name: "Microsoft" },
+      google: { provider: "google", letter: "G", hue: "coral", name: "Google" },
+    };
+    const S4 = ["Sign in", "Scope", "History", "Done"], S5 = ["Sign in", "Sources", "Scope", "History", "Done"];
+    const C = {
+      connect: { p: "slack", steps: S4, i: 0, title: "Connect Slack", desc: "You'll sign in to Slack in a new tab, then choose which channels it captures.", hint: "opens slack in a new tab", buttons: [["Cancel", "secondary"], ["Sign in to Slack", "brand"]] },
+      waiting: { p: "microsoft", steps: S5, i: 0, title: "Waiting for you to finish signing in to Microsoft…", desc: "Nothing is captured until you choose sources on the next step.", hint: "you can close this — setup waits for you", buttons: [["Cancel", "secondary"]] },
+      expired: { p: "microsoft", steps: S5, i: 0, title: "Sign-in expired, try again", desc: "Signing in again opens a fresh Microsoft tab.", hint: "", buttons: [["Cancel", "secondary"], ["Try again", "primary"]] },
+      sources: { p: "microsoft", steps: S5, i: 1, title: "Choose what to capture from Microsoft", desc: "Turn on the sources you want. You'll choose exactly which items next.", hint: "3 of 5 on", buttons: [["Back", "ghost"], ["Continue", "primary"]] },
+      scopeLong: { p: "slack", steps: S4, i: 1, title: "Which channels?", desc: "Only the channels you pick are captured. Nothing is picked to start with.", hint: "12 of 200 channels", buttons: [["Back", "ghost"], ["Continue", "primary"]] },
+      scopeEmpty: { p: "google", steps: S5, i: 2, title: "Which Chat spaces?", desc: "Choose for each source you turned on.", hint: "chat · 4 of 4", buttons: [["Back", "ghost"], ["Continue", "primary"]] },
+      scopeEverything: { p: "microsoft", steps: S5, i: 2, title: "Which calendar events?", desc: "Choose for each source you turned on.", hint: "calendar · 2 of 3", buttons: [["Back", "ghost"], ["Continue", "primary"]] },
+      history: { p: "slack", steps: S4, i: 2, title: "How far back should it go?", desc: "It can also import past messages from the 12 channels you picked.", hint: "", buttons: [["Back", "ghost"], ["Continue", "primary"]] },
+      historyMulti: { p: "microsoft", steps: S5, i: 3, title: "How far back should it go?", desc: "One choice for each source. Change it any time on the Microsoft page.", hint: "", buttons: [["Back", "ghost"], ["Continue", "primary"]] },
+      done: { p: "microsoft", steps: S5, i: 4, title: "Microsoft is connected", desc: "Here's what it captures from now on, and what history is on its way.", hint: "", buttons: [["Back to connectors", "secondary"], ["Open Microsoft", "primary"]] },
+    }[screen];
+    const rail = C.steps.map((label, k) => {
+      const st = k < C.i ? "done" : k === C.i ? "current" : "up";
+      return {
+        label, sep: k > 0, showLabel: !narrow || st === "current", glyph: st === "done" ? "✓" : String(k + 1),
+        bg: st === "done" ? "var(--ok)" : st === "current" ? "var(--ink)" : "var(--bg)",
+        fg: st === "up" ? "var(--ink-4)" : "#fff", border: st === "up" ? "1px solid var(--line)" : "none",
+        weight: st === "current" ? 500 : 400, color: st === "current" ? "var(--ink)" : "var(--ink-4)",
+      };
+    });
+    const is = {}; ["connect", "waiting", "expired", "sources", "scopeLong", "scopeEmpty", "scopeEverything", "history", "historyMulti", "done"].forEach(k => (is[k] = k === screen));
+    is.rail = is.scopeEmpty || is.scopeEverything;
+    const picked = new Set([0, 2, 3, 6]);
+    const chanNames = ["eng-platform", "design-crit", "eng-billing", "launch-q4", "general", "eu-rollout", "incidents", "pricing", "random", "sales-mid-market"];
+    const channels = chanNames.map((name, k) => ({ name, members: `${[48, 22, 31, 64, 412, 19, 87, 15, 398, 27][k]} members`, rule: k ? "1px solid var(--line-3)" : "none", bg: picked.has(k) ? "var(--bg-subtle)" : "var(--bg)", boxBorder: picked.has(k) ? "var(--ink)" : "var(--line)", boxBg: picked.has(k) ? "var(--ink)" : "var(--bg)", mark: picked.has(k) ? "✓" : "" }));
+    const railItem = (n, meta, cur) => ({ n, meta, border: cur ? "var(--line)" : "transparent", bg: cur ? "var(--bg)" : "transparent", shadow: cur ? "var(--shadow-row)" : "none", weight: cur ? 500 : 400, color: cur ? "var(--ink)" : "var(--ink-2)" });
+    const scopeRail = is.scopeEmpty
+      ? [railItem("Gmail", "✓"), railItem("Calendar", "✓"), railItem("Meet", "✓"), railItem("Chat", "", true)]
+      : [railItem("Outlook mail", "✓"), railItem("Calendar", "", true), railItem("Teams chats", "")];
+    const hsel = "30";
+    const histOpts = [["7", "Last 7 days", "a quick start"], ["30", "Last 30 days", "recent context"], ["90", "Up to 90 days", "the limit"], ["none", "None", "start from now"]].map(([k, label, sub]) => ({ label, sub, border: k === hsel ? "var(--brand)" : "var(--line)", bg: k === hsel ? "var(--brand-soft)" : "var(--bg)", weight: k === hsel ? 500 : 400, subColor: k === hsel ? "var(--brand-2)" : "var(--ink-3)" }));
+    const done = [
+      ["Outlook mail", "4 followed threads", "importing 30 days"], ["Calendar", "Everything I can see", "importing 7 days"], ["Teams chats", "6 chats", "no history"],
+      ["Teams channels", "off — turn on any time", "—", true], ["Teams meetings", "off — turn on any time", "—", true],
+    ].map(([n, scope, hist, locked]) => ({ n, scope, hist, color: locked ? "var(--ink-3)" : "var(--ink)", color2: locked ? "var(--ink-3)" : "var(--ink-2)", hColor: hist.startsWith("importing") ? "var(--ok)" : "var(--ink-3)" }));
+    return {
+      p: P[C.p], title: C.title, desc: C.desc, hint: C.hint, rail, is, wide: !narrow,
+      buttons: C.buttons.map(([label, variant]) => ({ label, variant })),
+      frameW: narrow ? "390px" : "760px", frameH: narrow ? "800px" : "640px", framePad: narrow ? "28px 0 0" : "48px 40px",
+      align: narrow ? "flex-start" : "center",
+      dialogW: narrow ? "100%" : "580px", dialogRadius: narrow ? "var(--r-frame) var(--r-frame) 0 0" : "var(--r-frame)", dialogMinH: narrow ? "772px" : "0",
+      bodyPad: narrow ? "16px" : "18px 20px 20px", titleSize: narrow ? "22px" : "25px", sepW: narrow ? "10px" : "16px",
+      msSources: [
+        { n: "Outlook mail", on: true, hint: "Only threads you follow. Never your whole inbox." },
+        { n: "Calendar", on: true, hint: "Event titles, times and who's invited." },
+        { n: "Teams chats", on: true, hint: "1:1 and group chats you're in." },
+        { n: "Teams channels", on: false, hint: "Messages in the channels you're a member of." },
+        { n: "Teams meetings", on: false, hint: "Transcripts of Teams meetings you join, live." },
+      ],
+      srcCols: narrow ? "minmax(0,1fr)" : "minmax(0,1fr) auto", lockJustify: narrow ? "start" : "end",
+      modes: [{ key: "pick", label: "Only what I pick" }, { key: "all", label: "Everything I can see" }],
+      modeValue: is.scopeEverything ? "all" : "pick",
+      searchIcon: NS ? React.createElement(NS.Icon, { name: "search", size: 13 }) : null,
+      channels, scopeRail, searchFlex: narrow ? "1 1 100%" : "1 1 0", railCols: narrow ? "minmax(0,1fr)" : "170px minmax(0,1fr)", railDir: narrow ? "row" : "column",
+      histOpts, histCols: narrow ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",
+      histSeg: [{ key: "7", label: "7 days" }, { key: "30", label: "30 days" }, { key: "90", label: "90 days" }, { key: "none", label: "None" }],
+      histRows: [{ n: "Outlook mail", seg: true, v: "30" }, { n: "Calendar", seg: true, v: "7" }, { n: "Teams chats", seg: true, v: "none" }, { n: "Teams meetings", skip: true, seg: false }],
+      histRowCols: narrow ? "minmax(0,1fr)" : "130px minmax(0,1fr)",
+      doneRows: done, doneCols: narrow ? "minmax(0,1fr) minmax(0,1fr)" : "130px minmax(0,1fr) 140px",
+    };
+  }
+}
+</script>
+</body>
+</html>

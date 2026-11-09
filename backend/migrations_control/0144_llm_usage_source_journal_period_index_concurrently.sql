@@ -1,0 +1,44 @@
+-- no-transaction
+-- Migration: 0144_llm_usage_source_journal_period_index_concurrently
+-- Description: Build the partial index backing PR9's per-journal-compile cost
+--   lookup (`SELECT ... FROM llm_usage WHERE graph_id = $1 AND
+--   source_journal_granularity = $2 AND source_journal_period = $3`) WITHOUT
+--   blocking writes on `llm_usage` while it builds. Same split-file /
+--   `CONCURRENTLY` / `-- no-transaction` mechanics as `0142`/`0143`; see
+--   `0142`'s header (and its own pointer to `0059`/`0074`) for the full
+--   rationale, including why a plain `CREATE INDEX` would still take a
+--   blocking `SHARE` lock here even though every row is NULL on this column
+--   at build time, and why this could not be combined with `0142`/`0143` into
+--   one file (multiple `CONCURRENTLY` statements in one migration file fails
+--   — confirmed against CI, see 0074's header).
+--
+--   Leading `graph_id`: every query PR9 runs against this index is already
+--   scoped to one ocean (the job/compile's own `graph_id`, which `llm_usage`
+--   already carries), so `graph_id` is the equality-selective leading column,
+--   same convention as `idx_llm_usage_account_created`'s own `account_id`
+--   lead. `source_journal_granularity` sits before `source_journal_period`
+--   because it is the lower-cardinality discriminator that disambiguates the
+--   hour/day/week/month alias collision `0141`'s header describes — without
+--   it in the key, two different compiles (an hour and a day, say) that
+--   share a `graph_id` and a `period_start` are indistinguishable.
+--
+--   Partial (`WHERE source_journal_period IS NOT NULL`): NULL on every row
+--   until PR4/PR5 starts populating it from `journal_sweep.rs`'s two
+--   `usage::record` call sites, and stays NULL forever on every non-journal
+--   row (job/query rows carry `source_job_id`/`source_query_id` instead) —
+--   indexing the NULL majority would waste space for a predicate PR9 never
+--   issues against those rows.
+--
+--   `IF NOT EXISTS` + `CONCURRENTLY`: same INVALID-index-on-failed-build
+--   caveat as `0142`/`0143` — if this migration errors, drop
+--   `idx_llm_usage_source_journal_period` before re-running.
+--
+-- PAIRED WITH: backend/migrations_tenant/0051_llm_usage_source_journal_period_index_concurrently.sql
+-- Depends on: 0141_llm_usage_provider_cost.sql (creates source_journal_period
+--   and source_journal_granularity).
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_llm_usage_source_journal_period;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_llm_usage_source_journal_period
+    ON llm_usage (graph_id, source_journal_granularity, source_journal_period)
+    WHERE source_journal_period IS NOT NULL;

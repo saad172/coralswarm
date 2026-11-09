@@ -1,0 +1,10 @@
+{
+  "toolInput": {
+    "query": "quantum teleportation protocol",
+    "ocean_ids": ["818ccfa2-051b-417a-96af-06335e439fac"]
+  },
+  "toolOutput": {
+    "results": [],
+    "unreachable_oceans": []
+  }
+}

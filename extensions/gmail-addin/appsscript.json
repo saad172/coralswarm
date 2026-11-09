@@ -1,0 +1,79 @@
+{
+  "timeZone": "Etc/UTC",
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Calendar",
+        "serviceId": "calendar",
+        "version": "v3"
+      }
+    ],
+    "libraries": [
+      {
+        "userSymbol": "OAuth2",
+        "libraryId": "1B7FSrk5Zi6L1rSxxTDgDEUsPzlukDsi4KGuTMorsTQHhGBzBkMun4iDF",
+        "version": "43",
+        "developmentMode": false
+      }
+    ]
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/gmail.addons.current.message.metadata",
+    "https://www.googleapis.com/auth/gmail.addons.execute",
+    "https://www.googleapis.com/auth/calendar.addons.execute",
+    "https://www.googleapis.com/auth/calendar.addons.current.event.read",
+    "https://www.googleapis.com/auth/calendar.events.readonly"
+  ],
+  "urlFetchWhitelist": [
+    "https://api.coralswarm.example/",
+    "https://clerk.coralswarm.example/"
+  ],
+  "addOns": {
+    "common": {
+      "name": "CoralSwarm",
+      "logoUrl": "https://app.coralswarm.example/addin/gmail-icon.png",
+      "layoutProperties": {
+        "primaryColor": "#F5F6F8",
+        "secondaryColor": "#F77764"
+      },
+      "homepageTrigger": {
+        "runFunction": "onHomepage",
+        "enabled": true
+      },
+      "openLinkUrlPrefixes": [
+        "https://app.coralswarm.example/",
+        "https://clerk.coralswarm.example/"
+      ],
+      "universalActions": [
+        {
+          "label": "Sign out of CoralSwarm",
+          "runFunction": "universalSignOut"
+        }
+      ]
+    },
+    "calendar": {
+      "currentEventAccess": "READ",
+      "eventOpenTrigger": {
+        "runFunction": "onCalendarEventOpen"
+      },
+      "eventUpdateTrigger": {
+        "runFunction": "onCalendarEventUpdate"
+      },
+      "homepageTrigger": {
+        "runFunction": "onCalendarHomepage",
+        "enabled": true
+      }
+    },
+    "gmail": {
+      "contextualTriggers": [
+        {
+          "unconditional": {},
+          "onTriggerFunction": "onGmailMessageOpen"
+        }
+      ]
+    }
+  }
+}

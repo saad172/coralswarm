@@ -1,0 +1,2 @@
+{"src": "marcus-webb", "predicate": "manages", "dst": "data-platform-team"}
+{"src": "data-platform-team", "predicate": "responsible_for", "dst": "nightly-etl-pipeline"}

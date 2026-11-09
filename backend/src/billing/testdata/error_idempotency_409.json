@@ -1,0 +1,6 @@
+{
+  "error": {
+    "type": "idempotency_error",
+    "message": "Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than 'refill:acc_1:1700000000:0' if you meant to execute a different request."
+  }
+}

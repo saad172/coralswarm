@@ -1,0 +1,194 @@
+name: Page load speed
+
+# Ordinary debug/e2e browser stack; <500ms p95 is distinct from the <250ms
+# ordinary release/default production-like evidence and hourly production gate.
+# No optimized e2e profile, production database, response interception, or second
+# SQL distribution. L5 owns all route declarations and the budget recorder.
+# Manual-only while the owner holds the recurring full-matrix cost.
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      E2E_CLERK_SECRET_KEY:
+        required: true
+      E2E_CLERK_PUBLISHABLE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: page-load-speed-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  E2E_STACK_ID: page-load-speed-${{ github.run_id }}-${{ github.run_attempt }}
+  E2E_RUN_ID: l6gh${{ github.run_id }}x${{ github.run_attempt }}
+  E2E_IDENTITY_NAMESPACE: nightly
+  E2E_OWNER_LEASE_ID: l6gh${{ github.run_id }}x${{ github.run_attempt }}
+  E2E_SKIP_CLERK_CLEANUP: "1"
+  E2E_DB_ASSERT: "1"
+  E2E_CAPTURE_PAGE_READ_RECEIPTS: "1"
+  E2E_CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+  E2E_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+  # Next's real Clerk middleware reads these runtime names as well as the
+  # E2E names consumed by stack/config.mjs. Both use the same DEV instance.
+  CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+  E2E_BACKEND_BIN_DIR: ${{ github.workspace }}/dist/page-load-backend
+  PAGE_LOAD_EVIDENCE_DIR: ${{ github.workspace }}/e2e/page-load-evidence
+  E2E_PG_PORT: "15861"
+  E2E_S3_PORT: "19561"
+  E2E_S3_PROXY_PORT: "29561"
+  E2E_FAKES_PORT: "18660"
+  E2E_API_PORT: "18670"
+  E2E_INTERNAL_PORT: "18671"
+  E2E_WEB_PORT: "13650"
+
+jobs:
+  speed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            e2e/package-lock.json
+      - name: Verify real Clerk DEV credentials before allocating resources
+        run: node --input-type=module -e 'import { requireClerk } from "./e2e/stack/config.mjs"; requireClerk();'
+      - name: Install the same backend packages as PR
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libclang-dev pkg-config cmake
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable (pinned)
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: page-load-speed-debug
+      - name: Build and immediately pin backend and both migrators independently
+        run: bash e2e/perf/build-backend.sh
+      - name: Install and check fixture/observer helpers
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: |
+          # e2e imports the shared web query/authority types.
+          npm --prefix web ci --no-audit --no-fund
+          npm --prefix e2e ci --no-audit --no-fund
+          node --test e2e/perf/*.test.mjs
+          node --test e2e/stack/clerk-cleanup.test.mjs e2e/lib/clerk-ownership.test.mjs
+          npm --prefix e2e run typecheck
+          python3 scripts/check_page_read_health.py --self-test
+      - name: Build actual standalone web and compiled registry drift
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+        run: |
+          npm --prefix web run drift
+          node e2e/stack/build-web.mjs --skip-install
+      - name: Install the pinned Playwright browser
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Declare the bounded nightly identity lease
+        run: node --input-type=module -e 'import { appendFileSync } from "node:fs"; appendFileSync(process.env.GITHUB_ENV, "E2E_OWNER_LEASE_EXPIRES_AT=" + (Date.now() + 150 * 60_000) + "\n");'
+      - name: Boot real e2e backend/web, fresh schema and serving-role assertions
+        working-directory: e2e
+        run: node stack/up.mjs
+      - name: Real 600k/60k fixture, registered worker refresh and twenty loads of every eligible representative
+        working-directory: e2e
+        run: npx playwright test -c playwright.page-load-speed.config.ts --retries=0
+      - name: Clean only this run's Clerk prefix
+        if: always()
+        run: node e2e/perf/cleanup-clerk.mjs
+      - name: Stop only this stack and remove its containers
+        if: always()
+        run: node e2e/stack/down.mjs
+      - name: Retain full timing, initial/owed request, fixture, profile and failure evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: page-load-speed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/page-load-evidence/
+            e2e/test-results/
+            e2e/.stack/*.log
+          retention-days: 30
+          if-no-files-found: error
+
+  # The full page-load budget matrix (initial and healthy load of every declared
+  # page sample, both planes). The merge queue runs only the core samples.
+  budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      E2E_RUN_ID: l6gh${{ github.run_id }}x${{ github.run_attempt }}b
+      E2E_OWNER_LEASE_ID: l6gh${{ github.run_id }}x${{ github.run_attempt }}b
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            e2e/package-lock.json
+      - name: Verify real Clerk DEV credentials before allocating resources
+        run: node --input-type=module -e 'import { requireClerk } from "./e2e/stack/config.mjs"; requireClerk();'
+      - name: Install the same backend packages as PR
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libclang-dev pkg-config cmake
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable (pinned)
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: page-load-speed-debug
+      - name: Build and immediately pin backend and both migrators independently
+        run: bash e2e/perf/build-backend.sh
+      - name: Install web and e2e
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: |
+          npm --prefix web ci --no-audit --no-fund
+          npm --prefix e2e ci --no-audit --no-fund
+      - name: Build actual standalone web
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+        run: node e2e/stack/build-web.mjs --skip-install
+      - name: Install the pinned Playwright browser
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Declare the bounded nightly identity lease
+        run: node --input-type=module -e 'import { appendFileSync } from "node:fs"; appendFileSync(process.env.GITHUB_ENV, "E2E_OWNER_LEASE_EXPIRES_AT=" + (Date.now() + 110 * 60_000) + "\n");'
+      - name: Boot real e2e backend/web, fresh schema and serving-role assertions
+        working-directory: e2e
+        run: node stack/up.mjs
+      - name: Every declared page sample's initial and healthy budget
+        working-directory: e2e
+        run: npx playwright test -c playwright.page-load-budget.config.ts
+      - name: Clean only this run's Clerk prefix
+        if: always()
+        run: node e2e/perf/cleanup-clerk.mjs
+      - name: Stop only this stack and remove its containers
+        if: always()
+        run: node e2e/stack/down.mjs
+      - name: Retain budget ledgers and failure evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: page-load-budget-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/
+            e2e/.stack/*.log
+          retention-days: 30
+          if-no-files-found: warn

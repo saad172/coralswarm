@@ -1,0 +1,117 @@
+# syntax=docker/dockerfile:1
+#
+# Runtime-only image for CI-built backend deploys (2026-09-04 RCA: deploy run
+# 33896893283's `cargo build --release -p coralswarm-backend` OOM-killed
+# (signal 9) inside Fly's remote/depot builder at ~348s compiling the
+# coralswarm-backend lib — that crate has grown past the remote builder's
+# memory ceiling). The release binaries are now compiled by the
+# `build-backend-release` job in `.github/workflows/deploy.yml` (a
+# GitHub-hosted runner, 16 GB RAM), stripped there, and uploaded as the
+# `dist/` artifact this Dockerfile COPYs from — no `cargo build` runs here at
+# all, so `flyctl deploy` only has to ship a handful of COPY layers plus this
+# file's own model-fetch layer to the remote builder.
+#
+# A SECOND fix landed the same day this file's `[build] dockerfile` setting
+# finally started being honored (see fly.toml's `[build]` comment for that
+# RCA — deploy run 33912443160): the embedding model + tokenizer used to ride
+# along in `dist/` too (133 MB), fetched by the CI job. They are fetched HERE
+# instead now, in their own `RUN curl` layer below — see that layer's
+# comment for why.
+#
+# Deliberately NOT a multi-stage build: there is no builder stage to elide,
+# `dist/` already contains exactly what the old builder stage would have
+# produced. This runtime stage is otherwise a close match of
+# `backend/Dockerfile`'s runtime stage (same base image, apt packages plus
+# `curl` for the model fetch, `/app` paths, ENV, user/permissions, and CMD)
+# — keep the two in lockstep; see the comment atop `backend/Dockerfile` for
+# which one CI actually deploys.
+FROM debian:trixie-slim AS runtime
+
+# ca-certificates: TLS to Slack/Anthropic/R2/huggingface.co (model fetch
+# below). libgomp1: ONNX Runtime OpenMP. libssl3: any dynamically-linked
+# openssl. curl: the model fetch below.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates libgomp1 libssl3 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# The backend binary and any ONNX Runtime shared lib the build placed next
+# to it — staged into `dist/` by the `build-backend-release` job, mirroring
+# `backend/Dockerfile`'s `COPY --from=builder` lines exactly. The `.so` COPY
+# is currently ALWAYS A NO-OP either way: `ort`'s pinned build
+# (`packages/core/Cargo.toml`) statically links onnxruntime rather than
+# producing a `.so` (confirmed 2026-09-04 debugging this job's first dry
+# run — see that job's "Assemble dist/" step comment), so `dist/*.so*` never
+# has anything to match. Left in for whenever that changes back (Docker's
+# COPY tolerates a zero-match glob).
+COPY dist/coralswarm-backend /app/coralswarm-funded-backend
+COPY dist/*.so* /app/
+
+# Fetch the embedding model + tokenizer HERE instead of shipping it in the
+# `dist/` artifact (moved 2026-09-04): the model + tokenizer were 133 MB of
+# the 353 MB context that made deploy run 33912443160's upload huge, and
+# they never change — building this as its own layer, byte-for-byte the same
+# `RUN curl` as `backend/Dockerfile`'s builder stage (same URLs, same
+# `--retry 3`, same `/app/models/...` target paths, same fail-closed
+# behavior: coralswarm_backend::run() treats a missing ONNX model as a FATAL
+# startup error in release builds), means BuildKit's layer cache skips
+# re-fetching it on every deploy that doesn't touch this Dockerfile, on top
+# of shrinking every upload that does.
+RUN mkdir -p /app/models && \
+    curl -fL --retry 3 \
+      "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/onnx/model.onnx" \
+      -o /app/models/bge-small-en-v1.5.onnx && \
+    curl -fL --retry 3 \
+      "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/tokenizer.json" \
+      -o /app/models/bge-small-en-v1.5-tokenizer.json
+
+# The out-of-band migrators, plus the wrapper that chains them. Neither is the
+# container's CMD: Fly runs `/app/release.sh` as the deploy `release_command`
+# (see fly.toml / fly.staging.toml) on a throwaway machine that finishes BEFORE
+# any traffic is routed to this image, and a non-zero exit aborts the deploy.
+# The serving process never applies migrations — see `run()`'s "NO migrations
+# here, by design" comment.
+COPY dist/migrate_control /app/migrate_control
+COPY dist/migrate_tenants /app/migrate_tenants
+# G1/G4 stock-repair one-shots (`scripts/fly_graph_ops.sh`). Not the CMD —
+# `fly machine run` overrides the entrypoint on a throwaway machine so the
+# serving process group never starts these.
+COPY dist/backfill_provenance_links /app/backfill_provenance_links
+COPY dist/fold_subtopics /app/fold_subtopics
+# Verified chunk-link and node_atoms bridge backfills (#1337, #1333), run as
+# one-shot machines so the master key and R2 credentials never leave prod.
+COPY dist/backfill_chunk_links /app/backfill_chunk_links
+COPY dist/backfill_node_atoms_bridge /app/backfill_node_atoms_bridge
+# 2026-10-19 incident one-shots: idle v1 standing backlog -> v2, and the
+# per-version duplicate reef merge. Tenant owner DSN only; no model call.
+COPY dist/dedupe_reefs /app/dedupe_reefs
+# Failed-extraction retry under source-atoms-v2. Tenant owner DSN only; no model call.
+COPY dist/retry_failed_extractions_v2 /app/retry_failed_extractions_v2
+# Fact supersession backfill (source-agnostic PR 9). Owner DSN; no model call.
+COPY dist/backfill_fact_supersession /app/backfill_fact_supersession
+# Statement co-occurrence edges (graph connectivity). Owner DSN; no model call.
+COPY dist/backfill_co_occurrence /app/backfill_co_occurrence
+# COR-66 quality eval one-shot: scoped Ask in-process; writes only what an Ask writes.
+COPY dist/quality_eval_ask /app/quality_eval_ask
+# Org-deletion operator CLI (list/approve/cancel/export; docs/plans/org-offboarding-design.md s10). Owner DSN.
+COPY dist/org_deletion_admin /app/org_deletion_admin
+# Desktop work-session purge (ADR 0015; docs/runbooks/purge-desktop-data.md). Owner DSN.
+COPY dist/purge_desktop_data /app/purge_desktop_data
+# chmod, not just whatever mode the artifact download preserved: a checkout or
+# artifact round-trip on a filesystem that drops the exec bit would otherwise
+# produce an image whose release command is not executable — a failure that
+# only shows up at deploy time. Mirrors `backend/Dockerfile`'s same paranoia.
+COPY dist/release.sh /app/release.sh
+RUN chmod 0755 /app/release.sh /app/coralswarm-funded-backend /app/migrate_control /app/migrate_tenants \
+        /app/backfill_provenance_links /app/fold_subtopics \
+        /app/backfill_chunk_links /app/backfill_node_atoms_bridge \
+        /app/dedupe_reefs /app/retry_failed_extractions_v2 /app/backfill_fact_supersession /app/backfill_co_occurrence /app/quality_eval_ask /app/org_deletion_admin /app/purge_desktop_data
+
+# ort dynamically links libonnxruntime.so — make it findable.
+ENV LD_LIBRARY_PATH=/app
+ENV EMBED_MODEL_PATH=/app/models/bge-small-en-v1.5.onnx
+ENV EMBED_TOKENIZER_PATH=/app/models/bge-small-en-v1.5-tokenizer.json
+
+EXPOSE 8080
+CMD ["/app/coralswarm-funded-backend"]

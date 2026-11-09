@@ -1,0 +1,200 @@
+name: Tenant restore drill
+
+# Restores ONE nightly tenant dump into a THROWAWAY target and proves it is
+# usable: checksum, decrypt, pg_restore with no unexpected errors, every dump
+# table present, migration ledger intact, rows back, vector extension and HNSW
+# index valid. COR-92.
+#
+# WHY A WORKFLOW: dumps are encrypted under BACKUP_ENCRYPTION_KEY, which exists
+# as a repository secret (see docs/runbooks/tenant-restore.md §1.4 for the
+# password-manager escrow). So decryption happens inside a run. The plaintext
+# dump lives only on the runner, outside the checkout, and is deleted at the
+# end of the job.
+#
+# NOTHING HERE WRITES PRODUCTION. The production tenant database is never
+# connected to. The targets are:
+#   container   (default) a pgvector:pg18 service container that dies with
+#               the job. Costs nothing beyond Actions minutes.
+#   neon-branch a throwaway branch of the tenant's OWN Neon project, with a new
+#               EMPTY database on it (restore_drill), on the direct endpoint.
+#               Exercises real Neon (extensions, PG version). Needs the
+#               NEON_API_KEY secret and the project id. The branch is deleted
+#               in an always() step, which refuses any branch not named
+#               restore-drill-*.
+#
+# SCHEDULE: monthly, container target, newest coralswarm dump, so an unreadable
+# backup is found within a month instead of during an incident.
+
+on:
+  schedule:
+    - cron: "30 11 1 * *"
+  workflow_dispatch:
+    inputs:
+      tenant_slug:
+        description: "Tenant slug"
+        type: string
+        default: coralswarm
+      object_key:
+        description: "Dump key (tenant/<slug>/... or restore-hold/<slug>/...). Blank = newest nightly"
+        type: string
+        default: ""
+      target:
+        description: "Restore target"
+        type: choice
+        options: [container, neon-branch]
+        default: container
+      neon_project_id:
+        description: "neon-branch only: the tenant's Neon project id"
+        type: string
+        default: ""
+      hold_source_key:
+        description: "Optional: if object_key is under restore-hold/, the tenant/ key it was copied from (compared size + checksum)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tenant-restore-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    name: Restore drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      scratch:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_PASSWORD: scratch
+          POSTGRES_DB: restore_drill
+        ports:
+          - 5432:5432
+        # Docker's default 64 MB /dev/shm is too small for the parallel HNSW
+        # index build; the first drill failed there with "could not resize
+        # shared memory segment ... No space left on device".
+        options: >-
+          --shm-size=2g
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PG_BIN_DIR: /usr/lib/postgresql/18/bin
+      SLUG: ${{ inputs.tenant_slug || 'coralswarm' }}
+      OBJECT_KEY: ${{ inputs.object_key || '' }}
+      TARGET: ${{ inputs.target || 'container' }}
+      NEON_PROJECT_ID: ${{ inputs.neon_project_id || '' }}
+      HOLD_SOURCE_KEY: ${{ inputs.hold_source_key || '' }}
+      DRILL_DIR: ${{ github.workspace }}/../drill-work
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate inputs and secrets
+        env:
+          HAVE_ENC: ${{ secrets.BACKUP_ENCRYPTION_KEY != '' }}
+          HAVE_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT != '' }}
+          HAVE_BUCKET: ${{ secrets.BACKUP_S3_BUCKET != '' }}
+          HAVE_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID != '' }}
+          HAVE_SECRET: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY != '' }}
+          HAVE_NEON: ${{ secrets.NEON_API_KEY != '' }}
+        run: |
+          missing=0
+          for pair in "$HAVE_ENC:BACKUP_ENCRYPTION_KEY" "$HAVE_ENDPOINT:BACKUP_S3_ENDPOINT" "$HAVE_BUCKET:BACKUP_S3_BUCKET" \
+                      "$HAVE_KEY_ID:BACKUP_S3_ACCESS_KEY_ID" "$HAVE_SECRET:BACKUP_S3_SECRET_ACCESS_KEY"; do
+            if [ "${pair%%:*}" != true ]; then echo "::error::Required secret ${pair#*:} is not set" >&2; missing=1; fi
+          done
+          case "$SLUG" in ''|*[!a-z0-9-]*) echo "::error::tenant_slug must be lowercase alnum and hyphens" >&2; missing=1 ;; esac
+          if [ "$TARGET" = neon-branch ]; then
+            [ "$HAVE_NEON" = true ] || { echo "::error::target=neon-branch needs the NEON_API_KEY secret" >&2; missing=1; }
+            case "$NEON_PROJECT_ID" in ''|*[!a-z0-9-]*) echo "::error::target=neon-branch needs neon_project_id" >&2; missing=1 ;; esac
+          fi
+          [ "$missing" -eq 0 ] || exit 1
+          bash scripts/tenant_restore_drill.sh --self-test
+          bash scripts/rehearse_tenant_restore.sh --self-test >/dev/null
+
+      # Tenant dumps are written by pg_dump 18; same PGDG install as backup-tenants.yml.
+      - name: Install postgresql-client-18
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+      - name: Held copy matches its source
+        if: ${{ startsWith(env.OBJECT_KEY, 'restore-hold/') }}
+        env:
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: DRILL_HOLD_KEY="$OBJECT_KEY" DRILL_SOURCE_KEY="$HOLD_SOURCE_KEY" bash scripts/tenant_restore_drill.sh hold-check
+
+      # Download, verify the SHA-256 recorded at backup time, decrypt, and
+      # check the TABLE DATA floor. The plaintext dump lands in DRILL_DIR.
+      - name: Fetch, verify checksum, decrypt
+        id: fetch
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+        run: |
+          mkdir -p "$DRILL_DIR"
+          cd "$DRILL_DIR"
+          args=(fetch --slug "$SLUG")
+          [ -n "$OBJECT_KEY" ] && args+=(--key "$OBJECT_KEY")
+          bash "$GITHUB_WORKSPACE/scripts/rehearse_tenant_restore.sh" "${args[@]}"
+
+      - name: Prepare the scratch container target
+        if: ${{ env.TARGET == 'container' }}
+        run: |
+          echo "TARGET_DSN=postgresql://postgres:scratch@localhost:5432/restore_drill" >>"$GITHUB_ENV"
+          TARGET_DSN=postgresql://postgres:scratch@localhost:5432/restore_drill \
+          DRILL_DUMP="$DRILL_DIR/${{ steps.fetch.outputs.dump_file }}" \
+            bash scripts/tenant_restore_drill.sh scratch-roles
+
+      - name: Create the throwaway Neon branch target
+        if: ${{ env.TARGET == 'neon-branch' }}
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: bash scripts/tenant_restore_drill.sh neon-create
+
+      # rehearse_tenant_restore.sh restore refuses a non-empty or pooled target
+      # and requires the database name typed back.
+      - name: Restore
+        run: |
+          set -o pipefail
+          bash scripts/rehearse_tenant_restore.sh restore \
+            --dump "$DRILL_DIR/${{ steps.fetch.outputs.dump_file }}" --confirm restore_drill \
+            2> >(tee "$DRILL_DIR/pg_restore.log" >&2)
+
+      - name: Sanity checks
+        env:
+          DRILL_DUMP: ${{ env.DRILL_DIR }}/${{ steps.fetch.outputs.dump_file }}
+          DRILL_RESTORE_LOG: ${{ env.DRILL_DIR }}/pg_restore.log
+        run: |
+          echo "drill: tenant=$SLUG artifact=${{ steps.fetch.outputs.artifact_key }} target=$TARGET"
+          bash scripts/tenant_restore_drill.sh sanity
+          bash scripts/rehearse_tenant_restore.sh verify
+
+      - name: Delete the throwaway Neon branch
+        if: ${{ always() && env.TARGET == 'neon-branch' }}
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: bash scripts/tenant_restore_drill.sh neon-delete
+
+      - name: Remove the plaintext dump
+        if: always()
+        run: rm -rf "$DRILL_DIR"

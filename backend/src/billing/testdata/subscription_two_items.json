@@ -1,0 +1,47 @@
+{
+  "id": "sub_TEST0000000001",
+  "object": "subscription",
+  "status": "active",
+  "customer": "cus_TEST0000000001",
+  "livemode": false,
+  "items": {
+    "object": "list",
+    "has_more": false,
+    "data": [
+      {
+        "id": "si_TEST0000000001",
+        "object": "subscription_item",
+        "quantity": 3,
+        "current_period_start": 1755500000,
+        "current_period_end": 1758092000,
+        "price": {
+          "id": "price_seat_standard_test",
+          "object": "price",
+          "unit_amount": 4000,
+          "currency": "usd",
+          "recurring": {
+            "interval": "month",
+            "usage_type": "licensed"
+          }
+        }
+      },
+      {
+        "id": "si_TEST0000000002",
+        "object": "subscription_item",
+        "quantity": 2,
+        "current_period_start": 1755500000,
+        "current_period_end": 1758092000,
+        "price": {
+          "id": "price_seat_premium_test",
+          "object": "price",
+          "unit_amount": 17500,
+          "currency": "usd",
+          "recurring": {
+            "interval": "month",
+            "usage_type": "licensed"
+          }
+        }
+      }
+    ]
+  }
+}

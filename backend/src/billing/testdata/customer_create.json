@@ -1,0 +1,14 @@
+{
+  "id": "cus_TEST0000000001",
+  "object": "customer",
+  "created": 1755500000,
+  "email": "founder-test@coralswarm.test",
+  "livemode": false,
+  "metadata": {
+    "account_id": "00000000-0000-0000-0000-000000000001",
+    "env": "test"
+  },
+  "invoice_settings": {
+    "default_payment_method": null
+  }
+}

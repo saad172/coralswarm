@@ -1,0 +1,26 @@
+{
+  "name": "operations/create-subscriptions-7f3a9c21-abcdef",
+  "metadata": {
+    "@type": "type.googleapis.com/google.apps.events.subscriptions.v1.CreateSubscriptionMetadata"
+  },
+  "done": true,
+  "response": {
+    "@type": "type.googleapis.com/google.apps.events.subscriptions.v1.Subscription",
+    "name": "subscriptions/7f3a9c21",
+    "targetResource": "//chat.googleapis.com/spaces/-",
+    "eventTypes": [
+      "google.workspace.chat.message.v1.created",
+      "google.workspace.chat.message.v1.deleted",
+      "google.workspace.chat.membership.v1.created",
+      "google.workspace.chat.membership.v1.deleted"
+    ],
+    "notificationEndpoint": {
+      "pubsubTopic": "projects/coralswarm-prod/topics/chat-events"
+    },
+    "state": "ACTIVE",
+    "createTime": "2026-08-01T00:00:00Z",
+    "updateTime": "2026-08-01T00:00:00Z",
+    "expireTime": "2026-08-08T00:00:00Z",
+    "uid": "7f3a9c21-uid"
+  }
+}

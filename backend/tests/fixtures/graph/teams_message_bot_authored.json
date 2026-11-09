@@ -1,0 +1,16 @@
+{
+  "id": "1738368120000",
+  "messageType": "message",
+  "createdDateTime": "2026-02-01T09:02:00Z",
+  "from": {
+    "application": {
+      "id": "coralswarm-bot-app-id",
+      "displayName": "CoralSwarm",
+      "applicationIdentityType": "bot"
+    }
+  },
+  "body": {
+    "contentType": "html",
+    "content": "<p>Ingested 12 messages from #general.</p>"
+  }
+}

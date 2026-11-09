@@ -1,0 +1,122 @@
+-- Migration: 0203_mcp_tenant_selection
+-- Description: Per-(user, client) MCP TENANT SELECTION — claim-based tenancy
+--              Phase 3, PR 3.2 (docs/plans/claim-based-tenancy.md §Phase 3;
+--              PR #804 corrected that section in place — read the corrected
+--              version, it is accurate). This is the store
+--              `tenant_selection::resolve_selected_tenant` (PR 3.1,
+--              `backend/src/mcp/tenant_selection.rs`) was written ahead of
+--              and left deliberately unwired to: `list_tenants`/
+--              `select_tenant` (this PR) are the first — and, per that
+--              module's own doc, the ONLY sanctioned — thing that ever
+--              writes an `Org` row here.
+--
+--              KEYED (user_id, client_id), NOT (user_id, account_id) LIKE
+--              EVERY SIBLING TABLE. `user_prefs` (0060), `user_account_prefs`
+--              (0080), and `user_active_graph` (0201) all key on
+--              (user_id, account_id) — but that key can only ever name an
+--              account the user is ALREADY resolved into, which is exactly
+--              backwards for this table: its whole job is naming which
+--              account an otherwise-personal MCP token should resolve INTO,
+--              before that resolution happens
+--              (`mcp::auth::resolve_mcp_tenancy`'s personal/apex branch —
+--              there is no active account yet to key on at the point this
+--              row is read). `client_id` is the OAuth client id the token
+--              was issued to (`ClerkClaims.client_id`, or its `azp`
+--              fallback — `mcp/auth.rs:76` / `:534` — already threaded into
+--              `McpAuthContext`/the audit trail before this PR, independent
+--              of tenancy). Keying on it is what makes "my personal
+--              laptop's MCP client stays on my personal ocean while my work
+--              laptop's MCP client sits in Acme Corp" simultaneously true
+--              for the SAME user_id — a (user_id, account_id) key cannot
+--              express that at all, because there is no account to join
+--              through until a selection already exists.
+--
+--              WHY THE PLAN'S OWN "one client_id can back several CONCURRENT
+--              connections" WARNING (§Phase 3, correction 3) IS ACCEPTED
+--              HERE, NOT SOLVED BY A DIFFERENT KEY. Remote MCP is fully
+--              stateless (`mcp/mod.rs`'s `mcp_router` doc comment: a fresh
+--              handler and a synthetic peer/session are built PER HTTP
+--              REQUEST, not per logical client connection — there is no
+--              connection identifier anywhere in a request's verified data
+--              to key by instead; rmcp's own stateless-mode peer info is
+--              reconstructed empty on every call past `initialize`). Two
+--              concurrent connections sharing one `client_id` already share
+--              one identity everywhere else this codebase models an MCP
+--              caller: `mcp::auth::mcp_auth`'s own `device_id` is literally
+--              `mcp:{client_id}`, one device for every connection from that
+--              client. This table keeping that same granularity is
+--              consistent with an existing modeling choice already made
+--              elsewhere in this exact code, not a new gap this migration
+--              invents — and the PRIMARY KEY below makes the consequence
+--              explicit and structural (a second `select_tenant` call from
+--              the same (user, client_id) REPLACES the first outright; it
+--              can never silently create a second, differently-routed row
+--              for the "same" caller) rather than an unbounded table growing
+--              one row per connection with no defined precedence between
+--              them.
+--
+--              NO FOREIGN KEY ON `clerk_org_id`, AND THAT IS DELIBERATE —
+--              same rationale `org_revocations` (0082) already established
+--              for the identical shape (a bare TEXT clerk_org_id, not a FK
+--              to `accounts.id`): it must survive an org's `accounts` row
+--              being deleted and later recreated, since Clerk org ids are
+--              unique per creation and an offboarded-then-resurrected org
+--              keeps the same one. A foreign key would need to be dropped
+--              and re-added across that cycle for no safety benefit anyway:
+--              `select_tenant`'s own live `account_members`/
+--              `org_revocations` re-check (mirroring
+--              `middleware::auth::live_org_membership`, mandatory per
+--              `tenant_selection::resolve_selected_tenant`'s invariant)
+--              already refuses to PERSIST a selection the caller is not a
+--              CURRENT member of, and every subsequent resolution re-runs
+--              that same live check rather than ever trusting the stored
+--              row alone (`tenant_selection`'s whole module doc is this
+--              exact point: a stored selection is a selector, never a
+--              credential). So the value stored here is advisory, the same
+--              way 0201's `graph_id` is: it may go on to name an org the
+--              caller has since been removed from, and
+--              `resolve_selected_tenant` — not a database constraint — is
+--              what makes that safe.
+--
+--              NO RLS POLICY — same rationale as 0201. This is a
+--              CONTROL-plane table keyed on `user_id` first, and every read
+--              and write here is already pinned to the authenticated
+--              `UserContext`'s own `user_id` (`WHERE user_id = $1 AND
+--              client_id = $2`, with `client_id` sourced from the VERIFIED
+--              token — never from client-supplied tool input — see
+--              `mcp::auth::mcp_auth`). 0083's consumer-RLS roster is
+--              account-scoped CONTENT tables; this is neither content nor
+--              account-scoped — it is what NAMES the account, upstream of
+--              any RLS session GUC. Registered in
+--              `scripts/check_schema_parity.sh`'s CONTROL_TABLES in this
+--              same PR (the paired-migration discipline that script's
+--              header asks for).
+--
+-- Depends on: 0001_init (users), 0027_clerk_identity (accounts.clerk_org_id),
+--             0082_org_revocations_and_membership_guard (org_revocations)
+--
+-- Down:
+--   DROP TABLE IF EXISTS mcp_tenant_selection;
+
+CREATE TABLE IF NOT EXISTS mcp_tenant_selection (
+    user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- The OAuth client id the token was issued to (or its `azp` fallback) —
+    -- see the header. Not a foreign key: it is a Clerk/OAuth-side
+    -- identifier, not a row in any table of ours.
+    client_id    TEXT        NOT NULL,
+    -- The selected Clerk organization id. Always present when a row exists
+    -- — the "no selection" state
+    -- (`tenant_selection::StoredSelection::None`) is represented by the
+    -- ABSENCE of a row, never by a NULL/empty value here (see
+    -- `tenant_selection`'s own doc on that enum's `None` variant).
+    clerk_org_id TEXT        NOT NULL,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, client_id)
+);
+
+-- No backfill. There is no mechanism anywhere in this codebase, before this
+-- PR, that could have written a row here — `tenant_selection::
+-- resolve_selected_tenant` (PR 3.1) shipped deliberately unwired to any
+-- caller, migration, or tool (see that module's doc). Every existing MCP
+-- caller today resolves to `StoredSelection::None`, i.e. no row, which is
+-- exactly what an empty table already represents.

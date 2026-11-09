@@ -1,0 +1,37 @@
+[workspace]
+members = [
+  "backend",
+  "cli",
+  "packages/core",
+]
+resolver = "2"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate", "uuid", "chrono", "json"] }
+chrono = { version = "0.4", features = ["serde"] }
+# IANA timezone boundary math for the journal day/week/month tiers
+# (`workers::journal_sweep`'s local-midnight/Monday-week/calendar-month
+# helpers) — chrono itself has no IANA tzdata, only fixed offsets.
+chrono-tz = "0.10"
+# The HTTP surface, declared once here so a version bump is one edit.
+axum = { version = "0.8", features = ["tokio"] }
+thiserror = "1"
+bytes = "1"
+# Outbound HTTP, rustls-only posture: no OpenSSL/Security.framework link, which
+# is what lets `backend` cross-compile. `backend` adds `features = ["stream"]` on top for its
+# streaming response bodies — member crates may widen a workspace dependency's
+# features, so the union lives at the call site that needs it rather than being
+# forced on everyone.
+#
+# NOT inherited by `packages/core`: it keeps its own declaration because it
+# runs reqwest's DEFAULT features (i.e. `default-tls`/native-tls, or
+# `blocking`), and rewriting it to this entry would silently change which TLS
+# backend it links — a behaviour change with no reviewed reason behind it.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

@@ -1,0 +1,60 @@
+-- Migration: 0123_platform_metrics_daily_cache_tokens
+-- Description: `platform_metrics_daily` (migration `0095_platform_metrics.sql`)
+--              rolls up org-tenant `llm_usage` sums into ONE row per
+--              `(day, tenant)`, but has only ever carried `llm_input_tokens`/
+--              `llm_output_tokens` — no columns exist for Anthropic
+--              prompt-cache tokens (`cache_creation_input_tokens`/
+--              `cache_read_input_tokens`, migration `0073_llm_usage_cache_
+--              tokens.sql`), even though the underlying per-tenant
+--              `llm_usage` table has carried both since 0073. That gap is
+--              exactly why `routes/admin.rs`'s `admin_spend` org-plane
+--              branch has always priced cache tokens at a hardcoded `0, 0`
+--              (see that call site's own comment, and the
+--              `cache_pricing: { complete, note }` response field that
+--              exists specifically to say so out loud) while the PERSONAL
+--              plane — sourced directly from `llm_usage`, no rollup in
+--              between — has been cache-aware since that same fix. This
+--              migration adds the two missing columns so
+--              `workers::platform_rollup` can start summing real cache
+--              tokens into them, closing that gap.
+--
+--              *** NULLABLE, NO DEFAULT — deliberate, not an oversight. ***
+--              A `DEFAULT 0` here would be actively WRONG: every row this
+--              table already holds (written by the rollup worker before this
+--              migration shipped) would silently read back as "0 cache
+--              tokens, verified" the instant this column exists, when the
+--              truth is "the rollup never even looked at cache tokens for
+--              this row." `NULL` is the only value that honestly means
+--              "this (day, tenant) row predates the cache-aware rollup —
+--              genuinely unknown," reserving `0` to mean what it should:
+--              "the cache-aware rollup computed this row and there really
+--              was zero cache activity that day." Collapsing those two
+--              states into one `DEFAULT 0` would be exactly the kind of
+--              silent-gap bug `cache_pricing.complete` exists to catch, not
+--              a fix for it.
+--
+--              `workers::platform_rollup` (this same change) is updated to
+--              ALWAYS populate both columns with real (never-null) sums on
+--              every row it writes or re-upserts going forward — so `NULL`
+--              only persists for days that are already closed out and never
+--              get touched again by that worker (a same-day re-run
+--              overwrites `NULL` with a real value, same as every other
+--              column here already does). Backfilling historical closed
+--              days is explicitly OUT OF SCOPE here — flagged as known
+--              follow-up work, not silently deferred.
+--
+--              `platform_metrics_daily` is control-only, with no tenant-tree
+--              counterpart (0095's own header, reaffirmed by its listing in
+--              `CONTROL_TABLES`, `scripts/check_schema_parity.sh`) — this
+--              migration needs no tenant-tree twin and does not touch that
+--              script's table list.
+-- Depends on: 0095_platform_metrics.sql (creates platform_metrics_daily),
+--             0073_llm_usage_cache_tokens.sql (the per-tenant source columns
+--             this rollup sums FROM).
+-- Down:
+--   ALTER TABLE platform_metrics_daily DROP COLUMN IF EXISTS llm_cache_creation_tokens;
+--   ALTER TABLE platform_metrics_daily DROP COLUMN IF EXISTS llm_cache_read_tokens;
+
+ALTER TABLE platform_metrics_daily
+    ADD COLUMN IF NOT EXISTS llm_cache_creation_tokens BIGINT,
+    ADD COLUMN IF NOT EXISTS llm_cache_read_tokens     BIGINT;

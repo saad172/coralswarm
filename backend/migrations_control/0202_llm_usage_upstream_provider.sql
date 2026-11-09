@@ -1,0 +1,56 @@
+-- Migration: 0202_llm_usage_upstream_provider
+-- Description: OpenRouter retry fix (2026-09-07) — adds a single nullable
+--   `upstream_provider TEXT` column to `llm_usage`.
+--
+--   Measured in production over the 7 days ending 2026-09-07: calls to
+--   `z-ai/glm-5.3-flash` through OpenRouter failed 16% of the time (134 of
+--   820), every failure an HTTP 200 whose body carried
+--   `choices[0].finish_reason == "error"` with no top-level `error` object —
+--   OpenRouter's signal that the upstream inference host it routed to failed
+--   mid-generation. `backend/src/llm/openai.rs`'s retry loop wrapped only the
+--   network `send`, never this body-level check, so nothing retried it (the
+--   companion code PR fixes that). Neither before nor after that fix could
+--   this table answer "which upstream host is unreliable": OpenRouter names
+--   the ACTUAL inference host it routed to in a top-level `provider` field on
+--   every response (and every SSE chunk), and nothing captured it.
+--
+--   `upstream_provider` is that field, persisted on EVERY `llm_usage` row —
+--   success and `_errored` (see `llm::usage::ERRORED_TASK_SUFFIX`) — written
+--   by `llm::usage::finalize`. It is NEVER the same thing as the pre-existing
+--   `provider` column (migration `0141`/`0048`), which stays the constant
+--   `llm.name()` string (`"openrouter"`, `"anthropic"`, …) that reporting and
+--   `model_rates` lookups key on and must never change value for. Read it
+--   like: `SELECT upstream_provider, count(*) FROM llm_usage WHERE task LIKE
+--   '%_errored' GROUP BY upstream_provider ORDER BY count(*) DESC;`.
+--
+--   NULLABLE and deliberately unbackfilled, same posture as every other
+--   `llm_usage` addendum column (`0141`'s `source_job_id`/`source_query_id`
+--   etc.): every pre-migration row predates this field, and it stays NULL
+--   for the code paths this fix's own remit documents as a deliberate gap
+--   (`StreamUsageGuard`/`finalize_for_stream`/`finalize_for_batch` — the
+--   interactive-Ask raw-stream shape and the Anthropic Batches lifecycle,
+--   neither of which observes an upstream host at this layer today). No
+--   `CHECK`, no FK: this is an observability column on an append-only
+--   accounting log, same as `provider` itself.
+--
+--   `ADD COLUMN ... TEXT` with no default is a fast, metadata-only operation
+--   in Postgres 11+ (no full-table rewrite, no default to backfill). `llm_usage`
+--   is still a hot, high-write table (every background LLM call and every
+--   synthesis prose call eventually writes here), so `SET LOCAL lock_timeout
+--   = '3s'` protects against queuing behind a long-running transaction that
+--   already holds a conflicting lock — same precedent as `0141`'s own header
+--   cites (`0134_job_outcomes`).
+--
+-- PAIRED WITH: backend/migrations_tenant/0075_llm_usage_upstream_provider.sql
+--   — `llm_usage` is byte-identical across both trees and is NOT in
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster, so the DDL
+--   below must stay byte-for-byte identical to that file's.
+--
+-- Depends on: 0141_llm_usage_provider_cost.sql (most recent prior ALTER
+--   adding a column to this table).
+-- Down:
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS upstream_provider;
+
+SET LOCAL lock_timeout = '3s';
+
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS upstream_provider TEXT;

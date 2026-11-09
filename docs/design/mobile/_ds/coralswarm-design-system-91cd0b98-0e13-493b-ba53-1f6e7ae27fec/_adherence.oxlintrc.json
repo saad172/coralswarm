@@ -1,0 +1,294 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/Badge/**",
+              "components/Button/**",
+              "components/Card/**",
+              "components/CiteChip/**",
+              "components/Display/**",
+              "components/Eyebrow/**",
+              "components/HueChip/**",
+              "components/Input/**",
+              "components/Nav/**",
+              "components/Pill/**",
+              "components/Section/**",
+              "components/Wordmark/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Instrument Serif|Geist|JetBrains Mono))/i]",
+        "message": "Font not provided by the design system. Available: Instrument Serif, Geist, JetBrains Mono."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute > JSXIdentifier[name!=/^(?:hue|variant|children|style|key|ref|className|style|children)$/]",
+        "message": "<Badge> doesn't accept that prop. Declared props: hue, variant, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:solid|outline)$/]",
+        "message": "<Badge> variant must be one of 'solid' | 'outline'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute > JSXIdentifier[name!=/^(?:variant|size|href|onClick|disabled|type|children|style|key|ref|className|style|children)$/]",
+        "message": "<Button> doesn't accept that prop. Declared props: variant, size, href, onClick, disabled, type, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:primary|ink|secondary|ghost|danger)$/]",
+        "message": "<Button> variant must be one of 'primary' | 'ink' | 'secondary' | 'ghost' | 'danger'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<Button> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='type'] > Literal[value!=/^(?:button|submit|reset)$/]",
+        "message": "<Button> type must be one of 'button' | 'submit' | 'reset'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Card'] > JSXAttribute > JSXIdentifier[name!=/^(?:kind|hue|title|prov|children|style|key|ref|className|style|children)$/]",
+        "message": "<Card> doesn't accept that prop. Declared props: kind, hue, title, prov, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='CiteChip'] > JSXAttribute > JSXIdentifier[name!=/^(?:hot|href|onClick|children|style|key|ref|className|style|children)$/]",
+        "message": "<CiteChip> doesn't accept that prop. Declared props: hot, href, onClick, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Display'] > JSXAttribute > JSXIdentifier[name!=/^(?:as|size|children|style|key|ref|className|style|children)$/]",
+        "message": "<Display> doesn't accept that prop. Declared props: as, size, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Display'] > JSXAttribute[name.name='as'] > Literal[value!=/^(?:h1|h2|h3|h4)$/]",
+        "message": "<Display> as must be one of 'h1' | 'h2' | 'h3' | 'h4'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Eyebrow'] > JSXAttribute > JSXIdentifier[name!=/^(?:as|children|style|key|ref|className|style|children)$/]",
+        "message": "<Eyebrow> doesn't accept that prop. Declared props: as, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='HueChip'] > JSXAttribute > JSXIdentifier[name!=/^(?:hue|meaning|showCode|style|key|ref|className|style|children)$/]",
+        "message": "<HueChip> doesn't accept that prop. Declared props: hue, meaning, showCode, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='HueChip'] > JSXAttribute[name.name='hue'] > Literal[value!=/^(?:coral|pink|amber|teal|plum)$/]",
+        "message": "<HueChip> hue must be one of 'coral' | 'pink' | 'amber' | 'teal' | 'plum'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Input'] > JSXAttribute > JSXIdentifier[name!=/^(?:type|size|invalid|disabled|value|defaultValue|placeholder|onChange|ariaLabel|style|key|ref|className|style|children)$/]",
+        "message": "<Input> doesn't accept that prop. Declared props: type, size, invalid, disabled, value, defaultValue, placeholder, onChange, ariaLabel, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Input'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<Input> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='NavItem'] > JSXAttribute > JSXIdentifier[name!=/^(?:label|href|onClick|key|ref|className|style|children)$/]",
+        "message": "<NavItem> doesn't accept that prop. Declared props: label, href, onClick."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Pill'] > JSXAttribute > JSXIdentifier[name!=/^(?:dot|children|style|key|ref|className|style|children)$/]",
+        "message": "<Pill> doesn't accept that prop. Declared props: dot, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Section'] > JSXAttribute > JSXIdentifier[name!=/^(?:variant|dotted|container|pad|children|style|innerStyle|key|ref|className|style|children)$/]",
+        "message": "<Section> doesn't accept that prop. Declared props: variant, dotted, container, pad, children, style, innerStyle."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Section'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:cream|tinted|ink)$/]",
+        "message": "<Section> variant must be one of 'cream' | 'tinted' | 'ink'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='DotMandala'] > JSXAttribute > JSXIdentifier[name!=/^(?:size|mono|color|density|rotate|key|ref|className|style|children)$/]",
+        "message": "<DotMandala> doesn't accept that prop. Declared props: size, mono, color, density, rotate."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "Badge": {
+        "replaces": []
+      },
+      "Button": {
+        "replaces": []
+      },
+      "Card": {
+        "replaces": []
+      },
+      "CiteChip": {
+        "replaces": []
+      },
+      "Display": {
+        "replaces": []
+      },
+      "Eyebrow": {
+        "replaces": []
+      },
+      "HueChip": {
+        "replaces": []
+      },
+      "Input": {
+        "replaces": []
+      },
+      "NavItem": {
+        "replaces": []
+      },
+      "Pill": {
+        "replaces": []
+      },
+      "Section": {
+        "replaces": []
+      },
+      "DotMandala": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--accent",
+      "--bad",
+      "--bg",
+      "--bg-2",
+      "--bg-3",
+      "--brand",
+      "--brand-2",
+      "--brand-3",
+      "--display",
+      "--dur",
+      "--ease",
+      "--hue-amber",
+      "--hue-coral",
+      "--hue-pink",
+      "--hue-plum",
+      "--hue-teal",
+      "--ink",
+      "--ink-2",
+      "--ink-3",
+      "--line",
+      "--mono",
+      "--ok",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--radius-xl",
+      "--ring",
+      "--sans",
+      "--shadow-lg",
+      "--shadow-md",
+      "--shadow-sm",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-7",
+      "--space-8",
+      "--space-9",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-5xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--warn"
+    ],
+    "tokenKinds": {
+      "--bg": "color",
+      "--bg-2": "color",
+      "--bg-3": "color",
+      "--ink": "color",
+      "--ink-2": "color",
+      "--ink-3": "color",
+      "--line": "color",
+      "--hue-coral": "color",
+      "--hue-pink": "color",
+      "--hue-amber": "color",
+      "--hue-teal": "color",
+      "--hue-plum": "color",
+      "--brand": "color",
+      "--brand-2": "color",
+      "--brand-3": "color",
+      "--accent": "color",
+      "--ok": "color",
+      "--warn": "color",
+      "--bad": "color",
+      "--display": "font",
+      "--sans": "font",
+      "--mono": "font",
+      "--text-xs": "font",
+      "--text-sm": "font",
+      "--text-base": "font",
+      "--text-lg": "font",
+      "--text-xl": "font",
+      "--text-2xl": "font",
+      "--text-3xl": "font",
+      "--text-4xl": "font",
+      "--text-5xl": "font",
+      "--space-1": "spacing",
+      "--space-2": "spacing",
+      "--space-3": "spacing",
+      "--space-4": "spacing",
+      "--space-5": "spacing",
+      "--space-6": "spacing",
+      "--space-7": "spacing",
+      "--space-8": "spacing",
+      "--space-9": "spacing",
+      "--radius-sm": "radius",
+      "--radius-md": "radius",
+      "--radius-lg": "radius",
+      "--radius-xl": "radius",
+      "--radius-pill": "radius",
+      "--shadow-sm": "shadow",
+      "--shadow-md": "shadow",
+      "--shadow-lg": "shadow",
+      "--ease": "other",
+      "--dur": "other",
+      "--ring": "shadow"
+    },
+    "fontFamilies": [
+      "Geist",
+      "Instrument Serif",
+      "JetBrains Mono"
+    ]
+  }
+}

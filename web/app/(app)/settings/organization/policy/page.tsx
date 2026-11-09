@@ -1,0 +1,5 @@
+import { redirectPage, type PageSearchParams } from "@/lib/pageRedirect";
+
+export default function RetiredSettingsPage({ searchParams }: { searchParams: PageSearchParams }) {
+  return redirectPage("/settings/organization/permissions", searchParams);
+}

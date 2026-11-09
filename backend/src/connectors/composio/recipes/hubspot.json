@@ -1,0 +1,440 @@
+{
+  "toolkit": "hubspot",
+  "label": "HubSpot",
+  "version": "20261013_01",
+  "scopes": {
+    "required": [
+      "oauth",
+      "crm.objects.contacts.read",
+      "crm.objects.companies.read",
+      "crm.objects.deals.read"
+    ]
+  },
+  "read_tools": [
+    "HUBSPOT_GET_ACCOUNT_INFO",
+    "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA"
+  ],
+  "namespace": {
+    "kind": "portal",
+    "source": {
+      "lookup": {
+        "call": {
+          "tool": "HUBSPOT_GET_ACCOUNT_INFO",
+          "args": {}
+        },
+        "id": "/portalId"
+      }
+    }
+  },
+  "streams": [
+    {
+      "kind": "company",
+      "change": "filter",
+      "call": {
+        "tool": "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA",
+        "args": {
+          "objectType": "companies",
+          "filterGroups": [
+            {
+              "filters": [
+                {
+                  "propertyName": "hs_lastmodifieddate",
+                  "operator": "GTE",
+                  "value": "{{since_epoch_ms_text}}"
+                }
+              ]
+            }
+          ],
+          "sorts": [
+            {
+              "propertyName": "hs_lastmodifieddate",
+              "direction": "ASCENDING"
+            }
+          ],
+          "properties": [
+            "name",
+            "domain",
+            "description",
+            "lifecyclestage",
+            "hubspot_owner_id",
+            "hs_lastmodifieddate"
+          ],
+          "limit": "{{page_size}}",
+          "after": "{{cursor}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "next": "/paging/next/after"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updatedAt",
+          "/properties/hs_lastmodifieddate"
+        ],
+        "title": "/properties/name",
+        "body": "/properties/description",
+        "state": "/properties/lifecyclestage",
+        "reference": "/properties/domain",
+        "author": {
+          "object": "/properties",
+          "id": "/hubspot_owner_id",
+          "name": []
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "{title}"
+        ]
+      }
+    },
+    {
+      "kind": "contact",
+      "change": "filter",
+      "call": {
+        "tool": "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA",
+        "args": {
+          "objectType": "contacts",
+          "filterGroups": [
+            {
+              "filters": [
+                {
+                  "propertyName": "lastmodifieddate",
+                  "operator": "GTE",
+                  "value": "{{since_epoch_ms_text}}"
+                }
+              ]
+            }
+          ],
+          "sorts": [
+            {
+              "propertyName": "lastmodifieddate",
+              "direction": "ASCENDING"
+            }
+          ],
+          "properties": [
+            "firstname",
+            "lastname",
+            "email",
+            "jobtitle",
+            "company",
+            "lifecyclestage",
+            "hubspot_owner_id",
+            "lastmodifieddate"
+          ],
+          "limit": "{{page_size}}",
+          "after": "{{cursor}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "next": "/paging/next/after"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updatedAt",
+          "/properties/lastmodifieddate"
+        ],
+        "title": "/properties/email",
+        "body": "/properties/jobtitle",
+        "state": "/properties/lifecyclestage",
+        "reference": "/properties/company",
+        "author": {
+          "object": "/properties",
+          "id": "/hubspot_owner_id",
+          "name": []
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Contact: {title}"
+        ]
+      }
+    },
+    {
+      "kind": "deal",
+      "change": "filter",
+      "call": {
+        "tool": "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA",
+        "args": {
+          "objectType": "deals",
+          "filterGroups": [
+            {
+              "filters": [
+                {
+                  "propertyName": "hs_lastmodifieddate",
+                  "operator": "GTE",
+                  "value": "{{since_epoch_ms_text}}"
+                }
+              ]
+            }
+          ],
+          "sorts": [
+            {
+              "propertyName": "hs_lastmodifieddate",
+              "direction": "ASCENDING"
+            }
+          ],
+          "properties": [
+            "dealname",
+            "description",
+            "dealstage",
+            "pipeline",
+            "amount",
+            "closedate",
+            "hubspot_owner_id",
+            "hs_lastmodifieddate"
+          ],
+          "limit": "{{page_size}}",
+          "after": "{{cursor}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "next": "/paging/next/after"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updatedAt",
+          "/properties/hs_lastmodifieddate"
+        ],
+        "container": {
+          "kind": "pipeline",
+          "id": "/properties/pipeline"
+        },
+        "title": "/properties/dealname",
+        "body": "/properties/description",
+        "state": "/properties/dealstage",
+        "author": {
+          "object": "/properties",
+          "id": "/hubspot_owner_id",
+          "name": []
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Deal: {title}"
+        ]
+      }
+    },
+    {
+      "kind": "note",
+      "change": "filter",
+      "call": {
+        "tool": "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA",
+        "args": {
+          "objectType": "notes",
+          "filterGroups": [
+            {
+              "filters": [
+                {
+                  "propertyName": "hs_lastmodifieddate",
+                  "operator": "GTE",
+                  "value": "{{since_epoch_ms_text}}"
+                }
+              ]
+            }
+          ],
+          "sorts": [
+            {
+              "propertyName": "hs_lastmodifieddate",
+              "direction": "ASCENDING"
+            }
+          ],
+          "properties": [
+            "hs_note_body",
+            "hs_timestamp",
+            "hubspot_owner_id",
+            "hs_lastmodifieddate"
+          ],
+          "limit": "{{page_size}}",
+          "after": "{{cursor}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "next": "/paging/next/after"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updatedAt",
+          "/properties/hs_lastmodifieddate"
+        ],
+        "body": {
+          "path": "/properties/hs_note_body",
+          "format": "html"
+        },
+        "author": {
+          "object": "/properties",
+          "id": "/hubspot_owner_id",
+          "name": []
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Note: {excerpt}"
+        ]
+      }
+    },
+    {
+      "kind": "call",
+      "change": "filter",
+      "call": {
+        "tool": "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA",
+        "args": {
+          "objectType": "calls",
+          "filterGroups": [
+            {
+              "filters": [
+                {
+                  "propertyName": "hs_lastmodifieddate",
+                  "operator": "GTE",
+                  "value": "{{since_epoch_ms_text}}"
+                }
+              ]
+            }
+          ],
+          "sorts": [
+            {
+              "propertyName": "hs_lastmodifieddate",
+              "direction": "ASCENDING"
+            }
+          ],
+          "properties": [
+            "hs_call_title",
+            "hs_call_body",
+            "hs_call_status",
+            "hs_call_direction",
+            "hs_timestamp",
+            "hubspot_owner_id",
+            "hs_lastmodifieddate"
+          ],
+          "limit": "{{page_size}}",
+          "after": "{{cursor}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "next": "/paging/next/after"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updatedAt",
+          "/properties/hs_lastmodifieddate"
+        ],
+        "title": "/properties/hs_call_title",
+        "body": {
+          "path": "/properties/hs_call_body",
+          "format": "html"
+        },
+        "state": "/properties/hs_call_status",
+        "author": {
+          "object": "/properties",
+          "id": "/hubspot_owner_id",
+          "name": []
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Call: {title}",
+          "Call: {excerpt}"
+        ]
+      }
+    },
+    {
+      "kind": "meeting",
+      "change": "filter",
+      "call": {
+        "tool": "HUBSPOT_SEARCH_CRM_OBJECTS_BY_CRITERIA",
+        "args": {
+          "objectType": "meetings",
+          "filterGroups": [
+            {
+              "filters": [
+                {
+                  "propertyName": "hs_lastmodifieddate",
+                  "operator": "GTE",
+                  "value": "{{since_epoch_ms_text}}"
+                }
+              ]
+            }
+          ],
+          "sorts": [
+            {
+              "propertyName": "hs_lastmodifieddate",
+              "direction": "ASCENDING"
+            }
+          ],
+          "properties": [
+            "hs_meeting_title",
+            "hs_meeting_body",
+            "hs_internal_meeting_notes",
+            "hs_meeting_outcome",
+            "hs_meeting_start_time",
+            "hubspot_owner_id",
+            "hs_lastmodifieddate"
+          ],
+          "limit": "{{page_size}}",
+          "after": "{{cursor}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "next": "/paging/next/after"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updatedAt",
+          "/properties/hs_lastmodifieddate"
+        ],
+        "title": "/properties/hs_meeting_title",
+        "body": {
+          "path": [
+            "/properties/hs_internal_meeting_notes",
+            "/properties/hs_meeting_body"
+          ],
+          "format": "html"
+        },
+        "state": "/properties/hs_meeting_outcome",
+        "author": {
+          "object": "/properties",
+          "id": "/hubspot_owner_id",
+          "name": []
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Meeting: {title}",
+          "Meeting: {excerpt}"
+        ]
+      }
+    }
+  ],
+  "limits": {
+    "coverage": "companies, contacts, deals, notes, logged calls and meetings the connected account can read in the HubSpot portal, changed after you connect",
+    "history": "nothing from before you connect is imported",
+    "archives": "archived (deleted) records never appear in HubSpot search, so deletions are not observed",
+    "associations": "which contact, company or deal a note, call or meeting is attached to is not captured",
+    "stages": "deal stage and lifecycle stage are HubSpot internal ids, not their display labels",
+    "tickets": "tickets are not captured: HubSpot's tickets scope also grants write access",
+    "emails": "logged emails are not captured: mail is captured by the Gmail and Outlook connectors",
+    "bulk_changes": "a single poll window can read at most 10,000 changed records per object type (HubSpot search limit)"
+  },
+  "references": [
+    "https://docs.composio.dev/toolkits/hubspot.md",
+    "https://developers.hubspot.com/docs/api-reference/search/guide",
+    "https://developers.hubspot.com/docs/apps/legacy-apps/authentication/scopes"
+  ]
+}

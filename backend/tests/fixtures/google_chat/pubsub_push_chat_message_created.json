@@ -1,0 +1,17 @@
+{
+  "message": {
+    "data": "eyJuYW1lIjoic3BhY2VzL0FBQUFBQUFBQUFBL3NwYWNlRXZlbnRzL2V2ZW50LWNyZWF0ZWQtMDAwMSIsImV2ZW50VGltZSI6IjIwMjYtMDgtMDFUMDk6MDU6MDBaIiwiZXZlbnRUeXBlIjoiZ29vZ2xlLndvcmtzcGFjZS5jaGF0Lm1lc3NhZ2UudjEuY3JlYXRlZCIsIm1lc3NhZ2VDcmVhdGVkRXZlbnREYXRhIjp7Im1lc3NhZ2UiOnsibmFtZSI6InNwYWNlcy9BQUFBQUFBQUFBQS9tZXNzYWdlcy9tc2ctMDAwMiJ9fX0=",
+    "messageId": "9871234560001",
+    "publishTime": "2026-08-01T09:05:01.123Z",
+    "attributes": {
+      "ce-id": "spaces/AAAAAAAAAAA/spaceEvents/event-created-0001",
+      "ce-source": "//workspaceevents.googleapis.com/subscriptions/7f3a9c21",
+      "ce-specversion": "1.0",
+      "ce-type": "google.workspace.chat.message.v1.created",
+      "ce-time": "2026-08-01T09:05:00Z",
+      "ce-subject": "//chat.googleapis.com/spaces/AAAAAAAAAAA",
+      "ce-datacontenttype": "application/json"
+    }
+  },
+  "subscription": "projects/coralswarm-prod/subscriptions/chat-events-sub"
+}

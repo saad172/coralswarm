@@ -1,0 +1,18 @@
+{
+  "toolInput": {
+    "reef_id": "12051da2-8c61-4b04-a612-b6add6b6eb8e"
+  },
+  "toolOutput": {
+    "reef_id": "12051da2-8c61-4b04-a612-b6add6b6eb8e",
+    "ocean_id": "818ccfa2-051b-417a-96af-06335e439fac",
+    "type": "thread",
+    "title": "New Slack channel: #onboarding-v2",
+    "scope": "account",
+    "atom_count": 1,
+    "created_at": "2026-02-14T10:00:00Z",
+    "updated_at": "2026-02-14T10:00:00Z",
+    "digest": null,
+    "corals": [],
+    "relationships": []
+  }
+}

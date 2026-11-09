@@ -1,0 +1,47 @@
+-- no-transaction
+-- Migration: 0244_atoms_title_tsv_index
+-- Description: GIN index over `atoms.title`'s tsvector, for the atom keyword
+--              leg (`store::keyword_search_pg`).
+--
+-- WHY AN EXPRESSION INDEX, NOT A GENERATED COLUMN
+--   A `title_tsv` GENERATED ALWAYS ... STORED column would rewrite `atoms`
+--   under an ACCESS EXCLUSIVE lock — on the dogfood ocean that is a 379 MB
+--   table, and on a tenant with a real corpus it is an outage. An expression
+--   index over `to_tsvector('simple', coalesce(title, ''))` needs no column,
+--   no rewrite, and builds CONCURRENTLY. The predicate in `keyword_search_pg`
+--   spells the expression character-for-character, which is what makes it
+--   usable.
+--
+-- WHY IT IS NEEDED AT ALL
+--   `keyword_search` used to conjoin every word of the user's question
+--   (`websearch_to_tsquery`) against `content_tsv` alone. Measured on the live
+--   dev ocean (26,980 atoms) that returned 2 rows for a typical question and
+--   surfaced the expected answer document for 1 of the 20 questions in
+--   `backend/eval/github/coralswarm.questions.json`. Ranking by term coverage
+--   instead needs an OR over the query's tokens, and an OR over `content_tsv`
+--   matches 17,281 of 27,161 rows — a sequential scan of every toasted
+--   tsvector, 6.5s WARM against a ~130ms retrieve budget. The same OR over
+--   TITLES matches 1,443 rows, in 0.27ms of index time. `atoms.title` is
+--   LLM-generated, short and descriptive (migration 0212); it is the
+--   highest-signal lexical field on an atom and the leg used to ignore it.
+--
+--   `EXPLAIN (ANALYZE, BUFFERS)` on the dev ocean, same query, warm:
+--     without this index  Parallel Seq Scan on atoms ... 46ms (71ms total)
+--     with this index     Bitmap Index Scan on idx_atoms_title_tsv ... 0.27ms
+--                                                              (28ms total)
+--
+-- 'simple' (not 'english') matches `content_tsv`'s own configuration
+-- (`workers::embed`, `workers::content_tsv_backfill`) and
+-- `idx_nodes_search_tsv`'s: no stemming, so a proper noun in a title stays
+-- the token a user typed. Stopwords are stripped in Rust instead
+-- (`retrieval::keyword_query_tokens`) — 'simple' strips none.
+--
+-- `coalesce(title, '')` rather than a partial index: rows with no title yet
+-- (pre-0212 history) index an empty tsvector, which GIN stores nothing for,
+-- and the predicate stays a single expression the planner can match.
+--
+-- Down:
+--   DROP INDEX CONCURRENTLY IF EXISTS idx_atoms_title_tsv;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_atoms_title_tsv
+    ON atoms USING GIN (to_tsvector('simple', coalesce(title, '')));

@@ -1,0 +1,85 @@
+-- Migration: 0251_oauth_tokens_credential_invalid
+-- Description: CS-453 (Phase G, wave 1 — "S2: credential-death classification",
+--   `docs/plans/org-onboarding-from-the-invite.md` §3, D21). D21 replaces one
+--   org-wide Slack/Teams credential with many member credentials, each of
+--   which can now die independently. Today every connector failure — a
+--   revoked Slack token, a throttled Graph call, a network timeout — collapses
+--   into the same `ConnectorError::Exchange(String)`, so nothing downstream
+--   (a Teams-subscription-owner re-election, a "reconnect" prompt to one
+--   member) can tell "this credential is dead" from "the provider hiccuped".
+--
+--   `connectors::ConnectorError::CredentialRevoked` (this PR, Rust-side) is
+--   the classification half — raised ONLY from a definite dead-credential
+--   signal (Microsoft `invalid_grant` + a specific AADSTS code; Slack
+--   `token_revoked`/`invalid_auth`/`account_inactive`; Slack's own
+--   `tokens_revoked` event). Never from a timeout, a 5xx, a 429, or a plain
+--   network error — D16's own rule ("could not ask" is not "does not work",
+--   `connector_health`'s migration 0243 header) applies here exactly as it
+--   does there: a transient failure must never look like a permanent one.
+--
+--   This migration is the DURABLE half: two columns on the row the
+--   classification is ABOUT — `oauth_tokens`, whose `(account_id, provider,
+--   owner_user_id)` triple ([`TokenOwner`], migration `0175`) is already the
+--   authoritative "this exact credential" address later stories (re-election,
+--   reconnect nudges) need to key on.
+--
+--   `credential_invalid_at` — `NULL` = the token is presumed live (today's
+--   universal state, and the default for every existing row). Non-NULL = the
+--   moment a definite revoke/disable/consent-loss signal was last observed
+--   for this exact row. Set by `connectors::credential_health::
+--   mark_credential_invalid` when a `CredentialRevoked` surfaces for a
+--   specific `(account_id, provider, TokenOwner)`; cleared back to `NULL` by
+--   the SAME token-store write path every reconnect and every successful
+--   refresh already goes through — `routes::oauth::store_token_bundle_tx`'s
+--   `ON CONFLICT ... DO UPDATE` (this PR adds `credential_invalid_at = NULL,
+--   credential_invalid_reason = NULL` to that `SET` list) — so a member who
+--   reconnects, or a token that refreshes cleanly after a transient blip,
+--   silently clears the marker with zero extra writer code. No CHECK pairing
+--   it to `updated_at`/`created_at` the way `connector_health`'s
+--   `first_observed_at`/`resolved_at` pair each other (0243's own header) —
+--   there is exactly one lifecycle bit here, not an open/resolve episode
+--   pair, because a credential doesn't have "recurring episodes" the way a
+--   connector-health CONDITION does; it is either presumed live or it isn't.
+--
+--   `credential_invalid_reason` — the specific signal, as a short stable
+--   code (`connectors::CredentialDeathReason::code()`), e.g.
+--   `'ms_consent_revoked'`, `'slack_token_revoked'`,
+--   `'slack_tokens_revoked_event'` — never a free-form message. Kept
+--   alongside the timestamp per the brief's "and a reason column if useful":
+--   an admin-facing surface (a later story) needs to say WHY a reconnect is
+--   being asked for, and a bare boolean/timestamp can't answer that. No CHECK
+--   constraint enumerating the values (unlike `connector_health.condition`'s
+--   closed `CHECK (condition IN (...))`, 0243) — deliberately open-ended: new
+--   providers/signals are expected to add reason codes over time in
+--   `CredentialDeathReason`, and closing this column would mean a migration
+--   per new code for a column nothing queries by value today (render-only,
+--   same posture `connector_health.detail`/`org_join_requests.evidence` take
+--   per their own migration headers).
+--
+--   Deliberately NOT built here (D21 §3's own phasing, and this PR's own
+--   brief): re-election of a Teams-subscription owner, a member-facing
+--   reconnect notification/email, or any read of this column outside
+--   `connectors::credential_health` and the write paths above. Those are
+--   later Phase G stories; this migration and its Rust write path are the
+--   hook point they attach to.
+--
+--   `oauth_tokens` is a SHARED table (`scripts/check_schema_parity.sh`'s
+--   `CONTROL_ONLY_RLS_TABLES` roster) — same discipline `0175`/`0177` and
+--   their tenant twins (`migrations_tenant/0059`/`0060`) already follow, so
+--   this migration is paired with a byte-identical
+--   `migrations_tenant/0103_oauth_tokens_credential_invalid.sql`. No behavior
+--   change on the tenant plane: nothing reads or writes `oauth_tokens` on a
+--   tenant pool today (same fact `0177`'s header already establishes and
+--   this PR does not change).
+--
+-- Depends on: 0021_oauth_tokens (base table), 0175_oauth_tokens_owner_user_id
+--             (the TokenOwner address this column is keyed to),
+--             0243_connector_health (the sibling "durable record of a
+--             connector condition" this migration's header borrows its
+--             set/clear framing from).
+-- Down:
+--   ALTER TABLE oauth_tokens DROP COLUMN IF EXISTS credential_invalid_reason;
+--   ALTER TABLE oauth_tokens DROP COLUMN IF EXISTS credential_invalid_at;
+
+ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS credential_invalid_at TIMESTAMPTZ;
+ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS credential_invalid_reason TEXT;

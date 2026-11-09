@@ -1,0 +1,8 @@
+# Statements that name one verdict twice with the same arguments on purpose.
+# Format: path call max-count # why it does not run twice per row
+# Each line covers one statement; a second statement with the same repeat fails.
+# scripts/check_verdict_once.py fails on a new repeat or a stale entry.
+backend/src/store/mod.rs library_atom_permitted(graph_id,atom_id) 3 # keyword search: title, content and docs scans read different rows
+backend/src/library_read.rs library_node_title(n.graph_id,n.node_id) 2 # matched_nodes runs only with a query; work_page re-checks the six page rows
+backend/src/library_read.rs library_legacy_headline_sha256(a.graph_id,a.atom_id) 2 # filter over candidates, then the projection of the page rows only
+backend/src/library_history.rs library_session_supported(a.graph_id,a.provider_namespace,m.session_id) 2 # alternatives of one OR: parent link or root link

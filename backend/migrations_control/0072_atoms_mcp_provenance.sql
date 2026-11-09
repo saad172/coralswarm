@@ -1,0 +1,64 @@
+-- Migration: 0072_atoms_mcp_provenance
+-- Description: Persist which MCP harness/client and which project/repo an
+--   `add_context` (remote MCP write tool, `backend/src/mcp/tools/write.rs`)
+--   call came from.
+--
+--   Before this, every atom written via `add_context` was tagged with a
+--   generic `source_type` (typically "note" or "mcp") and NOTHING else — no
+--   record of which harness (Claude Code, Cursor, Claude Desktop, etc.) sent
+--   it, and no record of which project/repo it relates to. For a user with a
+--   single personal ocean fed by several unrelated local projects, every
+--   reef/atom from every project looks identical, with no way to filter or
+--   attribute by source project.
+--
+--   Two new nullable columns, following the exact precedent of migration 0058
+--   (`workspace_id`) and 0034 (`channel_id`/`channel_name`/`author_id`/
+--   `author_name`) — plain `ADD COLUMN ... TEXT` with no default is a fast,
+--   metadata-only change (Postgres 11+), same posture as every other
+--   provenance column added to this table:
+--
+--   * `project` — the caller-supplied project/repo label (`add_context`'s new
+--     optional `project` input, capped at 256 chars — see
+--     `ADD_CONTEXT_PROJECT_CAP` in `mcp/tools/write.rs`). NOT a repurposing of
+--     the existing `workspace_id` column: `workspace_id` (0058) has an
+--     established, narrower semantic — the originating Slack *workspace*
+--     (`slack_integrations.workspace_id`) — and giving it double duty here
+--     would be confusing for anyone auditing Slack-workspace-scoped backfills
+--     against it. `channel_id`/`channel_name` are similarly Slack/Teams-shaped
+--     (a chat channel), not a project/repo — repurposing either would be an
+--     equally poor semantic fit. A dedicated column keeps each provenance
+--     axis (chat channel, Slack workspace, MCP project) independently
+--     queryable and named for what it actually holds.
+--   * `mcp_client_name` — the identifying value of the MCP client that made
+--     the call. Sourced from the request's `User-Agent` HTTP header, NOT the
+--     MCP protocol's own `initialize` `clientInfo.name` field — see the PR
+--     description for why: `/mcp` runs `rmcp`'s streamable-HTTP transport in
+--     stateless mode (`NeverSessionManager`, no session id), so a fresh
+--     synthetic peer/session is built per HTTP request
+--     (`peer_info_for_stateless_request` in rmcp's
+--     `transport/streamable_http_server/tower.rs`); only the literal
+--     `initialize` request's OWN body carries a real `clientInfo`, and that
+--     request never itself calls a tool — every subsequent `tools/call`
+--     request (including every `add_context` call) is a wholly separate HTTP
+--     request that reconstructs `Implementation::default()` (empty
+--     name/version) instead. `User-Agent`, by contrast, is present on every
+--     single HTTP request the same way, requires no new session-correlation
+--     state, and is exactly as trustworthy (self-reported, unauthenticated)
+--     as `clientInfo.name` would have been — so it is the best available
+--     per-call harness-identity signal without switching `/mcp` to stateful
+--     session mode (which the module doc on `mcp/mod.rs::mcp_router` already
+--     rules out for multi-replica Fly safety) or building a new cross-request
+--     identity cache.
+--
+--   Both nullable: historical atoms (including every non-`add_context`
+--   ingest path — Slack, Teams, HTTP `/v1/ingest/atom`, chat-correction
+--   auto-save) predate these columns / never populate them, same posture as
+--   `author_id` in migration 0052 and `workspace_id` in migration 0058.
+--
+-- Down:
+--   ALTER TABLE atoms DROP COLUMN IF EXISTS project;
+--   ALTER TABLE atoms DROP COLUMN IF EXISTS mcp_client_name;
+
+ALTER TABLE atoms
+    ADD COLUMN IF NOT EXISTS project TEXT,
+    ADD COLUMN IF NOT EXISTS mcp_client_name TEXT;

@@ -1,0 +1,13 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {QueryClientProvider} from '@tanstack/react-query';
+import {makeQueryClient} from '@/lib/queryClient';
+import {PageLoadBoundary} from '@/components/PageLoadBoundary';
+import {ConnectorsPageV2} from '@/components/connectors/ConnectorsPageV2';
+import {ConnectorDetail} from '@/components/connectors/ConnectorDetail';
+import MobileNav from '@/components/MobileNav';
+import GithubSetup from '@/app/(app)/connectors/github/setup/page';
+import MeetingCapture from '@/app/(app)/connectors/microsoft-teams/meeting-capture/page';
+import './styles.css';
+import './fallback-fonts.css';
+createRoot(document.getElementById('root')!).render(<QueryClientProvider client={makeQueryClient()}><PageLoadBoundary><main style={{padding:24,maxWidth:1200,margin:'auto'}}>{location.pathname.endsWith('/github/setup') ? <GithubSetup/> : location.pathname.endsWith('/meeting-capture') ? <MeetingCapture/> : /^\/connectors\/[^/]+$/.test(location.pathname) ? <ConnectorDetail provider={location.pathname.split('/')[2]}/> : <ConnectorsPageV2/>}</main><MobileNav/></PageLoadBoundary></QueryClientProvider>);

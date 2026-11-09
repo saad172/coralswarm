@@ -1,0 +1,860 @@
+# converted: activity queries use Tenant::begin_member_scoped for caller-visible atoms with explicit account/member and library admission predicates; no unscoped content query.
+backend/src/connectors/catalog/activity.rs converted
+# converted: Teams history uses begin_tenant_system_scoped (also establishes app.account_id) on the resolved content pool; every watch query includes account/member/source predicates.
+backend/src/connectors/catalog/history/teams.rs converted
+# exempt: cfg(test)-only deterministic Teams admission fixtures use disposable migrated databases and owner-pool seeding/inspection; production ingestion is exercised separately.
+backend/src/routes/teams_source_admission_pg_tests.rs exempt
+# converted: Everything discovery reads connector_sources through begin_account_scoped on the explicit control pool with account/member predicates.
+backend/src/connectors/catalog/everything.rs converted
+# RLS-scope conversion manifest — consumed by scripts/check_rls_coverage.sh.
+# Format: <path> <status>   status: pending | converted | exempt
+#
+# Every backend/src file (store/ excluded) that can reach an RLS-covered table
+# (roster derived from backend/migrations_control/0083_consumer_rls.sql) — either via direct SQL
+# or via a Store method with a _scoped sibling — must be listed. Flip an entry to
+# 'converted' in the SAME PR that routes its queries through
+# tenancy::scope::begin_account_scoped — the script verifies the call is actually
+# present (one documented exception: Store::ocean_stats_scoped manages its own
+# scoping internally — see the script header). A file whose RLS-table references
+# are ALL deliberate non-scoped surfaces (org-tenant-pool-only queries, or the
+# audited SECURITY DEFINER carve-outs) gets 'exempt' with a '# exempt: <why>'
+# comment directly above it. Regenerate with: scripts/check_rls_coverage.sh --seed
+#
+# NOTHING TO SCOPE, reviewed and recorded (org-tenancy OPS-4 phase B.5a), now
+# carried as 'exempt' with per-line rationales rather than as permanent
+# 'pending' (MCP-surface PR). B.5a left these three 'pending' on the reading
+# that 'exempt' was reserved for deliberate non-scoped SURFACES — which would
+# have parked them there forever and held the gate's pending count off zero
+# for files that need no work at all. 'exempt' is the status the script
+# actually validates (a '# exempt: <why>' line directly above the entry) AND
+# the only one `--seed` carries across a reseed, so the reasoning now lives
+# where the tooling protects it. Each rationale is inline below; all three were
+# re-verified against origin/main before the flip.
+#
+# Hand-added status note (org-tenancy OPS-4 phase B.5b): routes/
+# {sessions,session_shares,teams}.rs reach coding_sessions /
+# coding_session_shares / teams / team_members / team_keys /
+# team_member_key_envelopes only through the Store trait, so they are listed
+# here by the expanded (Store-aware) detection, not the direct-SQL grep.
+#
+# ── PERMANENT DOCUMENTED EXCEPTION (decided, not outstanding work) ───────────
+# Exactly ONE consumer-plane query path will never be `converted`, by decision
+# rather than by backlog: the reachable-graphs authorization backbone
+# (`Store::list_reachable_graphs` / `Store::graph_reachable_by_user`, reached
+# from backend/src/tenancy/reachability.rs and ~13 route files). Its predicate
+# is deliberately MULTI-account — `graphs.account_id IN (SELECT account_id FROM
+# account_members WHERE user_id = $1)`, ADR-0007 "Model B" as documented in
+# backend/src/middleware/auth.rs: one user belongs to several accounts and sees
+# across all of them in ONE query — so there is no single account_id to
+# `SET LOCAL app.account_id` with. Scoping it is not "not done yet"; it is not
+# expressible without changing product behavior. It therefore runs under the
+# SECURITY DEFINER functions `resolve_reachable_graphs` /
+# `resolve_graph_reachable_by_user` (migration 0084_bootstrap_scope_functions,
+# founder-reviewed there by name), which re-implement the identical predicate.
+#
+# COMPENSATING CONTROL — because SECURITY DEFINER means RLS is NOT evaluated
+# inside those function bodies, this one path has no database-level backstop:
+# if the predicate ever drifted (a weakened/dropped account_members join), it
+# would leak every graph to every caller silently. That risk is closed by
+# backend/tests/reachable_graphs_parity_pg.rs, which asserts the functions
+# return byte-identical results (same rows, columns and ORDER) to the ORIGINAL
+# inline predicate — a verbatim pre-#284 copy — across a two-account/one-user,
+# one-account/one-user, no-account/one-user and unreachable-third-account
+# fixture, plus the team/departed-member paths, the LIMIT 500 boundary, and
+# negative assertions that fail loudly if the user_id filter is dropped. It
+# runs in CI in the `rls-probe-harness` job (.github/workflows/ci.yml), NOT
+# only locally. Any future change to those functions must keep that suite
+# green; a failure there is a live authorization defect, not a stale test.
+backend/src/billing/enforcement.rs converted
+# converted: the single plan-entitlement query (grant-seats PR). The only RLS-covered table it reaches is `grants`; the `plans` it JOINs is control-only (CONTROL_TABLES in check_schema_parity.sh) and carries no 0083 policy. This file deliberately contains NO `begin_account_scoped` call of its own — `current_plan` is generic over `sqlx::PgExecutor` precisely so the CALLER supplies the scope, and the one production caller, `routes::usage::get_usage_summary`, passes its already-open account-scoped transaction (`&mut *ctrl_tx`), which is where the `app.account_id` predicate is satisfied. That generic executor is load-bearing rather than incidental: extracting this query out of the handler is what stopped `tests/billing_grant_seats_pg.rs` from proving a re-typed COPY of it (review finding — the old duplicate meant a handler regression left the suite green), and the test reaches it by passing a plain pool, which is RLS-exempt only because CI connects as superuser. Residual risk stated rather than waved away: a FUTURE caller could pass an unscoped pool and lose RLS defence-in-depth — that caller would still be constrained by this query's own explicit `WHERE g.account_id = $1`, whose bound value comes from the authenticated `UserContext` and never from request input, so the failure mode is "lost a second layer", not "reads another account's grant". Any new caller must still pass a scoped transaction; this note is the reason, not a licence to skip it.
+backend/src/billing/entitlement.rs converted
+# converted: the Phase 4a period roll (Stripe invoice.paid renewal). RLS-covered tables reached: `grants` (read, to resolve the per-member allowance) and `member_allowance_periods` (the INSERT itself; 0161, so NOT on this gate's 0083-derived roster and therefore invisible to it — stated here rather than left to be inferred). `plans` is JOINed but is control-only reference data with no 0083 policy, and `account_members` carries no RLS at all. This file deliberately contains NO `begin_account_scoped` call: `roll_period` takes `&mut PgConnection` precisely so the CALLER supplies the scope, for a reason stronger than entitlement.rs's — the renewal MUST run in the same transaction as `routes::stripe_webhook`'s idempotency claim, and opening its own scope would put a commit boundary between the claim and the work and reintroduce the double-grant the claim exists to prevent. The one production caller, `routes::stripe_webhook::apply_invoice_paid`, passes its already-open account-scoped transaction (`&mut *tx`), which is where the `app.account_id` predicate is satisfied. Residual risk, stated rather than waved away: a future caller could pass an unscoped connection and lose the RLS layer — that caller would still be constrained by every query here carrying an explicit `account_id = $1`, whose value comes from the SECURITY DEFINER `resolve_stripe_customer_account_id` and never from request input, so the failure mode is "lost a second layer", not "wrote another account's allowances".
+backend/src/billing/renewal.rs converted
+# exempt: concierge, one-shot export tool (member-private-oceans PR 9). Every RLS-table reference (graphs, atoms, nodes, node_atoms, relationship_edge, node_promotions, meeting_transcripts, transcript_corrections, conversations, conversation_messages) is run against `tenant` — a connection this binary opens directly to ONE org's own tenant database via EnvSecretResolver (never the shared control/consumer pool `coralswarm_app` connects to). Tenant databases have whole-database isolation and no 0083 policies at all (migrations_tenant/0003_bootstrap_scope_functions.sql), so there is no app.account_id predicate to satisfy and nothing for begin_account_scoped to scope — same shape as tenancy/member_ocean.rs and workers/member_ocean_reconciler.rs above. This binary ALSO touches the CONTROL plane directly (`control`, a separate pool/connection): it reads `tenant_databases` (SELECT-only, unaffected by 0083's role split) and `org_revocations` (not on the 0083 RLS roster — a control-only table, see CONTROL_TABLES in check_schema_parity.sh) to gate the export, and inserts/updates `member_ocean_lifecycle_log` (also control-only, migration 0092, not RLS-covered) for the audit trail. None of those control-plane tables are in the RLS roster this script derives from 0083_consumer_rls.sql, so they do not themselves require `begin_account_scoped` scoping — but are named here so this rationale accounts for every database plane the binary touches, not only its RLS-table references.
+backend/src/bin/export_member_ocean.rs exempt
+# converted: `issue_grant` opens `tenancy::scope::begin_account_scoped` itself and does every RLS-covered write inside it — the `grants` INSERT, plus `renewal::close_open_period`/`roll_period` (which write `member_allowance_periods`, a 0161 addition not on this gate's 0083-derived roster and so invisible to it, stated here rather than left to be inferred). This inverts entitlement.rs/renewal.rs's "generic executor, caller supplies the scope" pattern deliberately: `issue_grant` owns its whole transaction lifecycle end-to-end (the INSERT, the period close, and the period roll all commit together), so it is the one place a scope has to be opened, not deferred to a caller. Two production callers, both passing no transaction of their own: `bin/grant_plan` (hand-sales — its OWN remaining queries are read-only lookups against control-only tables, not RLS-covered, which is why its manifest entry was removed rather than kept `converted`) and `clerk_provision::{ensure_personal_account,ensure_org_account}` (auto-grant at signup, enforcement-rollout PR).
+backend/src/billing/issuance.rs converted
+# converted (billing self-serve PR F): both public functions read `stripe_subscriptions`/`grants`/`grant_seat_tiers` (0150/0168, RLS-covered) exclusively inside `tenancy::scope::begin_account_scoped(pool, account_id)` — `live_subscription_id` opens its own short-lived scoped tx for the `stripe_subscriptions` read, and the `grant_seat_tiers`/`grants`/`account_members` ledger writes in `acquire_seat`/`release_seat` run inside a second scoped tx that also takes `billing::renewal::lock_period_rotation` first, matching every other writer of those two tables. `seat_tiers` (reads) and `account_members` (the `seat_purchased_at` read/write) carry no RLS (0165's/0169's own headers), so those calls are plain unscoped reads against the raw pool by design, not an oversight.
+backend/src/billing/seat_lifecycle.rs converted
+# converted (CS-435, org-onboarding plan §3 items 7/15): `read_slot_pool` reads `grants` (RLS-covered, 0150) via a generic `&mut PgConnection` — same "caller supplies the scope" shape `billing::entitlement`'s own manifest entry documents — and its production callers (`reserve_slot`'s own locked transaction below, `routes::org_slots`' handlers) always pass one. `reserve_slot` itself opens `tenancy::scope::begin_account_scoped` directly (the literal call this script's `converted` status requires). `account_members`/`slot_reservations` carry no policy on the 0083 roster this script derives from (`account_members`: 0169's own header; `slot_reservations`: migration 0233, a LATER, non-0083 `account_isolation` policy — same "not on this gate's roster" note `grant_seat_tiers`'s own manifest entries already carry), so those reads are plain unscoped by design.
+backend/src/billing/slot_pool.rs converted
+# exempt: offline eval binary — connects as the DATABASE_URL / RELINFER_TEST_DATABASE_URL OWNER against a scratch DB it seeds itself, never as coralswarm_app and never in a deploy, so no 0083 policy is ever evaluated against it.
+backend/src/bin/retrieval_eval.rs exempt
+backend/src/bin/seed_large_ocean.rs converted
+# CORRECTED (OPS-4 follow-up, F2). The previous 'exempt' rationale here was factually
+# wrong and is what let a live break reach production: it enumerated only the
+# CONTROL-plane tables this file writes directly in SQL (accounts, users,
+# account_members, org_revocations, org_membership_tombstones, user_account_prefs)
+# and omitted its TWO `Store::create_graph` calls (`ensure_personal_account`'s
+# "Primary" ocean and `ensure_org_account`'s org ocean). `graphs` IS on 0083's
+# roster, so post-OPS-4 those INSERTs raised and every brand-new user's first
+# authenticated request failed before they ever got an account. Both now run
+# through `create_graph_scoped` inside `tenancy::scope::begin_account_scoped` on
+# the just-committed account — see `create_first_ocean_scoped`'s doc comment for
+# why scoping to a freshly-created account is well-defined (0083's `graphs`
+# policy compares the new row's own account_id to the GUC; it never joins
+# accounts/account_members, so there is no ordering dependency to satisfy).
+# Everything else in this file remains CONTROL-plane and correctly unscoped.
+backend/src/clerk_provision.rs converted
+# converted: COR-71 capture admission health. `waiting`, `lag` and `progress` read `source_versions`/`graphs`/`source_items`/`semantic_atom_windows`/`corpus_enrichment_units`/`corpus_enrichment_runs`/`corpus_capture_admissions` and are read-only. They take `&mut PgConnection` so the CALLER supplies the scope (the renewal.rs/entitlement.rs pattern); this file opens no transaction of its own. The one production caller, `workers::capture_admission_health::measure`, runs them on the consumer plane inside `tenancy::scope::begin_account_scoped(&t.pool, account)`, one transaction per account, and all three queries also bind that same account to an explicit `g.account_id = $2` predicate. On an org tenant it runs them inside `begin_tenant_system_scoped_without_account`, where the database itself is the isolation boundary and `account` is `None`. `accounts_processing_off` reads only control-only `account_prefs`, which carries no RLS. Residual risk, stated: a future caller passing an unscoped consumer connection with `account = None` would read every account's capture counts. The output is per-graph counts and timings, never content, and the only consumer is the operator-only chain-health route.
+backend/src/capture_admission_health.rs converted
+# converted: pipeline stage health. Every content query (`ATOM_STAGES_SQL`, `VERSION_STAGES_SQL`, `MINTED_REEFS_SQL`, `GRAPH_STAGES_SQL`, the snapshot reads) is read-only, takes `&mut PgConnection` so the CALLER supplies the scope (the capture_admission_health.rs pattern), and binds the caller's own graph ids (`graph_id = ANY($1)`) and account ids; this file opens no transaction of its own. `harden` makes the caller's transaction READ ONLY with a transaction-local statement timeout. Callers: `workers::pipeline_stage_health::measure` (consumer: `begin_account_scoped` per account; org: `begin_tenant_system_scoped_without_account`) and `bin/pipeline_stage_health`. `measure_credit_holds` reads control `managed_credit_reservations` inside the caller's `begin_account_scoped(control, account)` and also binds `account_id = $1`. Residual risk, stated: an unscoped consumer connection passed with every graph id would read every account's counts. Output is counts and timestamps, never content; consumers are the operator-only admin route and the operator bin.
+backend/src/pipeline_stage_health.rs converted
+# converted: the pipeline stage health worker. On the consumer plane it lists accounts (control `accounts`, outside the roster), then opens `begin_account_scoped(&t.pool, account)` per account and reads that account's `graphs`/`atoms` with an explicit `account_id = $1` / `graph_id = ANY` predicate inside it; on an org tenant one `begin_tenant_system_scoped_without_account` transaction, the database being the isolation boundary. Control credit holds are read per account inside `begin_account_scoped(control, account)`. `jobs` (no RLS) is read plane-wide. Writes only the control-only `pipeline_stage_health` report table.
+backend/src/workers/pipeline_stage_health.rs converted
+# converted: operator bin, read-only. `--plane consumer` opens `begin_account_scoped(&pool, account)` per account and reads that account's `graphs` inside it; `--plane org` opens `begin_tenant_system_scoped_without_account` on the one tenant database. Every transaction is made READ ONLY by `pipeline_stage_health::harden`; nothing is written.
+backend/src/bin/pipeline_stage_health.rs converted
+# exempt: gsuite Train G3 PR 1 (Calendar ingest). Production code never queries `atoms`/`graphs` directly — `propagate_deletions` resolves the account's primary ocean via `routes::slack::resolve_primary_graph` (already converted) and deletes through `services::deletion::delete_source` (already converted); actual atom ingest happens in `routes::google_calendar_push`'s `ingest_and_commit`, via `routes::ingest::ingest_atom`, not in this file. The file's OTHER production writers (`upsert_channel`, `upsert_sync_columns`, and the `persist_*`/`clear_sync_token` helpers) touch only `google_watch_channels` — not on this gate's 0083-derived roster — and run inside `scoped_tx` transactions. The file's only direct `INSERT INTO graphs`/`INSERT INTO atoms` are inside `#[cfg(test)]` (`deletion_propagation_removes_the_matching_atom_pg` and friends), seeding a scratch `gws_g31_deletion` database it connects to as the migration-runner owner, never as `coralswarm_app` — same posture as `retrieval_eval.rs`'s exemption above.
+backend/src/connectors/google_calendar.rs exempt
+# exempt: companion disconnect/cleanup path for the file above. Production code (`purge_google_connection`, `delete_watch_channels`, `delete_watched_threads`) only ever touches `google_watch_channels`/`gmail_watched_threads` — neither on the 0083 RLS roster — via `begin_tenant_system_scoped` transactions. Its lone `INSERT INTO graphs` is inside `#[cfg(test)]` fixture setup (a scratch DB seeded as the migration-runner owner, never `coralswarm_app`), needed only to satisfy `google_watch_channels`'/`gmail_watched_threads`' FK to a graph row.
+backend/src/connectors/google_disconnect.rs exempt
+# converted: gsuite Train G4 PR 3 (Chat app-install gate + destination
+# picker). The ONE production direct-SQL touch on this gate's 0083-derived
+# roster — `pick_space_destination`'s `graph_id` ownership check
+# (`SELECT EXISTS(... FROM graphs ...)`) — runs inside
+# `tenancy::scope::begin_tenant_system_scoped(tenant_pool, account_id)`.
+# `oauth_tokens` also matches the table-name grep, but every production
+# read of it goes through `resolve_google_identity_by_sub` — a control-only
+# `SECURITY DEFINER` function call (migration 0198), not a direct SELECT
+# against the table — the only literal `INSERT INTO oauth_tokens`/
+# `SELECT ... FROM oauth_tokens` text in this file is `#[cfg(test)]` fixture
+# seeding, connected as the migration-runner owner, never `coralswarm_app`.
+backend/src/connectors/google_chat.rs converted
+backend/src/connectors/google_gmail.rs converted
+# gsuite Train G3 PR 2: production code runs every google_meet_sync_state/
+# google_meet_ingested_conferences read-write inside begin_account_scoped
+# (ensure_sync_state/already_ingested/record_ingested_conference). The
+# `atoms` match this gate flags is `#[cfg(test)]`-only (the pg test module's
+# atom_contents helper), a direct pool read against a scratch DB connected
+# as the migration-runner owner, never coralswarm_app — same posture as
+# google_chat.rs's own entry above.
+backend/src/connectors/google_meet.rs converted
+# exempt: chat-per-user-ingest-and-in-chat-ask plan §4, PR 2 (backfill engine). Production code (`run_slack`/`ingest_one_slack_message`) never queries `atoms`/`graphs` directly -- every atom lands via `routes::ingest::ingest_atom`, already RLS-scoped internally through the synthetic `Tenant`/`UserContext` this module builds in `synthetic_ingest_identity` (the identical "construct a Tenant and call ingest_atom from a worker" shape `connectors::google_meet::ingest_transcript_for_attendee` already uses -- see that file's own entry above for the same posture). The only literal `SELECT ... FROM atoms`/`INSERT INTO graphs` text in this file is inside `#[cfg(test)] mod history_backfill_pg_tests`'s fixture seeding and assertion helpers (`seed_personal_primary_graph`, `atom_source_ids`, and the org-account test's own `INSERT INTO graphs`), run against a scratch database connected to as the ORGT_TEST_BASE_URL migration-runner/owner role, never as `coralswarm_app` -- same posture as every other `#[cfg(test)]`-only exemption in this manifest.
+backend/src/connectors/history_backfill.rs exempt
+# Settings launch PR 2.8 (member offboarding): every control-plane read/write
+# of oauth_tokens/connector_installs/slack_member_channels/google_watch_channels/
+# graph_subscriptions runs inside begin_account_scoped (control) or
+# begin_tenant_system_scoped (tenant); the one cross-account read is the
+# oauth_grant_held_elsewhere SECURITY DEFINER (control 0368).
+backend/src/connectors/member_offboarding.rs converted
+backend/src/connectors/microsoft.rs converted
+backend/src/connectors/microsoft_disconnect.rs converted
+# exempt: false positive — no SQL and no Store access. The expanded detection matches the Store method name `expand` against `Hkdf::expand` (the hkdf crate's RFC 5869 expand step) in this pure key-derivation module.
+backend/src/crypto/kdf.rs exempt
+backend/src/connectors/slack.rs converted
+# Both Slack status modules read atoms/graphs/slack_watched_channels/
+# slack_huddle_captures, and every one of those reads opens a
+# tenancy::scope::begin_account_scoped transaction — the same hazard that left
+# post_destination_prompt silently dead in production until 2026-07-27, where
+# 0083's account_isolation policy ERRORS on the uuid cast rather than
+# returning zero rows for a connection that never set app.account_id.
+backend/src/connectors/slack_channel_actions.rs converted
+backend/src/connectors/slack_channel_management.rs converted
+backend/src/connectors/slack_onboarding.rs converted
+backend/src/connectors/slack_review.rs converted
+# exempt: chat-per-user plan PR 6 ("email the unmatched"). Production code in this file (discover_unmatched_recipients) makes NO direct SQL reference to any RLS-covered table at all -- it calls connectors::slack::fetch_conversation_members (network only) and connectors::slack::resolve_slack_identity_with_email (which delegates every RLS-covered read/write to match_and_persist_verified_email/resolve_slack_identity_detailed_impl inside slack.rs itself, already `converted` in this manifest's entry above). The ONLY literal RLS-table reference in this file is `INSERT INTO oauth_tokens` inside its own #[cfg(test)] pg-test module (unmatched_member_with_confirmed_scope_is_collected_pg), seeding a confirmed-scope fixture row -- run against a scratch database this test creates and connects to as the ORGT_TEST_BASE_URL migration-runner/owner role, never as coralswarm_app, same posture as every other `#[cfg(test)]`-only exemption in this manifest (e.g. connectors/google_calendar.rs above).
+backend/src/connectors/slack_unmatched_email.rs exempt
+backend/src/connectors/state.rs converted
+backend/src/eval.rs converted
+# exempt: the core of the one-shot `backfill_reef_judgement_from_history` (judgement-graph slice PR5) — an operator-run reconciliation binary, never mounted on any request path and never reached from a worker (grep `judgement_backfill::` — the only caller in the crate is backend/src/bin/backfill_reef_judgement_from_history.rs; backend/tests/judgement_backfill_pg.rs is the other). Its four direct-SQL tables (graphs, nodes, node_merges, reef_judgement) and three Store methods (list_merge_dismissals, get_active_judgement, write_judgement) all run PLAIN/unscoped on purpose, exactly as store/mod.rs's judgement-graph PLANE CONTRACT sanctions for a caller that connects as the ELEVATED role (MIGRATOR_DATABASE_URL on the control plane; the tenant owner credential, resolved via EnvSecretResolver, on a tenant DB — where 0083's policies do not exist at all). Unlike every other `exempt` entry here, this one is not left to review: `judgement_backfill::assert_policy_bypass` PROVES the connection bypasses RLS on `reef_judgement` against pg_class/pg_roles before any work begins and REFUSES otherwise, so a run under the least-privilege coralswarm_app role stops at the preflight with an actionable message instead of erroring one candidate at a time. That refusal has its own negative control (a throwaway NOBYPASSRLS role) in backend/tests/judgement_backfill_pg.rs, wired into CI. begin_account_scoped would be the WRONG conversion here regardless: this tool walks EVERY ocean in a database, across accounts, by design.
+backend/src/judgement_backfill.rs exempt
+# exempt: the core of the one-shot `backfill_promoted_blobs` (promote-content-loss fix, this PR) -- same shape and same reviewer reasoning as `judgement_backfill.rs`/`reextract.rs` immediately above, so read either first. Never mounted on any request path and never reached from a worker (grep `promoted_blob_backfill::` -- the only callers in the crate are backend/src/bin/backfill_promoted_blobs.rs and backend/tests/promoted_blob_backfill_pg.rs). Its four direct-SQL tables (atoms, graphs, node_atoms, nodes) run PLAIN/unscoped on purpose: this tool walks every promoted atom across every graph/account in the database by design -- finding the rows a per-account boundary would hide is the entire point -- which is exactly the shape `tenancy::scope::begin_account_scoped` cannot express (there is no single account to scope a connection to). `promoted_blob_backfill::assert_policy_bypass` PROVES the connection bypasses RLS on `atoms` against pg_class/pg_roles before any work begins and REFUSES otherwise -- same preflight-not-trust discipline as `judgement_backfill::assert_policy_bypass`/`reextract::assert_policy_bypass`, with its own negative control (a throwaway NOBYPASSRLS role) in backend/tests/promoted_blob_backfill_pg.rs's `preflight_refuses_a_role_that_cannot_bypass_rls`. The only writes this file makes to the RLS-covered roster are `atoms.UPDATE content_blob_key` (only after the R2 object is confirmed uploaded -- see the module's own doc comment) and `jobs.INSERT` via `enqueue_native_derivation`/`enqueue` (jobs carries no RLS policy at all -- not on the 0083 roster); it never writes `nodes`/`node_atoms`/`graphs` themselves, reading them only to resolve each candidate's original source atom. `backend/src/bin/backfill_promoted_blobs.rs` (the thin wrapper) has its OWN entry directly below, as of the blanked-key PR: it gained one direct-SQL query of its own there (the zero-candidate corroboration count) and this gate detected it, which is why the older note here -- that the wrapper carries no direct SQL and cannot independently trip the gate -- no longer holds.
+backend/src/promoted_blob_backfill.rs exempt
+# exempt: the core of the one-shot `purge_desktop_data` (ADR 0015, desktop retirement). Same shape and reasoning as `judgement_backfill.rs`/`promoted_blob_backfill.rs` above: operator-run, never mounted on a request path or reached from a worker (the only callers are backend/src/bin/purge_desktop_data.rs and backend/tests/desktop_purge_pg.rs). It walks every account in one database by design, so its direct SQL runs unscoped against the ELEVATED role, and the deletes themselves go through `services::deletion` (which opens its own begin_account_scoped transactions). `desktop_purge::assert_policy_bypass` PROVES the connection bypasses RLS on `atoms` before any work and refuses otherwise, with a negative control (a NOBYPASSRLS role) in backend/tests/desktop_purge_pg.rs.
+backend/src/desktop_purge.rs exempt
+# exempt: the thin operator wrapper around `promoted_blob_backfill` directly above -- read that entry first; every gate, candidate query and write of substance lives there, reached through it. This file's ONLY direct SQL of its own is `count_contentless_promotable_atoms`: a single read-only `SELECT COUNT(*)` over `atoms` JOIN `graphs`, printed on the zero-candidate path so the tool can no longer report a clean database it never actually measured (blanked-key PR -- the previous wording claimed "every promoted coral in this database already has real R2 content" while 1,191 corals were unreadable). It runs PLAIN/unscoped for the SAME reason the module's own queries do: the count is deliberately database-wide across every graph and account, which is exactly the shape `tenancy::scope::begin_account_scoped` cannot express (there is no single account to scope a connection to), and it runs on the same ELEVATED connection `promoted_blob_backfill::assert_policy_bypass` has already PROVEN bypasses RLS on `atoms` before any work begins -- that preflight's negative control (a throwaway NOBYPASSRLS role) is backend/tests/promoted_blob_backfill_pg.rs's `preflight_refuses_a_role_that_cannot_bypass_rls`. The query writes nothing, and a failure of it is swallowed to `None` and reported as "could not be run", never allowed to change the exit code.
+backend/src/bin/backfill_promoted_blobs.rs exempt
+backend/src/llm/usage.rs converted
+backend/src/mcp/audit.rs converted
+backend/src/mcp/tools/read.rs converted
+backend/src/mcp/tools/write.rs converted
+# converted (Foundation train PR 1.2, CS-031): the wrapped-DEK cutover
+# backfill (oauth_dek_cutover::process_account / reencrypt_one_row) reads
+# and writes the CONTROL-covered oauth_tokens table inside
+# tenancy::scope::begin_account_scoped, per-account, exactly like every
+# other oauth_tokens caller — see that module's own doc comment ("Why
+# per-account, not one global query"). Left off this manifest when #665
+# merged; added here by Foundation PR 1.5 while touching adjacent Slack
+# token-plane code.
+backend/src/oauth_dek_cutover.rs converted
+backend/src/seats.rs converted
+backend/src/routes/activity.rs converted
+backend/src/routes/admin.rs converted
+backend/src/routes/atlas.rs converted
+backend/src/routes/atoms.rs converted
+# converted (billing self-serve PR F): the ONE `grants` read (resolving the account's current `team` grant + linked `stripe_subscription_id`) runs inside its own short-lived `tenancy::scope::begin_account_scoped` transaction, committed immediately after the SELECT. The later `grant_seat_tiers`/`grants`/`account_members`/`member_allowance_periods` writes (the upgrade/downgrade ledger move) run inside a second scoped transaction that takes `billing::renewal::lock_period_rotation` first, same as every other writer of those tables. `plans`/`seat_tiers`/`stripe_subscriptions`/`account_members` carry no RLS (0167's/0165's/0162's/0169's own headers), so the `require_org_admin`/frozen-check/member/tier-lookup reads against the raw `control` pool are plain unscoped by design, not an oversight.
+backend/src/routes/billing_seats.rs converted
+# converted (CS-435, org-onboarding plan §3 item 7): both handlers open `tenancy::scope::begin_account_scoped` directly before every `grants`/`grant_seat_tiers` (RLS-covered, 0150/0168) read or write — `get_slots`/`purchase_slots` each scope their own transaction, and `purchase_slots`' own current-grant lookup uses the identical short-lived-scoped-then-committed shape `routes::billing_seats::change_seat_tier`'s own manifest entry documents. `seat_tiers`/`stripe_subscriptions`/`account_members` carry no RLS on the 0083 roster (0165's/0162's/0169's own headers), so the tier lookup and the personal-org/frozen-subscription checks against the raw `control` pool are plain unscoped by design.
+backend/src/routes/org_slots.rs converted
+# exempt: the join-request queue's PRODUCTION code (routes::org_join_requests) never touches `grants`/`grant_seat_tiers`/`org_join_requests` directly at all — it calls `billing::slot_pool::reserve_slot`/`release_reservation` (both already `converted` above, each opening their own `tenancy::scope::begin_account_scoped`), `routes::org_invites::provision_clerk_membership` + `mirror_local_membership` -> `clerk_provision::ensure_org_membership` (also already `converted`) for the real membership/seat write, and `services::org_join_requests` (`converted` below) for every `org_join_requests` read/write. The only literal `grants`/`grant_seat_tiers` INSERTs and `org_join_requests` SELECTs in this file are inside `#[cfg(test)] mod pg_tests`'s own fixture helpers (the one approve scenario needing a live Stripe mock, RELINFER_TEST_DATABASE_URL-gated — see that module's own doc comment) — connected to as the migration-runner/DB owner, never as `coralswarm_app`, same posture as every other `#[cfg(test)]`-only exemption in this manifest.
+backend/src/routes/org_join_requests.rs exempt
+backend/src/routes/calendar.rs converted
+backend/src/routes/connectors.rs converted
+backend/src/routes/conversations.rs converted
+# exempt: the everything-mode toggle route (gsuite enterprise train PR G2.4, the SECOND implementation of the Outlook precedent below). Its production `begin_tenant_system_scoped` transactions touch only `gmail_everything_mode` — not on this gate's 0083-derived roster. Every `INSERT INTO graphs` in the file sits inside the `#[cfg(test)]` module (scratch-DB fixture seeding as the migration-runner owner, never `coralswarm_app`) — same posture as workers/gmail_everything_mode.rs below and routes/outlook_everything_mode.rs's own entry.
+backend/src/routes/gmail_everything_mode.rs exempt
+# exempt: Calendar `events.watch` push webhook (gsuite Train G3 PR 1) — no Clerk JWT, apex-only (see check_no_ambient_pool.sh's allowlist for the same route). Its handler and `run_calendar_sync_for_account`/`ingest_and_commit` never query `graphs` directly: ingest goes through `routes::ingest::ingest_atom` and the destination ocean is resolved via `routes::slack::resolve_primary_graph` (both already converted/exempt). The lone `INSERT INTO graphs` is inside `#[cfg(test)]` fixture setup for a scratch DB, connected to as the migration-runner owner, never `coralswarm_app`.
+backend/src/routes/google_calendar_push.rs exempt
+# reviewed (gsuite Train G4 PR 6, "G4.6"): the new org destination-pick
+# authorization gate (`reject_unauthorized_org_chat_destination_pick`,
+# `set_space_destination`'s pre-write check for security review finding L9)
+# is the only new reader of `graphs`/`teams`/`team_members` this file adds,
+# and it never queries them itself — it calls straight through to
+# `connectors::slack_channel_actions::fetch_graph_for_destination`/
+# `fetch_team_id_for_graph` and `routes::slack_interactivity::
+# check_team_ocean_admin` (both already `converted`, above/below), passing
+# the SAME `(pool, account_id)` pair those functions' own signatures expect.
+# `pool` is always the request's CONTENT pool (`tenant.pool` — the legacy
+# consumer pool on Personal, the org's own tenant database on Org, per the
+# `Tenant` extractor's own doc comment), never the CONTROL pool
+# (`state.control_db()`, kept as a separate `creds_pool` variable and used
+# ONLY for `oauth_tokens`/`account_members` reads via `load_creds_bg`/
+# `is_current_account_member` — verified by re-reading every call site, not
+# assumed from this file's own doc comments). All three delegated functions
+# scope via `tenancy::scope::begin_tenant_system_scoped` on that pool — a
+# superset of `begin_account_scoped` (same `app.account_id` GUC), the same
+# shape `check_team_ocean_admin`'s own doc comment documents as already
+# safe for an authenticated REST caller (`connectors::slack_channel_actions::
+# set_channel_destination` reuses it identically). Confirmed empirically
+# against a real two-database org fixture under `coralswarm_tenant_app`
+# (`routes::google_chat::tests::org_gate_lifted_admin_routes_non_admin_
+# refused_pg`), which is also where this file's own literal
+# `begin_tenant_system_scoped` call (its RLS-scoped readback assertion)
+# lives — not the sole evidence for this entry, just confirmation the same
+# scoping is exercised end-to-end under the least-privilege tenant role.
+backend/src/routes/google_chat.rs converted
+# exempt: gsuite Train G4 PR 3 (Pub/Sub push webhook). Production code never queries `oauth_tokens` directly in this file: every credential load/refresh-persist goes through `routes::connectors::load_creds_bg` / `routes::oauth::store_token_bundle` (both already converted/scoped elsewhere), and the new `handle_chat_added_to_space`/`handle_chat_removed_from_space` handlers resolve identity via `connectors::google_chat::resolve_google_identity_by_sub` — a control-only `SECURITY DEFINER` function call, not a direct SELECT. The lone `INSERT INTO oauth_tokens` in this file is `#[cfg(test)]` fixture seeding, connected to as the migration-runner owner, never `coralswarm_app`.
+backend/src/routes/google_push.rs exempt
+# exempt: Graph change-notification webhook — no Clerk JWT, apex-only (already on check_no_ambient_pool.sh's allowlist). ALL of its `graph_subscriptions` access is delegated to `connectors::microsoft` (already `converted` above): `subscription_by_id`, `set_subscription_expiry`, `delete_subscription_row`, and `ensure_subscription_for` each resolve the owning account server-side and then run inside `begin_tenant_system_scoped` transactions. This file's own `INSERT INTO graph_subscriptions` is `#[cfg(test)]`-only fixture seeding (`seed_graph_subscription`), never production code.
+backend/src/routes/graph_webhook.rs exempt
+backend/src/routes/graphs.rs converted
+# exempt: GET /v1/bootstrap runs no query of its own. It calls the route HANDLERS routes::me::get_me, routes::graphs::list_graphs and routes::org_join_requests::count on the request's own Tenant/UserContext and assembles their bodies; the gate matches the handler name `graphs::list_graphs(` against the Store method `list_graphs`. Every query those handlers run is covered by their own files' entries (routes/graphs.rs converted, routes/org_join_requests.rs exempt, routes/me.rs reads only control-plane identity through state.control_store()).
+backend/src/routes/bootstrap.rs exempt
+backend/src/ingest.rs converted
+backend/src/routes/meetings.rs converted
+backend/src/routes/nodes.rs converted
+backend/src/routes/oauth.rs converted
+# exempt: the everything-mode toggle route (Outlook enterprise train). Its production `begin_tenant_system_scoped` transactions touch only `outlook_everything_mode` — not on this gate's 0083-derived roster. Every `INSERT INTO graphs` in the file sits inside the `#[cfg(test)]` module (scratch-DB fixture seeding as the migration-runner owner, never `coralswarm_app`) — same posture as workers/outlook_everything_mode.rs below.
+backend/src/routes/outlook_everything_mode.rs exempt
+backend/src/routes/queries.rs converted
+backend/src/routes/relationships.rs converted
+backend/src/routes/session_shares.rs converted
+backend/src/routes/sessions.rs converted
+backend/src/routes/shares.rs converted
+backend/src/routes/slack_events.rs converted
+# converted: the Phase 4a Stripe webhook. Its PRODUCTION RLS surface is `apply_invoice_paid`, which opens `tenancy::scope::begin_account_scoped` and does every write inside it — the event claim (`stripe_webhook_events`), the period roll (delegated to `billing::renewal::roll_period`, which reads `grants` and writes `member_allowance_periods`), and the `stripe_subscriptions` mirror update. All three of those tables are 0161/0162 additions and so are NOT on this gate's 0083-derived roster; the `grants` match that triggers detection here comes from the pg_tests fixture, not from the handler. The one production query that deliberately runs UNSCOPED is `resolve_account`, and it must: it calls the SECURITY DEFINER `resolve_stripe_customer_account_id` to discover WHICH account to scope to, the same chicken-and-egg 0086 solved for the Slack and Graph webhooks, and it returns a bare account id and nothing else. Wrapping that call in `begin_account_scoped` would be impossible (there is no account id yet) and pointless (SECURITY DEFINER runs as the definer regardless).
+backend/src/routes/stripe_webhook.rs converted
+backend/src/routes/slack_interactivity.rs converted
+backend/src/routes/slack.rs converted
+backend/src/routes/supersession.rs converted
+backend/src/routes/teams_ingest.rs converted
+backend/src/routes/teams.rs converted
+# exempt: (#1500) routes::org_members's production code never touches an RLS-covered table (it reads/writes account_members, accounts and users only, none of which carries a policy); the roster read lives in routes::teams (`converted` above). The one `oauth_tokens` INSERT is inside `#[cfg(test)] mod pg_tests`, a fixture seeded as the DB owner against ORGT_TEST_BASE_URL so the roster test has a connected provider to read back as `coralswarm_app` - the same posture every other `#[cfg(test)]`-only exemption here documents.
+backend/src/routes/org_members.rs exempt
+backend/src/routes/transcript.rs converted
+backend/src/routes/workflows.rs converted
+# The one file the script header's ocean_stats_scoped note anticipated. Its single
+# RLS-covered call is Store::ocean_stats_scoped, the one _scoped variant that manages
+# its own begin_account_scoped transactions internally (a four-aggregate fan-out that
+# a shared &mut Transaction would serialize onto one connection). The file still
+# matches the gate's detection because it keeps the plain ocean_stats call on the
+# pool-less arm, so it needs this waiver rather than silently dropping
+# out of the manifest:
+# converted: only RLS call is the self-scoping Store::ocean_stats_scoped (B.5a)
+backend/src/self_context.rs converted
+# converted (Foundation train PR 1.5): the legacy-slack_integrations backfill
+# (list_legacy_integrations / insert_backfilled_row) reads/writes the
+# CONTROL-covered oauth_tokens and slack_integrations tables per-account
+# inside tenancy::scope::begin_account_scoped, same shape as
+# oauth_dek_cutover's own conversion above.
+backend/src/slack_oauth_backfill.rs converted
+# CORRECTED (RLS-pending-retraction-deletion follow-up). The previous
+# rationale here said this gap was "harmless today (RLS is enable-only
+# pre-OPS-4-role-switch; both planes still connect as the BYPASSRLS owner
+# role)" — that was FALSE at the time it was checked: verified against
+# production, `DATABASE_URL`'s user IS `coralswarm_app` and `rolbypassrls =
+# f`, so the OPS-4 role switch had already happened (2026-08-04) and the
+# unscoped form was a live, hard-failing bug on
+# `DELETE /v1/graphs/{graph_id}/atoms/{atom_id}` (0083's strict
+# `current_setting('app.account_id')` raises rather than returning zero rows
+# — see that migration's header). `unpublish_atom` is FIXED: it resolves
+# `account_id` via the `resolve_graph_account_id` SECURITY DEFINER bootstrap
+# (migration 0084) and opens its owned transaction through
+# `begin_account_scoped(pool, account_id)` instead of a bare `pool.begin()`
+# — the R2-vs-Postgres commit ordering the module's own doc argues for is
+# unaffected (`begin_account_scoped` is `pool.begin()` plus one extra
+# `set_config`, nothing more; it does NOT require a caller-supplied
+# transaction, only a resolved `account_id`).
+#
+# UPDATE (same follow-up, second pass): `revoke_source_publication` (the
+# sibling verb, `POST /v1/graphs/{graph_id}/revoke-publication`) is NOW ALSO
+# FIXED, identically — it resolves `account_id` from `source_graph_id` via
+# the same `resolve_graph_account_id` bootstrap and opens its owned
+# transaction through `begin_account_scoped` instead of a bare `pool.begin()`
+# against `source_publications` (RLS-covered since migration `0111`, not
+# `0083` itself — the table didn't exist yet when `0083` shipped). Confirmed
+# empirically that this was live-broken even with `source_publications`
+# completely EMPTY in production (nothing writes it yet, per
+# `routes::nodes`'s own comment): Postgres evaluates the RLS qual while
+# planning the statement, not lazily per matched row, so zero rows was never
+# a mitigation. A file-wide sweep (`grep -n 'pool\.begin\|fetch_.*(pool)\|
+# execute(pool)' backend/src/services/retraction.rs`) turned up no other bare
+# `pool`-against-RLS-table access in this file — `unpublish_atom` and
+# `revoke_source_publication` were the only two, and both are now fixed, so
+# this file flips to `converted`. See `services::retraction`'s module doc,
+# "RLS scoping" section, for the full account, including why `source_graph_id`
+# (not `target_graph_id`) is the correct anchor to resolve from. Regression
+# tests: backend/tests/retraction_deletion_rls_pg.rs
+# (`unpublish_atom_succeeds_under_app_role_pool`,
+# `revoke_source_publication_succeeds_under_app_role_pool`), wired into CI's
+# `consumer-rls` job.
+backend/src/services/retraction.rs converted
+backend/src/services/corrections.rs converted
+# CORRECTED (RLS-pending-retraction-deletion follow-up) — same false
+# "harmless today" premise as retraction.rs immediately above (verified
+# against production: `coralswarm_app`, `rolbypassrls = f`, already live
+# since 2026-08-04), and the SAME live-hard-failing-bug consequence on
+# `DELETE /v1/graphs/{graph_id}/corals/{atom_id}`,
+# `DELETE /v1/graphs/{graph_id}/sources` and
+# `DELETE /v1/graphs/{graph_id}/subjects/{node_id}`. Now FIXED, and unlike
+# retraction.rs this one flips all the way to `converted`: EVERY RLS-table
+# reference in this file — `resolve_account_id_for_graph` (now the
+# `resolve_graph_account_id` bootstrap instead of a raw `graphs` read),
+# `expand_by_source_identity`, and `delete_coral`/`delete_source`/
+# `delete_subject`'s own setup reads — runs inside a transaction opened
+# through `begin_account_scoped(pool, account_id)` (`delete_atom_cascade`
+# itself takes `account_id` as a parameter now, resolved once per
+# entry-point call and reused across the whole propagation set, which is
+# safe because propagation is deliberately restricted to ONE account — see
+# the module doc's "Propagation" section). The R2-vs-Postgres commit
+# ordering and every idempotency/retry guarantee are unchanged — same
+# reasoning as retraction.rs's fix. Regression test:
+# backend/tests/retraction_deletion_rls_pg.rs
+# (`delete_atom_cascade_succeeds_under_app_role_pool`), wired into CI's
+# `consumer-rls` job.
+backend/src/services/deletion.rs converted
+backend/src/services/supersession.rs converted
+backend/src/services/transcripts.rs converted
+# exempt: org-TENANT-pool-only, same shape as tenancy/registry.rs's ensure_org_ocean and workers/member_ocean_reconciler.rs (member-private-oceans PR 4). `provision_one`'s only RLS-table reference is a single `INSERT INTO graphs ... ON CONFLICT ... DO NOTHING RETURNING id` against the `tenant_pool` argument its two callers (routes/clerk_webhook.rs's webhook trigger, tenancy/runtime.rs's request-path first-sight trigger) resolve from `TenantRegistry::get_or_build` -- always the org's own fingerprint-verified tenant pool, never the control/consumer pool. Tenant databases have whole-database isolation and no 0083 policies at all (migrations_tenant/0003_bootstrap_scope_functions.sql), so there is no app.account_id predicate to satisfy and nothing for begin_account_scoped to scope.
+backend/src/tenancy/member_ocean.rs exempt
+# exempt: org-TENANT-pool-only. `ensure_org_ocean` runs a single `INSERT INTO graphs ... ON CONFLICT DO NOTHING` against the per-org tenant pool inside `TenantRegistry::build`, self-healing an onboarded tenant whose commons ocean was never created (ensure_org_account's shadow-provisioning fence skips it under MULTITENANT_ENABLED, and it only ever holds the control pool). Tenant databases have whole-database isolation and no 0083 policies at all (see backend/migrations_tenant/0003_bootstrap_scope_functions.sql), so there is no app.account_id predicate to satisfy and nothing for begin_account_scoped to scope -- the account_id is supplied by the caller's own tenant_databases routing row, not by a session GUC. This file never touches the consumer plane.
+backend/src/tenancy/registry.rs exempt
+backend/src/workers/atom_title_backfill.rs converted
+backend/src/workers/billing_derivation.rs converted
+backend/src/workers/content_tsv_backfill.rs converted
+backend/src/workers/embed_retry.rs converted
+backend/src/workers/statement_embed.rs converted
+backend/src/workers/embed.rs converted
+backend/src/workers/entity_resolution.rs converted
+backend/src/workers/huddle.rs converted
+backend/src/workers/inference_closure.rs converted
+backend/src/workers/journal_sweep.rs converted
+backend/src/workers/mcp_task_sweep.rs converted
+backend/src/workers/microsoft_calendar_sync.rs converted
+# exempt: the everything-mode background sync sweep (Outlook enterprise train). Its due-claim query `resolve_outlook_everything_mode_due()` and all state reads/writes stay on `outlook_everything_mode`/`tenant_databases`, neither on the 0083 RLS roster. Its lone `INSERT INTO graphs` is `#[cfg(test)]`-only fixture setup (FK satisfaction for `outlook_everything_mode.graph_id` in a scratch DB seeded as the migration-runner owner, never `coralswarm_app`) — production code never inserts or reads `graphs` itself.
+backend/src/workers/outlook_everything_mode.rs exempt
+# exempt: the everything-mode background sync sweep (gsuite enterprise train PR G2.4, the SECOND implementation of the Outlook precedent directly above). Its due-claim query `resolve_gmail_everything_mode_due()` and all state reads/writes stay on `gmail_everything_mode`/`tenant_databases`, neither on the 0083 RLS roster. Its lone `INSERT INTO graphs` is `#[cfg(test)]`-only fixture setup (FK satisfaction for `gmail_everything_mode.graph_id` in a scratch DB seeded as the migration-runner owner, never `coralswarm_app`) — production code never inserts or reads `graphs` itself.
+backend/src/workers/gmail_everything_mode.rs exempt
+# converted: Google Calendar org lift. The only RLS-covered table this worker names directly is `oauth_tokens`, in `member_calendar_owners`' single SELECT (owner_user_id of current members holding a member-owned `google` token), which runs inside `begin_account_scoped(control_pool, account_id)` on the CONTROL plane and selects no credential column. Its per-member sync (`sync_org_member`) goes through `connectors::google_calendar`'s scoped helpers (every `google_watch_channels` read/write is begin_tenant_system_scoped on the control pool) and `routes::ingest::ingest_atom`, which scopes internally. The `#[cfg(test)]` module's INSERT/SELECT fixtures run as the migration-runner owner against scratch databases, never `coralswarm_app`.
+backend/src/workers/google_calendar_sync.rs converted
+backend/src/workers/google_chat_sweep.rs converted
+# converted: gsuite Train G3 PR 2, extended by the Meet org-plane lift. The only RLS-covered table this worker names directly is `oauth_tokens`, in `connected_member_ids`' single SELECT (owner_user_id of connected `google_meet` members), which runs inside `begin_account_scoped(control_pool, account_id)` on the CONTROL plane and selects no credential column. Its google_meet_sync_state reads/writes run inside begin_tenant_system_scoped (see tenant_rls_coverage.manifest's entry for why that table needs no member-ocean policy). The `#[cfg(test)]` module's INSERT/SELECT fixtures run as the migration-runner owner against scratch databases, never `coralswarm_app`.
+backend/src/workers/google_meet_sweep.rs converted
+backend/src/workers/member_connect_nudge.rs converted
+# converted (CS-438, org-onboarding plan §3 item 5, D13): the join-request-queue admin digest. Every `account_members`/`users`/`personal_orgs`/`org_join_requests`/`org_join_request_digests` read or write in `process_account` opens its own `tenancy::scope::begin_tenant_system_scoped(control, account_id)` transaction — same primitive, same "control-plane tables read through the tenant-system scope on the control pool" convention `workers::member_connect_nudge.rs`'s own entry immediately above documents (its module doc's own reasoning applies verbatim: every table this worker touches is control-plane-only, so `t.pool` is unused for anything but identifying which org this tick is for). `org_join_request_digests` (migration 0240) is added to this gate's EXTRA_RLS_TABLES in the same PR, alongside `org_join_requests`'s own precedent there.
+backend/src/workers/org_join_request_digest.rs converted
+# exempt: org-TENANT-pool-only, same shape as tenancy/registry.rs's ensure_org_ocean (member-private-oceans PR 3). The only RLS-table reference is `INSERT INTO graphs ... ON CONFLICT ... DO NOTHING` run against `t.pool` (the per-org tenant pool handed to a WorkerTenant tick), never against the control/consumer pool. Tenant databases have whole-database isolation and no 0083 policies at all (migrations_tenant/0003_bootstrap_scope_functions.sql), so there is no app.account_id predicate to satisfy and nothing for begin_account_scoped to scope. The file's other DB reads (account_members, users, tenant_databases) are control-plane tables outside 0083's roster entirely.
+backend/src/workers/member_ocean_reconciler.rs exempt
+backend/src/workers/platform_rollup.rs converted
+# converted: async-promote PR. Every scoped Store call this worker makes
+# (`copy_atoms_to_graph_scoped`, `link_node_atoms_batch_scoped`) runs inside a
+# transaction opened by `tenancy::scope::begin_account_scoped` (consumer
+# plane) or `begin_tenant_scoped` (org tenant plane, threading the job's own
+# `promoted_by` as the acting user) — see `workers::promote`'s own module doc,
+# "RLS scope" section, for why this mirrors `slack_name_backfill.rs`'s
+# per-statement-scoped convention rather than `JobScope`'s ambient-org-arm one.
+backend/src/workers/promote.rs converted
+backend/src/workers/reembed.rs converted
+backend/src/workers/slack_name_backfill.rs converted
+backend/src/workers/slack_seat_reconcile.rs converted
+# converted: chat-per-user plan PR 6 ("email the unmatched"). process_job opens a REAL begin_tenant_system_scoped(pool, account_id) transaction per recipient before calling services::unmatched_recipient_email::claim_notice_slot -- same tenant-loop shape as slack_seat_reconcile.rs directly above. Not currently matched by this gate's direct-SQL grep (the file's own literal SQL, `SELECT clerk_org_id FROM accounts`, references `accounts`, which carries no 0083 policy) -- listed anyway, defensively, since the file's real RLS-relevant write is present and correctly scoped.
+backend/src/workers/slack_unmatched_email.rs converted
+backend/src/workers/summary.rs converted
+backend/src/workers/review_deadline.rs converted
+backend/src/workers/teams_seat_reconcile.rs converted
+backend/src/workers/tombstone_purge.rs converted
+backend/src/workers/usage_pending_sweep.rs converted
+backend/src/workers/usage_reconciliation.rs converted
+backend/src/workers/digest.rs converted
+backend/src/routes/usage.rs converted
+# converted: enforcement-completion PR backfill one-shot (plan §1.9/§2.A). The only RLS-covered table this file's own text references directly is `grants` (`has_active_grant`); it also reads `member_allowance_periods` (0161, not on this gate's 0083-derived roster and so invisible to it, same documented gap named on `billing/issuance.rs`'s own manifest line) via `members_missing_current_period`. Both are scoped via `tenancy::scope::begin_account_scoped`, satisfying this gate's literal-call check. `account_members`/`accounts`/`org_revocations` are also queried here but carry no RLS policy at all (see migration `0164`'s header for `accounts`), so they need no scoping. This binary also calls `billing::issuance::issue_grant` and `billing::renewal::seed_member_period`, both of which open their OWN account-scoped transactions internally (see those files' own manifest entries) — nothing here relies on an ambient/unscoped connection reaching either function.
+backend/src/bin/backfill_billing_enforcement.rs converted
+# exempt: the core of the one-shot `backfill_self_reefs` (identity-resolution-at-the-door §10.3) — an operator-run binary, never mounted on any request path and never reached from a worker (grep `self_reef_backfill::` — the only caller is backend/src/bin/backfill_self_reefs.rs; backend/tests/identity_door_pg.rs is the other). It walks EVERY live graph in a database by design, which is exactly the shape begin_account_scoped cannot express, so its direct SQL on graphs/nodes/reef_identifiers runs PLAIN under the ELEVATED role (MIGRATOR_DATABASE_URL on the control plane, the tenant owner credential on a tenant DB) with the same policy-bypass preflight discipline as `judgement_backfill.rs` and `reextract.rs` above.
+backend/src/self_reef_backfill.rs exempt
+# exempt: the §4.2 human repair CLI — an operator-run one-shot that writes ONE human-source POSITIVE reef_judgement and calls merge_nodes_with_judgement for an explicitly named (graph, keep, dup) pair, never on a request path and never reached from a worker. Runs under the ELEVATED role like every other bin in this family; the judgement row carries created_by so the audit trail is identical to the authenticated route's (routes/nodes.rs write_human_positive_and_merge).
+backend/src/bin/merge_reefs.rs exempt
+# converted: `ReachabilityResolver::resolve_reef_access` (added with GET /v1/nodes/{id}, #860) is what made this file reach an RLS-covered table — it reads `nodes` via `node_graph_id_scoped` to resolve a reef's ocean before authorizing. It takes the caller's `scoped_tx` and uses the scoped store method whenever one exists. The `None` arm reads unscoped ON PURPOSE and only reaches that state when there is no content-plane pool at all (`begin_scoped_tx!` gates on `$tenant.pool.is_some()`, and its Err branch returns early rather than falling through), i.e. a backend with no content-plane pool (test builds only), where no policy exists to satisfy. If a failed scope-open is ever routed to `None` instead of returning, this becomes an unscoped read of `nodes` on an org tenant and nothing detects it — see that arm's own comment.
+backend/src/tenancy/reachability.rs converted
+backend/src/routes/source_connections.rs converted
+backend/src/services/source_publication.rs converted
+# converted (CS-437 CodeRabbit follow-up, #1021): every single-account `org_join_requests` statement (rejected-row check, insert/readback, list_open, list_recent_decided, get_open, mark_decided) opens `tenancy::scope::begin_account_scoped` itself — the table is a 0238 `account_isolation` policy, added to this gate's EXTRA_RLS_TABLES in the same change. `list_open_for_user` is the one cross-account read: it discovers account ids via the control-only SECURITY DEFINER `resolve_open_join_request_account_ids` (migration 0239, bare uuid only, never itself RLS-scoped — same 0084/0228 bootstrap-resolver shape) then re-reads each row inside a real `begin_account_scoped` transaction. `personal_orgs`/`accounts` in `is_personal_org` carry no RLS on this gate's roster and stay unscoped by design.
+backend/src/services/org_join_requests.rs converted
+# converted (CS-443, org-onboarding plan §3 item 37, D11): every single `org_domains` statement in this module — the claim insert/readback, `list_domains`, `get_domain`, `remove_domain`, `mark_verified`, and both verified-domain reads (`verified_domains`, behind `connectors::slack::verified_org_domain` and `services::assertion_ladder`) — opens `tenancy::scope::begin_account_scoped` itself. The one exception is `claim_confirmation_send`, which takes a `&mut PgConnection` because its CALLER (`routes::org_domains::request_confirmation`) must hold that transaction open across the Resend call and commit only on a successful send — same "caller supplies the scope" shape `billing::slot_pool`'s own entry above documents, and that caller opens `begin_account_scoped`. `org_domains` (migration 0242) carries a LATER, non-0083 `account_isolation` policy, so it is added to this gate's EXTRA_RLS_TABLES in the same PR — the same permanent-fix pattern `org_join_requests`/`org_join_request_digests` already use.
+backend/src/services/org_domains.rs converted
+# converted (CS-447, org-onboarding plan §3 item 9, D1/D11/D12/D16): auto-add's settings and ledger. All four statements in this module — `read_settings`, `upsert_settings`, `record_auto_add`, and nothing else touches either table — open `tenancy::scope::begin_account_scoped` themselves. Both tables (`org_auto_add_settings`, `org_auto_adds`, migration 0247) carry LATER, non-0083 `account_isolation` policies, so they are added to this gate's EXTRA_RLS_TABLES in the same PR, the same permanent-fix pattern `org_join_requests`/`org_join_request_digests`/`org_domains` already use. `resolve_tier_id`'s `seat_tiers` read is deliberately UNSCOPED: `seat_tiers` is global catalogue reference data with no `account_id` at all and carries no policy on this gate's roster — the same posture `plans`/`model_rates` have.
+backend/src/services/org_auto_add.rs converted
+# converted (CS-443, org-onboarding plan §3 item 37, D11): the admin domain routes. Every PRODUCTION `org_domains` read and write in this file goes through `services::org_domains` (`converted` above, which opens `tenancy::scope::begin_account_scoped` in each of its own statements); the one place this file touches the pool itself is `request_confirmation`, which opens `begin_account_scoped` directly — the literal call this script's `converted` status requires — and holds that transaction open across the Resend send so a failed send consumes no cooldown. The only literal `FROM org_domains` SQL in the file is inside `#[cfg(test)] mod pg_tests`' own assertions (connected as the DB owner against RELINFER_TEST_DATABASE_URL, never as `coralswarm_app`) — which is what brought this file into the gate's roster at all, since the detection greps file text rather than cfg-gated items, the same posture `routes::org_join_requests`' own entry documents for its `#[cfg(test)]`-only fixture SQL.
+backend/src/routes/org_domains.rs converted
+backend/src/routes/org_invites.rs converted
+# converted: chat-per-user plan PR 6 ("email the unmatched") + PR 6 follow-up ("unsubscribe"), corrected 2026-09-20 (org-plane fix). Two functions, two shapes: claim_notice_slot's ONE RLS-covered statement (`INSERT INTO slack_unmatched_email_notices ... ON CONFLICT ... DO UPDATE`, migration control 0227/0228, CONTROL-PLANE ONLY -- no tenant-tree twin, added to this gate's EXTRA_RLS_TABLES supplement in this same PR) takes `executor: impl sqlx::PgExecutor<'_>` -- it never opens a connection or transaction itself, same shape store/mod.rs's own `_scoped` methods have (a function that RECEIVES an already-scoped executor rather than opening one). Its ONE caller, workers::slack_unmatched_email::process_job, opens a REAL begin_tenant_system_scoped(control_pool, account_id) transaction -- always the shared control pool, never this tick's own `t.pool` -- and passes `&mut *tx` in (see that file's own tenant_rls_coverage.manifest entry, `converted`). suppress_by_token (the unsubscribe write, added by the follow-up PR) is the OTHER shape: it resolves a bare token to an account_id via the control-only SECURITY DEFINER resolve_unmatched_email_notice_account_id (migration 0228, never itself RLS-scoped by design -- see that migration's header), then opens its OWN REAL begin_tenant_system_scoped(control_pool, account_id) transaction before the UPDATE -- an "owns its own scoping" pattern (see store/mod.rs's `_scoped`-method shape). That literal begin_tenant_system_scoped( call is what makes this file `converted` rather than `exempt` now, unlike when only claim_notice_slot existed here.
+backend/src/services/unmatched_recipient_email.rs converted
+# 2026-09-14 deploy-unblock (fix-forward AFTER the fact): the nine G-train files
+# below merged on 2026-09-13 (#898, #904, #907, #908) without manifest entries, and
+# this gate — a hard step in Deploy's pre-deploy invariant guard — has failed on
+# main since. Added as 'pending' (the status the guard's own message prescribes
+# for new query surface) rather than 'exempt', because the exempt rationale
+# belongs to the files' authors: only provenance_link_backfill.rs carries an
+# `assert_policy_bypass` preflight in the frozen backfill_* shape; ocean_health
+# reads atoms/graphs/nodes/relationship_edge from a QUEUE WORKER, and
+# prompt_gate.rs calls Store::create_graph — both need an actual review before
+# either 'converted' or 'exempt' is an honest claim; relationship_guard_probe.rs
+# refuses any database but the coralswarm_kg_guard scratch DB. Owed by the G-train.
+# The two bin/ wrappers below (backfill_provenance_links, probe_relationship_guards)
+# carry no direct SQL of their own, so this grep-strength guard does not flag them —
+# they are listed anyway (CodeRabbit on #912) so the reachable surface behind their
+# imported cores cannot hide once the wrappers grow a query of their own.
+backend/src/bin/ocean_health.rs pending
+backend/src/ocean_health.rs pending
+backend/src/provenance_link_backfill.rs pending
+backend/src/workers/ocean_health.rs pending
+backend/src/bin/backfill_provenance_links.rs pending
+# 2026-09-14 deploy-unblock (fix-forward AFTER the fact), #913: fold_subtopics
+# merged on 2026-09-13 without a manifest entry, and this gate — a hard step in
+# Deploy's pre-deploy invariant guard — has failed on main since. Added as
+# 'pending' (the status the guard's own message prescribes for new query
+# surface) rather than 'exempt', because the exempt rationale belongs to the
+# file's author: the core reads nodes/relationship_edge/node_atoms and then
+# WRITES through Store::merge_nodes with no scope. It does carry the frozen
+# backfill_* `assert_policy_bypass` preflight and is an operator one-shot
+# (dry-run by default, `--i-am-sure` for any non-scratch database name, not in
+# the Fly image), which is what an exempt review would argue from — but that is
+# a claim for #913's author to make. OWED REVIEW: #913's author flips this to
+# 'converted' (reads and the merge routed through a scoped transaction) or to
+# 'exempt' with that rationale written directly above the entry.
+# The bin/ wrapper below carries no direct SQL of its own, so this
+# grep-strength guard does not flag it — it is listed anyway, on the same rule
+# CodeRabbit applied to backfill_provenance_links/probe_relationship_guards on
+# #912, so the reachable surface behind its imported core cannot hide once the
+# wrapper grows a query of its own.
+backend/src/fold_subtopics.rs pending
+backend/src/bin/fold_subtopics.rs pending
+# GitHub connector (PR A, sync plumbing). Every RLS-covered-table query in
+# these three files runs inside begin_account_scoped/begin_tenant_system_scoped
+# — mirrors the Slack connector's own scoping discipline
+# (connectors::slack/slack_channel_actions/slack_interactivity).
+backend/src/connectors/github_disconnect.rs converted
+backend/src/connectors/github_repos.rs converted
+backend/src/routes/github.rs converted
+# converted: NEW to this gate as of the §3.9/D10 Path-1 conversion. Until then this file reached `atoms` only through routes::ingest::ingest_atom (its own entry above), so it named no RLS-covered table in a greppable position and this gate could not see it. It now writes `atoms` itself — `Store::insert_atoms_scoped` / `stamp_atom_provenance_scoped` / `set_atoms_inline_content_scoped` / `delete_atoms_scoped` — and every one of those statements, along with the `github_watched_repos` cursor/progress/sync_error_code writes, runs inside `tenancy::scope::begin_tenant_system_scoped`. System scope (not `begin_tenant_scoped`) because a team/org destination ocean has no single member whose identity would satisfy the member-ocean policy — the same posture workers::huddle and connectors::google_chat's multi-destination writes take. TWO DELIBERATE UNSCOPED READS, both in `destination_reachable` and both copied in shape from the call sites this connector's write replaced: `SELECT public.resolve_tenant_graph_reachable_by_user(...)` is one of 0084/0086/0091's audited SECURITY DEFINER carve-outs (routes::ingest's own reachability check and services::source_publication::authorized call it the same way, unscoped by necessity — a scope that could hide the row would turn "not permitted" into "does not exist" one layer too early), and the `account_members` EXISTS read runs against the CONTROL pool on a control-only table outside the 0083 roster.
+backend/src/connectors/github_backfill.rs converted
+# converted: the push head-cursor compare-and-swap (advance_head_cursor, #1340) updates github_watched_repos inside tenancy::scope::begin_tenant_system_scoped(account_id) with an explicit repo-row predicate; capture itself delegates to the scoped github_backfill::ingest_one path.
+backend/src/connectors/github_event_ingest.rs converted
+# exempt: test-only (`#[cfg(test)]`, the §8 conformance suite). Its INSERTs into RLS-covered tables (`atoms`, `graphs`, `teams`, `team_seat_grants`, `github_watched_repos`, `oauth_tokens`) are fixture seeding inside a scratch database it creates and drops itself, connected as the migration-runner OWNER and never as `coralswarm_app` — so no 0083 policy is ever evaluated against it. Same posture as `retrieval_eval.rs`'s and `connectors::google_calendar`'s exemptions above. There is no production code path in this file.
+backend/src/connectors/github_conformance.rs exempt
+# converted: `load_member_oauth_token_ciphertext` (CodeRabbit round 1 on #1012) reads `oauth_tokens` inside begin_account_scoped AND with an explicit `owner_user_id = $n` predicate — the I7 shape, never `IS NULL OR`. Its other writes (`connector_installs`, `github_installations`) are control-only tables outside the 0083 roster.
+backend/src/connectors/github.rs converted
+# exempt: the only RLS-covered read is a BOOT-TIME telemetry count over `atoms` for the cloud-embed dual-write log line (#1010: how many atoms still lack `embedding_next`), unscoped by design because it is a platform-wide figure for the operator log, never a per-account data path; every account-scoped read in this file goes through the routes/workers it wires up, which carry their own entries. Registered while merging the GitHub connector (#1012) because main was red on this gate from #1019.
+backend/src/lib.rs exempt
+# converted (CS-446, org-onboarding plan §3 item 16, D16): D16's connector-health record. Every statement in this module — the two credential reads (`oauth_tokens`, joined to `account_members` for the "is anyone left" half), the `connector_health` upsert, `resolve_condition`, `touch_open` and `list_open` — opens `tenancy::scope::begin_account_scoped` itself. `connector_health` (migration 0243) carries a LATER, non-0083 `account_isolation` policy, so it is added to this gate's EXTRA_RLS_TABLES in the same PR — the same permanent-fix pattern `org_join_requests`/`org_join_request_digests`/`org_domains` already use. `stored_directory_credential` is the one read that drops the `account_members` predicate (never the account scope): it runs AFTER `clerk_provision::remove_org_membership` has deleted that row, so gating on membership would report every departing member as having had no credential and the feature would never fire — see its own doc comment. The `INSERT INTO connector_health` inside `#[cfg(test)] mod pg_tests`' fixtures connects as the DB owner against RELINFER_TEST_DATABASE_URL, never as `coralswarm_app`, the same posture every other `#[cfg(test)]`-only exemption here documents.
+backend/src/services/connector_health.rs converted
+# exempt: the admin read route. It touches no RLS-covered table directly at all — `list` calls `services::connector_health::refresh_open_degradations` (`converted` above, which opens `tenancy::scope::begin_account_scoped` in each of its own statements) and `Store::account_is_real_org` for the personal-org bar. There is no literal SQL in this file, in production or in tests; it is listed anyway on the same rule CodeRabbit applied to the `bin/` wrappers on #912, so the surface behind it cannot hide once it grows a query of its own.
+backend/src/routes/connector_health.rs exempt
+# converted (CS-470, org-onboarding plan item 25/27): Chat cold-start notices.
+# Every production statement against chat_cold_start_notices and the
+# oauth_tokens directory-grant read opens begin_tenant_system_scoped on the
+# control pool. chat_cold_start_notices (migration 0258) is a later
+# account_isolation policy, added to EXTRA_RLS_TABLES in this same PR.
+# retire_chat_cold_start_container and chat_cold_start_due_accounts are
+# SECURITY DEFINER discovery for a space-keyed removal and the hourly
+# repeat — they do not read ocean content.
+backend/src/connectors/chat_cold_start.rs converted
+# converted (RLS roster sync, #1169): the per-meeting opt-in capture tables
+# (0260/0263/0266/0269) and org_install_capture_grace (0257) carry later,
+# non-0083 policies and are added to EXTRA_RLS_TABLES in the same PR. Every
+# production statement against google_meet_captures / outlook_schedule_intents /
+# teams_meeting_captures in these files runs inside begin_tenant_scoped
+# (app.account_id AND app.user_id, which the owner-keyed policies need);
+# teams_meeting_installations runs inside begin_account_scoped (its policy is
+# account-keyed only); teams_meeting_contexts runs inside
+# begin_tenant_system_scoped (its policy is system-actor only).
+backend/src/services/google_meet_capture.rs converted
+backend/src/services/outlook_schedule.rs converted
+backend/src/services/teams_meeting_capture.rs converted
+backend/src/workers/teams_meeting_sync.rs converted
+# exempt: test-only (`#[cfg(test)] #[path]` module of services::teams_meeting_capture). Its SQL is fixture seeding in a scratch database it creates and drops itself. There is no production code path in this file.
+backend/src/services/teams_meeting_capture_tests.rs exempt
+# exempt: every production statement against outlook_schedule_intents / teams_meeting_captures goes through services::outlook_schedule (`converted` above). The direct SQL this gate matches (`graphs`, `outlook_schedule_intents`, `teams_meeting_captures`) is all inside `#[cfg(test)] mod tests` (from line ~410), fixture seeding in a scratch tenant database.
+backend/src/workers/outlook_schedule.rs exempt
+# exempt: the one read is `SELECT connect_emails_began_at FROM org_install_capture_grace`, a fleet-wide singleton timestamp with no account content. Its 0257 policy is `FOR SELECT USING (true)` on purpose, so an unscoped read under coralswarm_app is correct; see that migration's header.
+backend/src/services/org_install_grace.rs exempt
+# converted (RLS roster sync, #1169, fix round 1): every production `oauth_tokens` statement goes through `begin_credential_tx` (= `begin_account_scoped`). The other matches are inside `#[cfg(test)] mod tests`.
+backend/src/connectors/credential_health.rs converted
+# converted (#1169 fix round 1): the production `atoms` reads (`stored_event_ids`, `retract_source_ids`) run inside `scoped_tx` (= `begin_tenant_system_scoped`). The `graphs` inserts and `insert_atoms_scoped` call are inside `#[cfg(test)] mod tests`.
+backend/src/connectors/microsoft_calendar.rs converted
+# converted (#1169 fix round 1): both production `oauth_tokens` reads run inside `begin_account_scoped`. The `connector_health` / `oauth_tokens` writes are inside `#[cfg(test)] mod tests`.
+backend/src/connectors/teams_doorbell.rs converted
+# converted (#1169 fix round 1): the production `oauth_tokens` reads run inside `begin_account_scoped`. `ensure_transcript_watches` (the `graph_subscriptions` / `connector_health` reader) is `#[cfg(test)]`-only, and the rest are inside `#[cfg(test)] mod tests`.
+backend/src/connectors/teams_transcripts.rs converted
+# converted (#1169 fix round 1): the production path runs inside `begin_account_scoped`. Every direct `oauth_tokens` query is inside `#[cfg(test)] mod google_workspace_pg_tests`.
+backend/src/routes/google_workspace_connect.rs converted
+# converted (#1169 fix round 1): the `connector_installs`/`oauth_tokens` member read runs inside `begin_account_scoped` on the control pool. The `teams_watched_resources` read runs inside `begin_tenant_scoped` on the content pool. The other matches are inside `#[cfg(test)] mod tests`.
+backend/src/routes/teams_bot.rs converted
+# converted (#1169 fix round 1): the `oauth_tokens` identity read runs inside `begin_account_scoped` (control). The `graphs` / `teams_watched_resources` statements run inside `begin_tenant_scoped` (content). The other matches are inside `#[cfg(test)] mod tests`.
+backend/src/routes/teams_onboarding.rs converted
+# converted (#1169 fix round 1): the one production `atoms` read runs inside `begin_tenant_system_scoped`. The other matches are inside `#[cfg(test)] mod tests`.
+backend/src/services/source_reingest.rs converted
+# converted (#1169 fix round 1): `org_join_requests` reads run inside `begin_tenant_system_scoped`, and `oauth_tokens` reads run inside `begin_account_scoped`, all on the control pool.
+backend/src/workers/google_chat_invite.rs converted
+# converted (fix-unscoped-oauth-reads): `slack_someone_can_be_emailed` and
+# `teams_someone_can_be_emailed` read `oauth_tokens` inside
+# `begin_account_scoped` on the control pool. `claim_cold_start_slot` already
+# ran inside `begin_tenant_system_scoped`.
+backend/src/connectors/cold_start.rs converted
+# converted (fix-unscoped-oauth-reads): `invite_reader_user_id` reads
+# `oauth_tokens` inside `begin_account_scoped` on the control pool.
+# `apply_membership_event` has no account id (Slack membership events carry
+# only workspace and user ids), so it no longer touches `oauth_tokens`
+# directly. It resolves owners through the control-only SECURITY DEFINER
+# `resolve_slack_user_token_owners(text, text)` (migration 0281) and writes
+# `slack_member_channels`, which has no RLS (0256).
+backend/src/connectors/slack_member_capture.rs converted
+# exempt: Jev on OpenRouter (2026-10-08). Production code issues no SQL — it records usage only through `llm::usage::metered_complete` (already `converted`) with the caller's `UsageContext`. The literal `llm_usage`/`llm_usage_pending` reads are inside `#[cfg(test)] jev_openrouter_metering_pg`, against a scratch database connected to as the ORGT_TEST_BASE_URL migration-runner/owner role, never as `coralswarm_app` -- same posture as every other `#[cfg(test)]`-only exemption in this manifest.
+backend/src/decision/openrouter.rs exempt
+
+# Meet subscription grant fencing reads oauth_tokens only inside begin_tenant_system_scoped(control_pool, account_id); bootstrap push resolver exposes IDs only, followed by scoped detail reads.
+backend/src/connectors/google_meet_events.rs converted
+# Per-huddle metadata uses tenant system scope on the resolved content plane.
+backend/src/connectors/slack_huddle_consent.rs converted
+
+# converted: meeting evidence SQL receives a caller-scoped transaction; HTTP entry points authorize graph reachability then use Tenant::begin_member_scoped. Ingest capture runs within its existing owner/member transaction.
+backend/src/meeting_evidence.rs converted
+
+# exempt: meeting worker begin_scope dispatches begin_account_scoped for consumer jobs and begin_tenant_system_scoped_without_account for org jobs after verify_job_scope; both branches are necessary for tenant-aware background extraction.
+backend/src/workers/source_atoms.rs exempt
+
+# exempt: operator-only personal-to-member migration CLI intentionally uses explicitly provisioned admin pools; its new preflight only refuses graphs with preserved evidence before any mutation. It does not serve user requests.
+backend/src/bin/migrate_personal_to_member_ocean.rs exempt
+
+# converted: generic source SQL uses caller-scoped transactions; HTTP authorizes graph reachability then Tenant::begin_member_scoped; capture is only called at admitted ingestion seams.
+backend/src/source_evidence.rs converted
+
+# converted: Corpus controller begins graph-authorized member-scoped content transactions; original requester checks use account-scoped control transactions.
+backend/src/corpus_enrichment.rs converted
+# exempt: cfg(test)-only module builds disposable local databases and intentionally seeds through their owner connections before exercising actual app-role isolation; never compiled into serving code.
+backend/src/corpus_enrichment_pg_tests.rs exempt
+
+# Connected-memory packages merged 2026-10-11..13 with per-PR CI off; each
+# entry below was checked against the file's scope calls, not assumed.
+# exempt: pure transaction helpers. Every function (`lock_session_tx`, `validate_ancestry_tx`, `validate_binding_tx`) takes the CALLER's already-scoped `&mut Transaction` and opens none of its own; the `coding_sessions` reads run inside whichever `begin_member_scoped`/`begin_account_scoped` transaction the ingest or history caller holds.
+backend/src/capture_context.rs exempt
+# converted: history reads open `tenant.begin_member_scoped(account)` after graph-reachability authorization.
+backend/src/library_history.rs converted
+# converted: disagreement reads open `tenant.begin_member_scoped(account)` after graph-reachability authorization.
+backend/src/library_disagreements.rs converted
+# converted: Library read, scope and evidence APIs open `tenant.begin_member_scoped(account)` after graph-reachability authorization (5 sites).
+backend/src/library_read.rs converted
+# exempt: SQL definitions only; no pool, connection, or execution. Live search composes these fragments inside library_read.rs authorized begin_member_scoped transactions; node-keyed statements require the scoped transaction supplied by their caller. Both owner and non-bypass plane equality is exercised in library_read_pg.
+backend/src/library_read/evidence.rs exempt
+# converted: managed-history reads open `tenant.begin_member_scoped(account)`; the one bare-pool call hands the job queue's own `could_not_do` writer a terminal verdict.
+backend/src/managed/gate.rs converted
+backend/src/managed_history.rs converted
+# converted: control-plane `composio_connections` reads open `begin_account_scoped(state.control_db(), account)`; content-plane scope rows open `tenant.begin_tenant_scoped` (8 sites).
+backend/src/routes/composio.rs converted
+# converted: scoped Ask opens `tenant.begin_member_scoped(account)` for content; org requester admission opens `begin_account_scoped(state.control_db(), account)` for control-only membership.
+backend/src/scoped_ask.rs converted
+# converted: selected publication opens `tenant.begin_member_scoped(account)` for content; org requester admission opens `begin_account_scoped(state.control_db(), account)` for control-only membership.
+backend/src/selected_publication.rs converted
+# converted: the e2e-only seeding route (feature `e2e`, never in a release build) reads and writes the caller's own source evidence under `tenant.begin_member_scoped(account)`, the same scope `selected_publication` writes semantic atoms under.
+backend/src/e2e_seed.rs converted
+# converted: recorded temporal state reads open `tenant.begin_member_scoped(account)` (2 sites).
+backend/src/temporal.rs converted
+# converted: change_pause_tx accepts only a caller-owned Transaction. Its production caller is corpus_enrichment::change_status, which opens tenant.begin_member_scoped(account) before authorization and the helper call. Consumer scope is begin_account_scoped; org scope also stamps the authenticated member. The helper takes no pool, rereads the graph/run under FOR UPDATE, and updates that row in the same transaction. The cfg(test-support) wrapper supplies the same helper to both-plane restricted-role and lock tests. New production callers must preserve this scoped transaction contract.
+backend/src/managed/standing.rs converted
+backend/src/managed/standing/principal.rs converted
+backend/src/managed/embedding.rs converted
+# exempt: cfg(test)-only child fixture creates disposable loopback-only databases, seeds with owners and verifies reserve/settle with actual restricted app roles.
+backend/src/managed/embedding/pg_tests.rs exempt
+
+backend/src/services/content_replacement.rs converted
+
+# exempt: disposable native PostgreSQL fixture; owner pool only seeds and inspects rows, while replacement and caller paths use normal Consumer account or Org system app roles.
+backend/src/services/content_replacement/pg_tests.rs exempt
+backend/src/billing/managed_reservation.rs converted
+backend/src/managed/gate/funded.rs converted
+# exempt: Native isolated fixtures only; normal LOGIN roles have no unsafe attributes or owned tables.
+backend/src/managed/gate/pg_tests.rs exempt
+
+# exempt: cfg(test) release compatibility fixtures; production calls use actual account/system-scoped owners and the fixtures also seed historical pre-seal rows.
+backend/src/managed/gate/pg_tests/release_c.rs exempt
+# converted: standing sweep opens content through execution::begin_content, which selects consumer account scope or Org tenant-system scope before any graph/source/run/unit SQL; CONTROL reads use a separately held account transaction. Adoption is one bounded transaction per version.
+backend/src/managed/standing/admission.rs converted
+# converted: execution owns consumer account / Org tenant-system content and separately scoped CONTROL acquisition; actual work/principal/policy/source/queue fences execute only on held scoped transactions, with no DB resources across HTTP or blob I/O.
+backend/src/managed/standing/execution.rs converted
+
+# converted: deep embedding operation opens actual Consumer account or Org tenant-system transactions and checks explicit account/graph/job/input bindings before all content SQL.
+backend/src/managed/embedding/operation.rs converted
+# converted: statement-embedding child of the deep embedding operation. Every content statement runs on a transaction from operation::begin(JobScope) (Consumer account scope or Org tenant-system scope) or the held locked transaction, with explicit account/graph/job/input bindings; CONTROL reads use operation::control (begin_account_scoped). No pool query of its own.
+backend/src/managed/embedding/operation/statements.rs converted
+# exempt: cfg(test)-only statement-embedding fixtures under gate/pg_tests.rs; the owner pool only seeds and inspects disposable databases, while the worker under test runs on the restricted app roles (and once on the table owner, prod's tenant role).
+backend/src/managed/gate/pg_tests/statement_embedding.rs exempt
+# exempt: cfg(test)-only real managed worker fixtures; actual owners use restricted normal LOGIN account/system pools while setup/inspection uses the existing isolated owner fixture.
+backend/src/managed/gate/pg_tests/embedding_workers.rs exempt
+# exempt: cfg(test)-only COR-114 fixtures under gate/pg_tests.rs (personal-org plane admission, billing reconciliation, the shared job hold rule). The owner pool only seeds and inspects disposable databases; admission, funding, billing and the queue under test run on the restricted app roles in account-scoped transactions.
+backend/src/managed/gate/pg_tests/personal_org.rs exempt
+
+# converted: reef_identity::patch_supported accepts only an already-scoped PostgreSQL transaction from the shared REST/MCP adapter (Tenant::begin_member_scoped), validates account/verified actor on both planes and uses a nested savepoint without opening an unscoped pool. The evaluator supplies begin_account_scoped plus its genuine seeded owner. Every SQL/Store operation stays on that supplied transaction; no provider or worker/system authority path exists.
+backend/src/services/reef_identity.rs converted
+# exempt: BRIDGE (source-agnostic pipeline plan PR 1; deleted with PR 11). Two halves. version_chunks_tx/link_reefs_tx run only inside the caller's scoped transaction (workers/source_atoms.rs persist_window: begin_account_scoped for Consumer, begin_tenant_system_scoped_without_account for Org) and write through Store::link_node_atoms_batch_scoped, so they open no connection of their own. preview/execute are the core of the one-shot backfill_node_atoms_bridge binary, never on a request path or in a worker: they walk EVERY graph in one database by design, which begin_account_scoped cannot express, so they run PLAIN under the ELEVATED role (tenant owner DSN / MIGRATOR_DATABASE_URL) behind assert_policy_bypass, the same discipline as self_reef_backfill.rs above. preview runs READ ONLY.
+backend/src/node_atoms_bridge.rs exempt
+# exempt: thin argument/DSN wrapper around node_atoms_bridge (entry above); its only own SQL is current_database() and the tenant_meta DSN-swap fingerprint read, neither RLS-covered. Listed so the surface behind the imported core cannot hide, same rule as backfill_provenance_links.
+backend/src/bin/backfill_node_atoms_bridge.rs exempt
+# converted: extraction v2 (pipeline plan PR 2) worker half. Every query takes the caller's already-scoped transaction from workers/source_atoms.rs (begin_account_scoped for Consumer, begin_tenant_system_scoped_without_account for Org), including the Store calls (resolve_reef_ref_scoped, upsert_relationship_edge_scoped) and the v1 -> v2 repin; it opens no connection or pool of its own.
+backend/src/workers/source_atoms_v2.rs converted
+# exempt: operator one-shot core of reextract_source_atoms_v2 (pipeline plan PR 2). preview/execute walk every graph of one database by design, which begin_account_scoped cannot express, so they run PLAIN under the ELEVATED role (tenant owner DSN / MIGRATOR_DATABASE_URL) behind node_atoms_bridge::assert_policy_bypass, the same discipline as node_atoms_bridge.rs above. preview runs READ ONLY; execute only repins v1 versions to v2 (no model call, no content read).
+backend/src/source_reextract.rs exempt
+# exempt: thin argument/DSN wrapper around source_reextract (entry above); its only own SQL is current_database() and the tenant_meta DSN-swap fingerprint read, neither RLS-covered.
+backend/src/bin/reextract_source_atoms_v2.rs exempt
+# exempt: operator one-shot core of carry_forward_unchanged_versions (2026-10-20 incident: #1382 anchor keys re-versioned unchanged content). preview/execute walk every graph of one database by design, which begin_account_scoped cannot express, so they run PLAIN under the ELEVATED role (tenant owner DSN / MIGRATOR_DATABASE_URL) behind node_atoms_bridge::assert_policy_bypass, the same discipline as source_reextract.rs above. preview runs READ ONLY; execute only marks pending versions of unchanged content done under their earlier version's profile (no model call, no content read, nothing copied or deleted).
+backend/src/source_carry_forward.rs exempt
+# exempt: thin argument/DSN wrapper around source_carry_forward (entry above); its only own SQL is the tenant_meta DSN-swap fingerprint read, not RLS-covered.
+backend/src/bin/carry_forward_unchanged_versions.rs exempt
+# exempt: OPERATOR ONE-SHOT, core of bin/retry_failed_extractions_v2 (failed versions -> source-atoms-v2). classify/execute walk every FAILED source version of one database by design, which begin_account_scoped cannot express, so they run PLAIN under the ELEVATED role (tenant owner DSN / MIGRATOR_DATABASE_URL) behind node_atoms_bridge::assert_policy_bypass_on, same discipline as source_reextract.rs above. classify and cost_basis run READ ONLY (and read managed_credit_reservations READ ONLY on the control pool); execute is one short transaction per version under the adoption lock order: v2::repin_to_v2_tx for a v1 version, or a failed v2 standing unit back to pending/infrastructure_unavailable. No model call, no content read.
+backend/src/failed_extraction_retry.rs exempt
+# exempt: thin argument/DSN wrapper around failed_extraction_retry (entry above); its only own SQL is current_database() and the tenant_meta DSN-swap fingerprint read, neither RLS-covered.
+backend/src/bin/retry_failed_extractions_v2.rs exempt
+# exempt: OPERATOR ONE-SHOT (2026-10-19 incident), core of bin/dedupe_reefs. plan reads every duplicate-title reef group of one database READ ONLY; execute merges one group per transaction through Store::write_judgement_scoped + Store::merge_nodes_with_judgement_scoped (the human-merge path merge_reefs.rs uses) on the caller's transaction. Runs PLAIN under the ELEVATED role (tenant owner DSN / MIGRATOR_DATABASE_URL) behind node_atoms_bridge::assert_policy_bypass_on, which begin_account_scoped cannot express for a whole-database walk. Merges never cross graphs, scopes or owners.
+backend/src/reef_dedupe.rs exempt
+# exempt: thin argument/DSN wrapper around reef_dedupe (entry above); its only own SQL is current_database() and the tenant_meta DSN-swap fingerprint read, neither RLS-covered.
+backend/src/bin/dedupe_reefs.rs exempt
+# exempt: OPERATOR ONE-SHOT (COR-66 follow-up), retract_fixture_kinship. Reads relationship_edge/atoms/semantic_atoms/source_versions of one whole database READ ONLY under the ELEVATED tenant owner DSN, behind its own RLS-bypass preflight (refuses with exit 3), which begin_account_scoped cannot express for a whole-database walk. Its only write is Store::set_relationship_edge_status (Rejected, via ops_retract_fixture_kinship), the review UI's reject path. Never mounted on a request path or reached from a worker.
+backend/src/bin/retract_fixture_kinship.rs exempt
+# converted: content-verified positional chunk reconciliation (adopt or replace). reconcile_tx/load_rows/replace_row/retire_surplus take only the caller's already-scoped capture transaction (through ingest::capture::store_capture_tx, private to the ingest module and called only by ingest::submit: Tenant::begin_member_scoped for a member write, begin_tenant_system_scoped for an OrgShared grant) and open no connection of their own. Surplus retirement runs in a savepoint inside that same transaction through services::deletion::retire_positional_chunks_tx.
+backend/src/chunk_reconcile.rs converted
+# converted: capture funnel core (source-agnostic pipeline PR 4). store_capture_tx and its insert/sync-op/upload/inline helpers take only the caller's already-scoped capture transaction (ingest::submit: Tenant::begin_member_scoped for a member write, begin_tenant_system_scoped for an OrgShared grant) and open no connection of their own. The EmbedAtoms job is enqueued in that same transaction (ADR-0016 §4).
+backend/src/ingest/capture.rs converted
+# exempt: cfg(test)-only disposable native PostgreSQL fixture; the owner pool seeds and inspects rows, while every capture runs through store_capture_tx in begin_tenant_system_scoped as both the owner and the restricted app role on each plane. Never compiled into serving code.
+backend/src/ingest/capture/pg_tests.rs exempt
+# exempt: cfg(test)-only disposable native PostgreSQL fixture for the ingest door's OrgShared path (ADR-0016 layer 2); the owner pool seeds the route and inspects rows, while every capture runs through ingest::submit in begin_tenant_system_scoped. Never compiled into serving code.
+backend/src/ingest/pg_tests.rs exempt
+# converted: ADR-0016 layer 2 review fixes. The OrgShared grant lookups read the routing rows through the connectors' own resolvers; the grant re-check (verify_tx) runs inside the door's begin_tenant_system_scoped capture transaction, where it share-locks the routing row and reads graphs, and on the consumer plane account_members (same database, same connection, same snapshot as the lock). The one unscoped read, Roster::for_grant's account_members list, runs on the CONTROL pool once per grant and only for an org tenant (account_members is a control table and another database on that plane), the same unscoped control read connectors::slack::resolve_org_fanout_destinations makes.
+backend/src/ingest/grant.rs converted
+# exempt: OPERATOR ONE-SHOT (step C of the adopt-or-replace fix), core of bin/backfill_chunk_links. Walks EVERY graph in one database by design, which begin_account_scoped cannot express, so it runs PLAIN under the ELEVATED role (tenant owner DSN / MIGRATOR_DATABASE_URL) behind node_atoms_bridge::assert_policy_bypass_on, same discipline as node_atoms_bridge.rs. Dry run reads in BEGIN READ ONLY transactions; --execute uses one short transaction per version under the capture source lock.
+backend/src/chunk_reconcile/backfill.rs exempt
+# exempt: thin argument/DSN wrapper around chunk_reconcile::backfill (entry above); its only own SQL is the tenant_meta DSN-swap fingerprint read. Listed so the surface behind the imported core cannot hide, same rule as backfill_node_atoms_bridge.
+backend/src/bin/backfill_chunk_links.rs exempt
+
+# converted: managed_enrichment scaffold. Content SQL runs only in transactions the caller or the gate opened via JobScope (Consumer account scope, Org tenant-system scope); principal reads use the control account-scoped transaction for Org. Every statement binds account/graph/job/receipt.
+backend/src/managed/enrichment.rs converted
+
+# exempt: cfg(test)-only enrichment gate fixtures under gate.rs's cfg(test) module; gate calls use restricted normal LOGIN app pools, setup/inspection uses the isolated owner fixture, and one test migrates a disposable Neon-shaped owner database.
+backend/src/managed/gate/pg_tests/enrichment.rs exempt
+# exempt: PR 9 fact supersession core. Every query runs inside a transaction its caller already scoped: the extraction persist transaction (workers/source_atoms.rs, begin_account_scoped on the consumer plane), the judge's scoped transactions (fact_supersession/judge.rs, converted), or the operator backfill, which runs PLAIN as the database OWNER behind bin/backfill_fact_supersession's assert_policy_bypass_on preflight. It opens no transaction of its own on a request path.
+backend/src/fact_supersession.rs exempt
+backend/src/fact_supersession/judge.rs converted
+# exempt: extraction v3 stated-change loader, a submodule of the PR 9 core above (fact_supersession.rs, exempt). Its one SELECT runs only inside the transaction load_facts was handed, which the caller already scoped (the extraction persist transaction, the judge's scoped transactions, or the operator backfill under the elevated owner DSN); it never opens a connection or a transaction of its own and writes nothing.
+backend/src/fact_supersession/changes.rs exempt
+# exempt: statement co-occurrence edges (graph connectivity). refresh_tx runs only inside the transaction its caller already scoped: the InferRelationships job (workers/inference_closure.rs, begin_account_scoped / begin_tenant_system_scoped_without_account) or the operator backfill, which runs PLAIN as the database OWNER behind bin/backfill_co_occurrence's assert_policy_bypass_on preflight. backfill opens one owner transaction per graph and is called only from that bin. Every statement is filtered to one graph_id.
+backend/src/co_occurrence.rs exempt
+# exempt: deferred resolution of ambiguous entity mentions (link_ambiguity, 2026-10-20). sweep_atom_tx runs only inside the transaction its caller already scoped; the only caller outside tests is the operator backfill, which runs PLAIN as the database OWNER behind bin/resolve_ambiguous_mentions's assert_policy_bypass_on preflight, one transaction per atom (READ ONLY and rolled back by default). Every statement is filtered to one graph_id. Its writes go through the door's Store::mint_reef_scoped and record_entity_type_hint_scoped plus the binder's own node_semantic_atoms / node_atoms bridge inserts. Never mounted on a request path or reached from a worker.
+backend/src/mention_sweep.rs exempt
+# exempt: cfg(test)-only entity-resolution fixtures (source-agnostic PR 5), included by gate/pg_tests.rs under gate.rs's cfg(test) module. The worker under test runs on restricted normal LOGIN app pools (and, for the org plane, a disposable Neon-shaped table-owner runtime); seeding and inspection use the isolated owner fixture. No serving code is compiled from this module.
+backend/src/managed/gate/pg_tests/entity_resolution.rs exempt
+
+# converted: interactive_ask (Jev at Ask time on a managed budget, 2026-10-18). Its only SQL is the gate fence for one Ask attempt; it runs inside transactions the gate opened via JobScope (Consumer account scope, Org tenant-system scope) plus the control account-scoped transaction for an Org call's account/membership reads. Every statement binds account, graph or asker.
+backend/src/managed/interactive_ask.rs converted
+
+# exempt: cfg(test)-only interactive_ask gate fixtures under gate.rs's cfg(test) module; Jev calls run through restricted normal LOGIN app pools or a Neon-shaped table-owner runtime, and setup/inspection uses the isolated owner fixture.
+backend/src/managed/gate/pg_tests/interactive_ask.rs exempt
+# exempt: cfg(test)-only managed enrichment consumer fixtures (journal sweep, coral titles, reef digests; source-agnostic PRs 6-8), included by gate/pg_tests.rs under gate.rs's cfg(test) module. The workers under test run on restricted normal LOGIN app pools (and, for the org plane, a disposable Neon-shaped table-owner runtime); seeding and inspection use the isolated owner fixture. No serving code is compiled from this module.
+backend/src/managed/gate/pg_tests/enrichment_consumers.rs exempt
+# exempt: cfg(test)-only meeting-summary managed enrichment fixtures (source-agnostic PR 10, COR-35), included by gate/pg_tests.rs under gate.rs's cfg(test) module. The worker under test runs on restricted normal LOGIN app pools (and a disposable Neon-shaped table-owner runtime); setup and inspection use the scratch databases' owner pools. Never compiled into serving code.
+backend/src/managed/gate/pg_tests/meeting_summary.rs exempt
+# exempt: cfg(test)-only attributed reef-digest read fixtures, `#[path]`-included as a child of gate/pg_tests/enrichment_consumers.rs under gate.rs's cfg(test) module. Digests are published by the real worker on restricted normal LOGIN app pools (and a disposable Neon-shaped table-owner runtime); each read runs in a reader-scoped transaction (begin_account_scoped on Consumer, begin_tenant_scoped on Org); seeding and inspection use the isolated owner fixture. No serving code is compiled from this module.
+backend/src/managed/gate/pg_tests/digest_read.rs exempt
+# exempt: attributed reef-digest read (GET /v1/nodes/{id}/digest, MCP get_reef). Opens no connection or transaction of its own: read_for_reader takes only the caller's already reader-scoped transaction (routes/nodes.rs node_digest and mcp/tools/read.rs get_reef, both Tenant::begin_member_scoped after reachability authorization) and only reads, so RLS and library_permitted_atoms evaluate as that reader. The regeneration enqueue lives in workers/digest.rs.
+backend/src/reef_digest_read.rs exempt
+
+# exempt: cfg(test) admission latency fixture; reads scratch-database ledger and reservation counts through the fixture owner pool, and every gate and billing call runs through the real account/system-scoped paths.
+backend/src/managed/gate/pg_tests/admission_latency.rs exempt
+
+# exempt: cfg(test) settlement-recovery invariants (phase-2 -> phase-3 window, managed recovery queue). Reads scratch-database receipt, reservation, ledger and queue state through the fixture owner pools and seeds conflicting financial facts through an owner account-scoped transaction under billing_enter_account; every gate and billing call under test runs through the real account/system-scoped paths.
+backend/src/managed/gate/pg_tests/settlement_recovery.rs exempt
+# exempt: cfg(test) managed call-timeout fixture; every gate reserve and settle runs through the real account/system-scoped paths on restricted normal LOGIN app pools (and a Neon-shaped table-owner runtime), and receipt/ledger inspection uses the isolated owner fixture. No serving code is compiled from this module.
+backend/src/managed/gate/pg_tests/call_timeouts.rs exempt
+
+# exempt: the COR-66 quality-eval one-shot (`quality_eval_ask`), an operator binary never mounted on a request path or reached from a worker. Its only direct SQL is one control-plane membership read (account_members JOIN users, neither on the 0083 RLS roster) that refuses a --user-id who is not a current member of the org account. Every tenant read and write goes through `scoped_ask::execute`, which opens its own member-scoped transactions (`Tenant::begin_member_scoped` + `set_tenant_user`) exactly as `POST /v1/queries` does.
+backend/src/bin/quality_eval_ask.rs exempt
+# exempt: cfg(test)-only (`connectors::composio::tests`, included by `#[cfg(test)] mod tests`). Its only SQL is the connector-anchor pg test's fixture seeding (`graphs`) and assertion (`source_versions`) on a disposable ORGT_TEST_BASE_URL database as its owner; the capture itself runs through `routes::composio::ingest_item`, which is already `converted`. Never compiled into serving code.
+backend/src/connectors/composio/tests.rs exempt
+
+# converted: Library evidence tenant-loop worker. Consumer account roster is identity/control data; every content read/write is inside begin_account_scoped per account. Org content uses begin_tenant_system_scoped_without_account; graph account is derived inside that scope and pinned transaction-locally for title/correction permissions. Shared SQL helpers accept only the scoped connection and never open a pool themselves.
+backend/src/workers/library_evidence.rs converted
+
+# exempt: Pure SQL generator has no pool/executor; library_read.rs executes its statement only inside the caller-scoped transaction.
+backend/src/library_read/read_model.rs exempt
+
+# converted: Listing facts render canonical reads and bounded worker-private SQL for already scoped worker/reader connections; no pool or transaction is opened here.
+backend/src/library_read/listing_facts.rs converted
+
+# exempt: Pure maintained-listing SQL renderer with no pool/executor. candidate_program executes its final clean/dirty statement only on the caller's scoped read-only RR connection; real reader proofs exercise both app roles and planes.
+backend/src/library_read/read_model/listing.rs exempt
+
+# converted: Private listing lifecycle receives only the caller graph-locked scoped connection; canonical rebuild, exact-ID ACK and contribution publication never open a pool/transaction.
+backend/src/workers/library_evidence/listing_facts.rs converted
+# converted (settings launch PR 3.3): `GET /v1/billing/summary` reads `extra_usage_settings`/`extra_usage_balances`/`extra_usage_periods` (0367, strict account_isolation; added to EXTRA_RLS_TABLES in the same PR) together with `grants`/`stripe_subscriptions`/`member_allowance_periods` inside ONE `tenancy::scope::begin_account_scoped` transaction committed before any Stripe call. The portal and seat-quote handlers read `stripe_subscriptions` through their own `begin_account_scoped` transactions. `seat_tiers`/`account_members` carry no RLS and are read unscoped by design. The `extra_usage_*` rows in `pg_tests` fixtures are seeded through the owner pool, never as `coralswarm_app`.
+backend/src/routes/billing_manage.rs converted
+# converted (settings launch PR 2.4): account deletion. Every read or write of an RLS-covered table (`graphs`, `atoms`, `nodes`, `op_log`, `oauth_tokens`, `extra_usage_*`, ...) runs inside `tenancy::scope::begin_account_scoped` for the account being deleted, one transaction per account per step; the financial writer additionally enters the 0321 fence through `lock_period_rotation`. The few unscoped statements touch tables with no RLS (`users`, `accounts`, `account_members`, `personal_orgs`, `sessions`, `user_private_keys`, `auth_codes`, `waitlist_snapshot`, `member_ocean_desired_state`) or call the 0370 SECURITY DEFINER functions (`account_deletion_claim`, `account_deletion_note_clerk_deleted`). The atom cascade is the existing `services::deletion::delete_atoms_in_graph_only`.
+backend/src/services/account_deletion.rs converted
+# converted (settings launch PR 2.4): production wiring for account deletion. The `oauth_tokens` / `composio_connections` reads open `begin_account_scoped`; the tenant-plane pass back-dates `archived_at` on the departing user's own `kind = 'member'` graphs in each org's tenant database through the reviewed tenant-system scope (the same stand-down the member-ocean reconciler uses to archive and purge), which hands the delete itself to that reconciler's audited, drain-guarded purge.
+backend/src/services/account_deletion_live.rs converted
+# exempt: cfg(test)-only (`services::account_deletion::pg_tests`, included by `#[cfg(test)] mod pg_tests`). Its SQL is fixture seeding and assertions on a disposable RELINFER_TEST_DATABASE_URL database through the owner pool; the code under test is `services/account_deletion.rs` above.
+backend/src/services/account_deletion_pg_tests.rs exempt
+# converted (in-app org deletion, control 0387). Every read or write of an RLS-covered table (`org_deletions`, `org_unpaid_watch`, `stripe_subscriptions`, `extra_usage_settings`, `org_trials`) runs inside `tenancy::scope::begin_account_scoped` for the org account being deleted, one transaction per write; the financial writers (trial end, extra usage off) also enter the 0321 fence through `lock_period_rotation`. Cross-account reads (the worker claim, the gate state, the unpaid and Clerk-dashboard sweeps, export retention, the stuck alert) are the 0387 SECURITY DEFINER functions. Unscoped statements touch tables with no RLS (`accounts`, `account_members`, `personal_orgs`, `org_revocations`, `tenant_provisioning_jobs`, `users`). The routing row and credential deletes go through the provisioner pool's definers.
+backend/src/services/org_deletion.rs converted
+# exempt: production wiring for in-app org deletion. Every RLS-table reference (`graphs`, `atoms`, `nodes`, `node_atoms`, `relationship_edge`, `meeting_transcripts`, `transcript_corrections`, `conversations`, `conversation_messages`) is the export/manifest read run against the ORG's own tenant pool (`TenantRegistry::get_or_build` from the routing row), never the shared control pool `coralswarm_app` connects to; tenant databases have whole-database isolation and no 0083 policies, same shape as bin/export_member_ocean.rs. The only control-plane read is `tenant_databases` (SELECT-only, not RLS-covered).
+backend/src/services/org_deletion_live.rs exempt
+# exempt: cfg(test)-only (`services::org_deletion::pg_tests`, included by `#[cfg(test)] mod pg_tests`). Its one RLS-covered table reference is a `grants` fixture INSERT (a live `founder_comp` grant, for the unpaid-sweep test), run through `billing::test_support::exec_fixture`, which enters the account scope and the 0321 fence; every other statement runs as `coralswarm_app` through the production functions under test, or as the owner on `org_deletions` / `org_deletion_policy` (control-only tables with no 0083 policy for the owner to be scoped by).
+backend/src/services/org_deletion_pg_tests.rs exempt
+# exempt: settings launch plan PR 3.2 (funding policy SQL). Every function takes a `&mut PgConnection` that the caller has already opened with `tenancy::scope::begin_account_scoped` and, for writers, entered with `billing::renewal::lock_period_rotation` (`billing_enter_account`): `billing::enforcement` (`check_funding`, `managed_funding_tx`), `billing::managed_reservation::settle_tx_with` and `workers::billing_derivation::write_account_ledger` are each `converted` above. The file opens no transaction of its own, so it has no literal `begin_account_scoped`; an unscoped caller would hard-error on the strict `account_isolation` policy (and the entry-fence trigger would refuse its writes), not read or write across accounts. Pinned by `funding_policy::pg_tests::an_extra_usage_write_outside_the_entry_fence_is_refused`.
+backend/src/billing/funding_policy/db.rs exempt
+backend/src/billing/funding_policy/pg_tests.rs converted
+# exempt: cfg(test) regression fixtures for the #1474 review. Every transaction is opened through `funding_policy::pg_tests::fenced` (`begin_account_scoped` + `lock_period_rotation`, `converted` above); the owner pool only seeds and inspects rows.
+backend/src/billing/funding_policy/regression_tests.rs exempt
+
+# exempt: settings launch plan PR 3.4 (extra-usage crediting SQL). `credit_in_tx` and `rate_in_force` take a `&mut PgConnection` the caller has already opened with `tenancy::scope::begin_account_scoped` and entered with `billing::renewal::lock_period_rotation` (`billing_enter_account`): `billing::extra_usage::webhook` (the Checkout webhook) is `converted` below, and the 3.5 auto-reload worker will do the same. The file opens no transaction of its own, so it has no literal `begin_account_scoped`; an unscoped caller would hard-error on the strict `account_isolation` policy and the entry-fence trigger would refuse its writes. Pinned by `billing::extra_usage::pg_tests::a_credit_outside_the_entry_fence_is_refused`.
+backend/src/billing/extra_usage/mod.rs exempt
+# converted: extra-usage Checkout webhook (top-up and credit-pack crediting). One `begin_account_scoped` transaction per event: the financial entry fence first, then the stripe_webhook_events claim, then credit_in_tx; any error rolls back the claim too.
+backend/src/billing/extra_usage/webhook.rs converted
+# converted: cfg(test) fixtures and assertions for crediting the extra-usage ledger; every account-scoped table write goes through a `begin_account_scoped` + `lock_period_rotation` transaction (`fenced`), and the webhook functions under test open their own scoped transactions.
+backend/src/billing/extra_usage/pg_tests.rs converted
+# converted: PUT /v1/billing/extra-usage and POST /v1/billing/extra-usage/topup. The PUT reads and writes extra_usage_settings inside one `begin_account_scoped` transaction under the account's financial lock; the top-up reads account facts in a scoped transaction and creates the Stripe session outside any transaction.
+backend/src/routes/extra_usage.rs converted
+# converted: cfg(test) route tests; fixtures write account-scoped tables through `begin_account_scoped` + `lock_period_rotation` (`fenced`).
+backend/src/routes/extra_usage/pg_tests.rs converted
+backend/src/billing/me.rs converted
+backend/src/billing/notices/mod.rs converted
+backend/src/billing/notices/pg_tests.rs converted
+# exempt: settings launch plan PR 3.6 (`billing::me` tests). Fixtures come from `billing::notices::pg_tests::kit`, which opens account-scoped transactions for every seeded write; the file's own reads go through `billing::me::build`, which opens `begin_account_scoped` (`billing/me.rs` is `converted` above).
+backend/src/billing/me/pg_tests.rs exempt
+# exempt: settings launch plan PR 3.6. The worker holds no transaction: every table access is inside `billing::notices::run_account`/`deliver` (`billing/notices/mod.rs`, `converted` above), each of which opens `begin_account_scoped` or `begin_tenant_system_scoped` for the account it is working on. The one direct read, `accounts.clerk_org_id`, is on `accounts`, which carries no `account_isolation` policy.
+backend/src/workers/billing_notices.rs exempt
+
+# converted: settings launch plan PR 3.5 (auto-reload). Every read and write of extra_usage_settings / _periods / _balances / _reloads / _ledger runs inside `begin_account_scoped` (via `open`, which also enters the 0321 financial fence with `lock_period_rotation`, or via `load_row`/`still_wanted`, scoped reads). The only statements on the bare control pool are two SELECTs of the SECURITY DEFINER scans `extra_usage_reload_candidates()` / `extra_usage_stale_reloads()` (migration 0374), which return account and reload ids only and are the one way to find accounts before a scope can be opened.
+backend/src/billing/extra_usage/reload/mod.rs converted
+# converted: auto-reload settlement. `apply_in_tx` takes the caller's account-scoped, entry-fenced transaction (`apply_observation` and `apply_event` open it with `begin_account_scoped` + `lock_period_rotation`) and is the only writer of reload state and the auto-reload ledger credit.
+backend/src/billing/extra_usage/reload/settle.rs converted
+# converted: cfg(test) fixtures and assertions for auto-reload; every account-scoped table write goes through a `begin_account_scoped` + `lock_period_rotation` transaction (`kit::fenced`), and the functions under test open their own scoped transactions.
+backend/src/billing/extra_usage/reload/pg_tests.rs converted
+# converted: self-serve PR C′ trial lifecycle SQL. Every function takes the caller's connection, which callers open with tenancy::scope::begin_account_scoped (and the 0321 entry via renewal::lock_period_rotation) before reading or writing org_trials, grants, credit_ledger, credit_balances or member_allowance_periods. org_trial_claims is reached only through the 0382 SECURITY DEFINER functions.
+backend/src/billing/org_trial/db.rs converted
+# converted: self-serve PR C′ trial worker pass and conversion. Each step opens its own begin_account_scoped transaction and takes the account's financial lock; no transaction spans a Stripe call.
+backend/src/billing/org_trial/lifecycle.rs converted
+# converted: self-serve PR C′ trial Checkout and resume route. org_trials/stripe_subscriptions are read and written inside begin_account_scoped transactions; accounts/account_members carry no RLS and are read unscoped by design.
+backend/src/routes/org_trial_checkout.rs converted
+# exempt: cfg(test)-only trial lifecycle suite. The owner pool only seeds and inspects rows; every handler under test runs on the restricted coralswarm_app role inside account-scoped transactions.
+backend/src/billing/org_trial/pg_tests.rs exempt
+# exempt: cfg(test)-only resubscribe seat-ledger suite (child of routes/stripe_webhook.rs). The owner pool only seeds and inspects rows; the webhook handlers under test run as coralswarm_app.
+backend/src/routes/stripe_webhook_resubscribe_pg_tests.rs exempt
+# converted: self-serve signup PR A2 create/status/retry routes. org_trials is read only inside begin_account_scoped; accounts, account_members, org_selfserve_creations and tenant_provisioning_jobs carry no RLS and are read unscoped by design; the Checkout itself is routes/org_trial_checkout.rs.
+backend/src/routes/orgs_create.rs converted
+# exempt: cfg(test)-only A2 suite. The owner pool only seeds and inspects rows (fixture writes to RLS'd billing tables go through begin_account_scoped + lock_period_rotation); every handler and the sweep under test run as coralswarm_app.
+backend/src/routes/orgs_create/pg_tests.rs exempt
+# exempt: cfg(test)-only #1540 follow-up suite (child module of routes/orgs_create/pg_tests.rs, same harness). The owner pool only seeds and inspects rows (org_trials fixtures go through begin_account_scoped + lock_period_rotation); every handler, the sweep and the trial worker under test run as coralswarm_app.
+backend/src/routes/orgs_create/pg_tests/followups.rs exempt
+# converted: self-serve signup PR A2 cleanup sweep (workers only). org_trials and stripe_subscriptions are read inside begin_account_scoped, and the abandoned-account delete runs in one begin_account_scoped transaction under the account's financial lock (lock_period_rotation); the intent and job tables carry no RLS.
+backend/src/tenancy/org_selfserve_cleanup.rs converted
+# converted: Compute-only SELECTs receive verified readonly ComputeCx transaction; no pool or independent opener.
+backend/src/services/home_metrics.rs converted
+# converted: chat find (`source_results` tiles on the scoped answer, `GET /v1/find/titles`). Every statement (source_items, source_versions, meeting_transcripts, atoms, semantic atoms, node_semantic_atoms, nodes) runs inside the one `Tenant::begin_member_scoped` transaction the module opens over only the oceans `ReachabilityResolver` returns for the caller (own private ocean, shared and team oceans it belongs to; never another member's private ocean), with `access_state = 'permitted'` and the history-floor predicates. Proven by backend/tests/find_results_pg.rs through the coralswarm_app login.
+backend/src/services/find_results.rs converted
+# converted: connector catalog (connectors redesign B1). `Facts::load` reads oauth_tokens, composio_connections, github_installations, slack_integrations and connector_sources in ONE begin_account_scoped transaction on the control pool, every statement filtered on the caller's own account_id and user_id, and rolls it back (read-only). Nothing here writes.
+backend/src/connectors/catalog/facts.rs converted
+# exempt: cfg(test)-only connector catalog suite. The owner pool only seeds and inspects rows; the GET /v1/connectors handlers under test run as coralswarm_app inside account-scoped transactions.
+backend/src/connectors/catalog/pg_tests.rs exempt
+# converted: connector catalog connect and disconnect (connectors redesign B2). `record_connect`, `keep_legacy_connection_set_up` and `clear_sources` each write connector_sources inside one begin_account_scoped transaction on the control pool, with account_id and the caller's own owner_user_id (from UserContext, or the verified OAuth state's uid) in every statement. Nothing else here reaches an RLS-covered table: the disconnects call routes::oauth::delete_connection, which scopes its own queries.
+backend/src/connectors/catalog/connect.rs converted
+# converted: connector pause gate and writers (connectors redesign B3). `read_row`, `write_paused` and `write_enabled` each run in one begin_account_scoped transaction on the control pool, with account_id and the caller's own owner_user_id (UserContext, or the owner a worker already resolved) in every statement. The gate only reads; a lookup error counts as paused.
+backend/src/connectors/catalog/pause.rs converted
+# converted: connector scope (connectors redesign B3). `write_mode` and `slack_admission` use begin_account_scoped on the control pool for connector_sources with account_id and owner_user_id predicates; `count_for_member` counts the member's own watched-item rows on the content plane inside begin_tenant_scoped(account, member), read-only and rolled back. `slack_member_channels` (no RLS, 0256) is read and written on the control pool with account_id and user_id predicates.
+backend/src/connectors/catalog/scope.rs converted
+# converted: the Google adapter's `source_runtime` counts the caller's own followed threads, Meet captures and Chat spaces through `scope::count_for_member`, which opens begin_tenant_scoped(account, member) and rolls back; the SQL it passes filters on the caller's account_id and owner id.
+backend/src/connectors/catalog/adapters/google.rs converted
+# converted: the Microsoft adapter's `source_runtime` counts the caller's own followed conversations, watched Teams resources and meeting captures through `scope::count_for_member` (begin_tenant_scoped, read-only, rolled back); the SQL it passes filters on the caller's account_id and user id.
+backend/src/connectors/catalog/adapters/microsoft.rs converted
+# exempt: cfg(test)-only suite for the pause gate and the Slack pick filter. The owner pool only seeds and inspects rows; the code under test runs its own scoped transactions.
+backend/src/connectors/catalog/pause_pg_tests.rs exempt
+# converted: connector catalog import history (connectors redesign B4). `record` and `requested_at` read and write connector_sources inside one begin_account_scoped transaction on the control pool, with account_id and the caller's own owner_user_id (from UserContext) in every statement. The write is compare-and-set on history_requested_at, so two racing requests cannot both enqueue.
+backend/src/connectors/catalog/history.rs converted
+# exempt: cfg(test)-only import history suite. The owner pool only seeds and inspects rows; the backfill handler under test runs as coralswarm_app inside account-scoped transactions.
+backend/src/connectors/catalog/history/pg_tests.rs exempt
+# exempt: Today activity cards (`GET /v1/journal/activities`). The module owns no pool or transaction: every statement (atoms, node_atoms, node_semantic_atoms, nodes, source_items, meeting_transcripts, coding_sessions) executes inside the `Transaction` its caller passes in, which `routes::journal_activities` opens with `Tenant::begin_member_scoped` over only the oceans `ReachabilityResolver` returns for the caller (so the consumer plane's app.account_id scope, the tenant plane's member-ocean RLS and the history-floor predicates all apply). Proven by backend/tests/journal_activities_pg.rs through the coralswarm_app login on both planes.
+backend/src/services/journal_activities.rs exempt
+# exempt: SQL text only (the journal's atom grouping and the coding_sessions session join): no pool, connection or execution. Store::journal_range_aggregate and services::journal_activities embed it in statements that run inside their callers' scoped transactions.
+backend/src/journal_grouping.rs exempt
+# converted (Home dashboard B2, GET /v1/connectors/status): read-only. Every production statement in this module (oauth_tokens, slack_integrations, mcp_tool_calls and the per-provider sync-state tables) runs inside the account-scoped transaction the route opens with `begin_account_scoped` on the control pool, and the atoms/graphs 30-day count runs inside the route's `begin_member_scoped` transaction on the content plane, filtered to `readable_graph_ids` and the history floor. This module takes the open transaction as a parameter and never opens its own; the `begin_account_scoped` call in this file is its pg test, which connects as the DB owner.
+backend/src/services/connector_status.rs converted
+# exempt: no SQL in this file. It opens the two scoped transactions (control `begin_account_scoped`, content `begin_member_scoped`) and hands them to services::connector_status, listed above.
+backend/src/routes/connector_status.rs exempt
+# converted: Home "From your workspaces" (GET /v1/home/workspace-activity). Reads under Tenant::begin_member_scoped with library_permitted_atoms / library_node_permitted / library_node_title
+backend/src/services/workspace_activity.rs converted
+# converted: Home launchpad reads (GET /v1/home/continue, /v1/home/whats-new, /v1/home/attention). No pool and no opener here: every statement runs in the READ ONLY Tenant::begin_member_scoped transaction routes::home_launchpad opens, over read_model_visible_windows() oceans only, with viewer predicates (conversations.user_id, atoms.ingested_by), the Library verdicts (library_conversation_title, library_node_title, library_atom_permitted, served_semantic_atoms) and crate::history_floor; the connector facts run in the route's begin_request_account_read on the control plane. Proven by backend/tests/home_launchpad_pg.rs through the coralswarm_app login.
+backend/src/services/home_launchpad.rs converted
+# converted: Today gist (services::journal_gist). The compile half runs inside workers::journal_sweep and opens a scope per statement group: begin_account_scoped on the consumer plane, begin_tenant_system_scoped_without_account on an org tenant (journal_gists, journal_rollups, graphs, served_semantic_atoms/source_versions reads; the journal_gists upsert). The read half (read_gist) owns no pool: it runs in the Tenant::begin_member_scoped transaction routes::journal_gist passes in, over the caller's D9-reachable oceans only. Proven by backend/tests/journal_gist_pg.rs through the coralswarm_app login.
+backend/src/services/journal_gist.rs converted
+backend/src/services/message_feedback.rs converted
+
+# converted: Page-load L2 pure ocean compute receives the worker's verified member-scoped READ ONLY repeatable-read transaction; explicit graph parameter, library admission and history-floor predicates, no ambient pool.
+backend/src/read_models/oceans.rs converted
+
+# converted: stored payload reads execute in the caller's verified account/member PageRead transaction. Work-lane enqueue rechecks the member; readonly repeatable compute uses the verified actor. Claim/publish/fail/due operate only on queue metadata in explicit tenant-system scope, with typed addresses, generation and claim-token fences; no system content reads. Actual coralswarm_app and tenant-app proofs are in read_models_pg.
+backend/src/read_models/store.rs converted
+# converted: registry subscription sync receives claim's explicitly system-scoped transaction and only unions public table/model subscription names. It takes no pool, reads no content and is not invoked by a request compute path.
+backend/src/read_models/registry.rs converted
+# converted: L3 home stored model; only ComputeCx verified readonly member/control transactions, explicit actor/account/graph predicates and Library admission.
+backend/src/read_models/home.rs converted
+
+# converted: L3 today stored model; only ComputeCx verified readonly member/control transactions, explicit actor/account/graph predicates and Library admission.
+backend/src/read_models/today.rs converted
+
+# converted: L3 connectors stored model; only ComputeCx verified readonly member/control transactions, explicit actor/account/graph predicates and Library admission.
+backend/src/read_models/connectors.rs converted
+
+# converted: L3 chats stored model; only ComputeCx verified readonly member/control transactions, explicit actor/account/graph predicates and Library admission.
+backend/src/read_models/chats.rs converted
+
+# converted: Metering/control SELECTs consume the worker member READ ONLY snapshots. Whole-org facts require the sealed control-verified MeteringProof and aggregate-only definer; ordinary content scope is never widened.
+backend/src/read_models/billing.rs converted
+
+# converted: Conversation and activity reads run only on ComputeCx.tx with verified account, actor and graph predicates. Checklist facts use ComputeCx.control_tx; no pool is accepted.
+backend/src/read_models/chats_detail.rs converted
+
+# converted: Coral/capture computations use only ComputeCx member READ ONLY snapshots, explicit verified graphs and Library/floor admission; blob reads retain canonical graph/plane key binding.
+backend/src/read_models/library.rs converted
+
+# converted: Ocean reads accept ComputeCx snapshots and filter content by cx.graphs. Optional archived governance facts use the existing sealed OrgAdminProof and are reprojected under current request authority.
+backend/src/read_models/oceans_pages.rs converted
+
+# converted: Topic composition uses the same verified ComputeCx snapshot for every source query, Library selectors and admitted title projection. No source helper opens a pool or transaction.
+backend/src/read_models/topics.rs converted
+
+# converted: Pure source-query assembly accepts the callers member READ ONLY transaction and an already authorized explicit graph. No pool or opener exists.
+backend/src/services/atlas_page.rs converted
+
+# converted: Pure message paging accepts the callers member transaction, preserves receipts and scope verification, and never opens a pool or scope.
+backend/src/services/conversation_page.rs converted
+
+# converted: Roster SQL accepts only the already verified admin control READ ONLY transaction; current eligibility is checked by the canonical access policy before cached GET, refresh and compute.
+backend/src/services/members_page.rs converted
+
+# converted: Personal financial SQL runs on the supplied member/account READ ONLY snapshot. Org facts require a sealed bound account/actor/org proof and use the purpose-specific aggregate-only definer, never a system content transaction.
+backend/src/services/usage_facts.rs converted

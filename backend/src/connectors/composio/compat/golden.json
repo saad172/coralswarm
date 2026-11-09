@@ -1,0 +1,306 @@
+{
+  "jira_legacy_shape": {
+    "demo": [
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "SYNTHETIC DEMO — sample jira content\nDEMO: Search indexing project\nService: jira\nProject: demo-project\nReference: \nState: \nDEMO: Improve search by retaining inspectable decisions and provider evidence. Pilot validation precedes production rollout.",
+        "kind": "project",
+        "project": "demo-project",
+        "source_id": "demo:jira:workspace:acct:user/project/demo-project",
+        "source_type": "jira_project",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-morgan",
+        "author_name": "Morgan (demo)",
+        "content": "SYNTHETIC DEMO — sample jira content\nDEMO: Search indexing rollout\nService: jira\nProject: demo-project\nReference: DEMO-1\nState: In Progress\nDecision: launch the bounded pilot after evidence links are verified. Morgan owns pagination validation.\n",
+        "kind": "issue",
+        "project": "demo-project",
+        "source_id": "demo:jira:workspace:acct:user/issue/10001",
+        "source_type": "jira_issue",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-casey",
+        "author_name": "Casey (demo)",
+        "content": "SYNTHETIC DEMO — sample jira content\ncomment\nService: jira\nProject: demo-project\nReference: \nState: \nDEMO: Retain decision evidence. Retry failed pages before expanding capture.\n",
+        "kind": "comment",
+        "project": "demo-project",
+        "source_id": "demo:jira:workspace:acct:user/comment/10001/10002",
+        "source_type": "jira_comment",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "SYNTHETIC DEMO — sample jira content\nDEMO: Search indexing project\nService: jira\nProject: demo-project\nReference: \nState: \nDEMO: Improve search by retaining inspectable decisions and provider evidence. Pilot validation precedes production rollout.",
+        "kind": "project",
+        "project": "demo-project",
+        "source_id": "demo:jira:workspace:acct:user/project/demo-project",
+        "source_type": "jira_project",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-morgan",
+        "author_name": "Morgan (demo)",
+        "content": "SYNTHETIC DEMO — sample jira content\nDEMO: Search indexing rollout\nService: jira\nProject: demo-project\nReference: DEMO-1\nState: In Progress\nDecision: the pilot is ready. Morgan verified pagination; Casey owns the production rollout and rollback rehearsal.\n",
+        "kind": "issue",
+        "project": "demo-project",
+        "source_id": "demo:jira:workspace:acct:user/issue/10001",
+        "source_type": "jira_issue",
+        "timestamp": "2026-10-11T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-casey",
+        "author_name": "Casey (demo)",
+        "content": "SYNTHETIC DEMO — sample jira content\ncomment\nService: jira\nProject: demo-project\nReference: \nState: \nDEMO: Retain decision evidence. Retry failed pages before expanding capture.\n",
+        "kind": "comment",
+        "project": "demo-project",
+        "source_id": "demo:jira:workspace:acct:user/comment/10001/10002",
+        "source_type": "jira_comment",
+        "timestamp": "2026-10-11T14:00:00+00:00"
+      }
+    ],
+    "items": [
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "Project snapshot observed by CoralSwarm\nAcme platform\nService: jira\nProject: 10000\nPlatform work",
+        "kind": "project",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/project/10000",
+        "source_type": "jira_project",
+        "timestamp": null
+      },
+      {
+        "author_id": "acct-1",
+        "author_name": "Morgan",
+        "content": "Adopt the recipe engine\nService: jira\nProject: 10000\nReference: ACME-1\nState: In Review\nDecision\nUse recipes, not code.\nLinear first\n\n",
+        "kind": "issue",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/issue/10001",
+        "source_type": "jira_issue",
+        "timestamp": "2026-10-03T15:45:12.123+00:00"
+      },
+      {
+        "author_id": "acct-2",
+        "author_name": "Casey",
+        "content": "comment\nService: jira\nProject: 10000\nReference: \nState: \nAgreed.\n",
+        "kind": "comment",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/comment/10001/20001",
+        "source_type": "jira_comment",
+        "timestamp": "2026-10-03T10:00:00+00:00"
+      },
+      {
+        "author_id": "acct-1",
+        "author_name": "Morgan",
+        "content": "comment\nService: jira\nProject: 10000\nReference: \nState: \ncargo test\n",
+        "kind": "comment",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/comment/10001/20002",
+        "source_type": "jira_comment",
+        "timestamp": "2026-10-04T16:00:00+00:00"
+      },
+      {
+        "author_id": "acct-3",
+        "author_name": "Riley",
+        "content": "comment\nService: jira\nProject: 10000\nReference: \nState: \nShipped.\n",
+        "kind": "comment",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/comment/10001/20003",
+        "source_type": "jira_comment",
+        "timestamp": "2026-10-05T10:00:00+00:00"
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "Plain description\nService: jira\nProject: 10000\nReference: ACME-2\nState: To Do\n",
+        "kind": "issue",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/issue/10002",
+        "source_type": "jira_issue",
+        "timestamp": "2026-10-02T09:00:00+00:00"
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "Project snapshot observed by CoralSwarm\nAcme platform\nService: jira\nProject: 10000\nPlatform work",
+        "kind": "project",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/project/10000",
+        "source_type": "jira_project",
+        "timestamp": null
+      },
+      {
+        "author_id": "acct-2",
+        "author_name": null,
+        "content": "Last page issue\nService: jira\nProject: 10000\nReference: ACME-3\nState: Done\n",
+        "kind": "issue",
+        "project": "10000",
+        "source_id": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/issue/10003",
+        "source_type": "jira_issue",
+        "timestamp": "2026-10-05T00:00:00+00:00"
+      }
+    ],
+    "namespace": "jira:site:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+  },
+  "linear": {
+    "demo": [
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "SYNTHETIC DEMO — sample linear content\nDEMO: Search indexing project\nService: linear\nProject: demo-project\nReference: \nState: \nDEMO: Improve search by retaining inspectable decisions and provider evidence. Pilot validation precedes production rollout.",
+        "kind": "project",
+        "project": "demo-project",
+        "source_id": "demo:linear:workspace:acct:user/project/demo-project",
+        "source_type": "linear_project",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-morgan",
+        "author_name": "Morgan (demo)",
+        "content": "SYNTHETIC DEMO — sample linear content\nDEMO: Search indexing rollout\nService: linear\nProject: demo-project\nReference: DEMO-1\nState: In Progress\nDecision: launch the bounded pilot after evidence links are verified. Morgan owns pagination validation.",
+        "kind": "issue",
+        "project": "demo-project",
+        "source_id": "demo:linear:workspace:acct:user/issue/00000000-0000-4000-8000-000000000001",
+        "source_type": "linear_issue",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-casey",
+        "author_name": "Casey (demo)",
+        "content": "SYNTHETIC DEMO — sample linear content\ncomment\nService: linear\nProject: demo-project\nReference: \nState: \nDEMO: We should retain the original decision evidence and retry failed pages before expanding capture.",
+        "kind": "comment",
+        "project": "demo-project",
+        "source_id": "demo:linear:workspace:acct:user/comment/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000002",
+        "source_type": "linear_comment",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "SYNTHETIC DEMO — sample linear content\nDEMO: Search indexing project\nService: linear\nProject: demo-project\nReference: \nState: \nDEMO: Improve search by retaining inspectable decisions and provider evidence. Pilot validation precedes production rollout.",
+        "kind": "project",
+        "project": "demo-project",
+        "source_id": "demo:linear:workspace:acct:user/project/demo-project",
+        "source_type": "linear_project",
+        "timestamp": "2026-10-10T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-morgan",
+        "author_name": "Morgan (demo)",
+        "content": "SYNTHETIC DEMO — sample linear content\nDEMO: Search indexing rollout\nService: linear\nProject: demo-project\nReference: DEMO-1\nState: In Progress\nDecision: the pilot is ready. Morgan verified pagination; Casey owns the production rollout and rollback rehearsal.",
+        "kind": "issue",
+        "project": "demo-project",
+        "source_id": "demo:linear:workspace:acct:user/issue/00000000-0000-4000-8000-000000000001",
+        "source_type": "linear_issue",
+        "timestamp": "2026-10-11T14:00:00+00:00"
+      },
+      {
+        "author_id": "demo-casey",
+        "author_name": "Casey (demo)",
+        "content": "SYNTHETIC DEMO — sample linear content\ncomment\nService: linear\nProject: demo-project\nReference: \nState: \nDEMO: We should retain the original decision evidence and retry failed pages before expanding capture.",
+        "kind": "comment",
+        "project": "demo-project",
+        "source_id": "demo:linear:workspace:acct:user/comment/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000002",
+        "source_type": "linear_comment",
+        "timestamp": "2026-10-11T14:00:00+00:00"
+      }
+    ],
+    "items": [
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "Project snapshot observed by CoralSwarm\nSearch indexing\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nImprove search; pilot before rollout.",
+        "kind": "project",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/project/6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_type": "linear_project",
+        "timestamp": null
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "Search rollout\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nReference: ENG-12\nState: In Progress\nDecision: pilot first.\n\n- owner: Morgan\nProvider transition snapshot: [{\"durationInPreviousStateSeconds\":3600,\"fromState\":{\"id\":\"s1\",\"name\":\"Todo\",\"type\":\"unstarted\"},\"id\":\"t1\",\"toState\":{\"id\":\"s2\",\"name\":\"In Progress\",\"type\":\"started\"},\"transitionedAt\":\"2026-10-01T00:00:00.000Z\"}]",
+        "kind": "issue",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/issue/issue-a",
+        "source_type": "linear_issue",
+        "timestamp": "2026-10-04T08:20:00+00:00"
+      },
+      {
+        "author_id": "user-1",
+        "author_name": "Morgan",
+        "content": "comment\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nReference: \nState: \nWe decided to ship behind a flag.",
+        "kind": "comment",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/comment/issue-a/comment-a1",
+        "source_type": "linear_comment",
+        "timestamp": "2026-10-02T11:30:00+00:00"
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "comment\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nReference: \nState: \nBot sync note",
+        "kind": "comment",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/comment/issue-a/comment-a2",
+        "source_type": "linear_comment",
+        "timestamp": "2026-10-03T09:00:00+00:00"
+      },
+      {
+        "author_id": "user-2",
+        "author_name": "Casey",
+        "content": "comment\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nReference: \nState: \nRollback rehearsed — ✅ unicode body.\nSecond line.",
+        "kind": "comment",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/comment/issue-a/comment-a3",
+        "source_type": "linear_comment",
+        "timestamp": "2026-10-04T06:15:00+00:00"
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "No description yet\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nReference: ENG-13\nState: Todo\n\nProvider transition snapshot: []",
+        "kind": "issue",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/issue/issue-b",
+        "source_type": "linear_issue",
+        "timestamp": "2026-10-02T08:00:00+00:00"
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "Project snapshot observed by CoralSwarm\nSearch indexing\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nImprove search; pilot before rollout.",
+        "kind": "project",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/project/6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_type": "linear_project",
+        "timestamp": null
+      },
+      {
+        "author_id": null,
+        "author_name": null,
+        "content": "Archive cleanup\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nReference: ENG-14\nState: \n",
+        "kind": "issue",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/issue/issue-c",
+        "source_type": "linear_issue",
+        "timestamp": "2026-10-06T00:00:00+00:00"
+      },
+      {
+        "author_id": "user-3",
+        "author_name": null,
+        "content": "comment\nService: linear\nProject: 6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6\nReference: \nState: \n",
+        "kind": "comment",
+        "project": "6f1d1c2a-3b4c-4d5e-8f60-718293a4b5c6",
+        "source_id": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd/comment/issue-c/comment-c1",
+        "source_type": "linear_comment",
+        "timestamp": "2026-10-05T12:00:00+00:00"
+      }
+    ],
+    "namespace": "linear:workspace:9a8b7c6d-0000-4000-8000-00000000abcd"
+  }
+}

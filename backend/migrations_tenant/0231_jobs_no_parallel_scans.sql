@@ -1,0 +1,25 @@
+-- The planner estimates due claim rows from table-wide `run_after`
+-- statistics, so the digest lane (`workers/digest.rs`) looks like 18,000 rows
+-- when 0 to 10 are due, and the planner answers it with a parallel bitmap
+-- scan: two background workers forked per poll, on trunk and with 0229
+-- alike. Measured on a copy of tenant-coralswarm (2026-11-02): the digest
+-- claim read 74 to 122 shared buffers per run through the parallel plan and
+-- 16 (idle) to 47 to 61 (ten due rows) through the same plan run serially;
+-- the source-atom claim 39 under its custom plan and 196 under a forced
+-- generic plan (trunk 13,575 and 13,396). Every hot poll on `jobs`
+-- is an index probe after 0229 and 0230, and a parallel scan only ever wins
+-- under that estimate, so the table opts out of parallel scans. The full
+-- scans that remain run serially: the statement-embed sweep with its status
+-- cast (457 ms instead of 430 ms with two workers, until the cast goes) and,
+-- on the control plane, the chain-health outcome scan over done rows
+-- (`routes/admin.rs`).
+-- A reloption, no rewrite: ALTER TABLE ... SET takes SHARE UPDATE EXCLUSIVE.
+-- It also makes later index builds on `jobs` serial (the two claim indexes
+-- above are built before it runs; on the copy 0229 took 1.5 s warm and
+-- 4.3 s cold, about 17 s inside a run that then failed on the lock timeout,
+-- and 0230 2.7 to 2.8 s).
+-- PAIRED WITH: control 0420 (DDL byte-identical). `jobs` is a shared table
+-- and `check_schema_parity.sh` diffs its schema.
+-- Down: ALTER TABLE jobs RESET (parallel_workers);
+
+ALTER TABLE jobs SET (parallel_workers = 0);

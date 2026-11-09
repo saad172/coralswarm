@@ -1,0 +1,169 @@
+-- Migration: 0141_llm_usage_provider_cost
+-- Description: PR2 of the usage-metering + credit-ledger train (13-PR plan,
+--   `.scratch/usage-metering/plan.md` §1 PR2) — the provider-switch addendum
+--   columns PLUS the join-key columns PR9's derivation worker needs to
+--   attribute cost to a unit of work — one pair for jobs/queries
+--   (`source_job_id`/`source_query_id`) and, per a 2026-08-13 revision found
+--   in review of this PR, a second pair for the journal compile
+--   (`source_journal_period`/`source_journal_granularity`, see below) — added
+--   ahead of any code that writes them (that code is PR4/PR5).
+--
+--   `llm_usage` today is exactly `id, account_id, graph_id, task, model,
+--   input_tokens, output_tokens, created_at, cache_creation_input_tokens,
+--   cache_read_input_tokens` (0044/0073) — there is no join key back to the
+--   `jobs` row or `query_history` row whose execution produced a given call,
+--   and no other FK anywhere recovers that link. Without one, "the cost of
+--   job X" is not computable: PR9 can cursor over completed `ExtractEntities`
+--   jobs, sum `llm_usage`, and nothing connects the two. These columns are
+--   also the idempotency keys PR8's `credit_ledger` unique indexes key on
+--   (`source_job_id`, `source_query_id`, `journal_hour`) — get them wrong and
+--   PR9 either can't be built as specified or double-charges on any re-run.
+--
+--   * `provider` — which LLM vendor served the call (Anthropic today,
+--     OpenRouter/others later per the provider-switch addendum). `DEFAULT
+--     'anthropic'` IS the backfill: every existing row predates any other
+--     provider, so no one-shot backfill script is needed or written.
+--   * `cost_usd` — provider-reported cost where available (PR3 plumbs this
+--     onto the response types; PR9 falls back to `model_rates` when absent).
+--     NULL, never `0.0`, when unknown — a defaulted-to-zero cost reads as
+--     free downstream (see plan §4 item 6).
+--   * `source_job_id` — the `jobs.id` of the job whose execution made this
+--     call (the four tenant-loop workers: extract, extract_relationships,
+--     entity_resolution, infer_expertise).
+--   * `source_query_id` — the `query_history.id` for request-path (synthesis/
+--     ask) calls. NOTE: `query_history` does not mint its id until AFTER
+--     synthesis completes today (`store::record_query` lets Postgres
+--     generate it via `DEFAULT gen_random_uuid()` and never surfaces it to
+--     the caller) — reserving against it as-is is impossible. PR4 mints the
+--     query UUID in the handler at request start and binds it explicitly on
+--     both the reserve and the `record_query` insert. That caller-side fix
+--     is PR4's job; this migration only adds the column it will populate.
+--
+--   Both source-id columns are DELIBERATELY NULLABLE and left UNBACKFILLED.
+--   Pre-epoch rows are unattributable to a unit of work by construction —
+--   consistent with "epoch at deploy, no backfill" (plan §5). Making either
+--   `NOT NULL` would break every existing caller (nothing threads a value
+--   until PR4) and every pre-epoch row. PR9 counts-and-alerts on rows with
+--   neither source id set rather than silently folding them into a total.
+--
+--   No FK on `source_job_id`/`source_query_id`: same posture 0044's own
+--   header already states for `account_id`/`graph_id` on this table —
+--   `llm_usage` is an append-only accounting log, recorded loosely, and nothing
+--   here needs referential-integrity enforcement against `jobs`/`query_history`
+--   (which would also complicate any future retention/pruning of either
+--   table independent of this log).
+--
+--   Nothing writes `provider`/`cost_usd`/`source_job_id`/`source_query_id`/
+--   `source_journal_period`/`source_journal_granularity` in this PR.
+--   `llm::usage::record`'s call sites (24 of them, including
+--   `journal_sweep.rs`'s two) are threaded starting in PR4 (`UsageContext`);
+--   this migration exists strictly ahead of that work, per the plan's
+--   explicit reasoning that adding these columns after PR4 would force a
+--   SECOND paired migration and a second pass over every call site.
+--
+--   `provider TEXT NOT NULL DEFAULT 'anthropic'` and the five nullable
+--   columns are all `ADD COLUMN` with either a non-volatile constant default
+--   or no default — all fast, metadata-only operations in Postgres 11+ (no
+--   full-table rewrite); the `CHECK` on `source_journal_granularity` is a
+--   `NOT VALID`-free constant-expression validation over an all-NULL column
+--   and equally cheap. `llm_usage` is still a hot, high-write table (every
+--   background LLM call and every synthesis prose call eventually writes
+--   here), so `SET LOCAL lock_timeout = '3s'` protects against queuing behind
+--   a long-running transaction that already holds a conflicting lock — same
+--   precedent as `0134_job_outcomes` on the equally hot `jobs` table.
+--
+--   ── Revision: a third unit-of-work class, found in review ──
+--   `source_job_id`/`source_query_id` cover jobs and request-path queries, but
+--   NOT the journal compile: `workers::journal_sweep::compile_hour` (hourly
+--   tier) and `compile_tier_group` (day/week/month tiers) both call
+--   `llm::usage::record(task="journal_compile", ...)` with NO `jobs` row at
+--   all — the sweep is time-driven, not queue-driven (`rg -n "job\.id|job_id"
+--   backend/src/workers/journal_sweep.rs` returns nothing). Per PR #477
+--   (2026-08-03), the hourly compile is the highest-call-volume LLM site on
+--   the plane (one per dirty hour, every 10-minute sweep tick, across every
+--   account/org). Without a join key, every one of those rows would land with
+--   BOTH `source_job_id` and `source_query_id` NULL — indistinguishable from
+--   a genuine pre-epoch/unattributed row, which PR9 counts-and-alerts on and
+--   NEVER folds into a total. That would make the single largest line item on
+--   the plane permanently unbillable and permanently alerting, the same class
+--   of gap the plan's 2026-08-13 revision already fixed once for jobs/queries.
+--
+--   * `source_journal_period` — the compile's own tier boundary:
+--     `candidate.hour_start` at `compile_hour`, the `period_start` parameter
+--     at `compile_tier_group`. Together with the table's existing `graph_id`
+--     and the new `source_journal_granularity` below, this fully identifies
+--     the unit of work a journal-compile `llm_usage` row belongs to (there is
+--     no per-compile id anywhere to reuse — `journal_rollups`' own natural
+--     key is exactly `(user_id, graph_id, granularity, hour_start)`, i.e. the
+--     same shape, per migration `0117`).
+--   * `source_journal_granularity` — `'hour' | 'day' | 'week' | 'month'`, the
+--     `granularity` parameter at `compile_tier_group` and the literal
+--     `'hour'` at `compile_hour`. NOT redundant with `source_journal_period`
+--     alone: `compile_tier_group`'s day/week/month `period_start` values are
+--     tier-boundary-aligned and therefore ALIAS onto hour boundaries — a day
+--     compile's `period_start` at UTC midnight is the identical timestamp
+--     value to that same day's 00:00 HOUR compile's `hour_start`. Keying only
+--     on `(graph_id, source_journal_period)` would collide those two into one
+--     ledger entry and silently drop one. Same CHECK vocabulary as
+--     `journal_rollups.granularity` (migration `0117`), which is the direct
+--     precedent for these four literal values.
+--
+--   Both new columns are NULLABLE and unbackfilled, same reasoning as
+--   `source_job_id`/`source_query_id` above: pre-epoch journal-compile rows
+--   are unattributable to a unit of work by construction, and nothing writes
+--   either column until PR4/PR5 threads it through `journal_sweep.rs`'s two
+--   `usage::record` call sites.
+--
+--   The three supporting partial indexes PR9 needs (`source_job_id`,
+--   `source_query_id`, and `(graph_id, source_journal_granularity,
+--   source_journal_period)`, all `WHERE ... IS NOT NULL` on the relevant
+--   column) are deliberately NOT in this file — see
+--   `0142_llm_usage_source_job_id_index_concurrently.sql`,
+--   `0143_llm_usage_source_query_id_index_concurrently.sql`, and
+--   `0144_llm_usage_source_journal_period_index_concurrently.sql`. `llm_usage`
+--   is a live production table taking continuous writes, and this repo's own
+--   established precedent for adding ANY index to a hot table
+--   (0058/0059 atoms, 0074 atoms, 0075 meeting_transcripts, 0098/0099
+--   coding-session atoms) is `CREATE INDEX CONCURRENTLY` in its own
+--   `-- no-transaction`, single-statement file — a plain `CREATE INDEX`
+--   takes a `SHARE` lock for the whole scan, blocking every concurrent
+--   INSERT against the table regardless of today's write rate, which is not
+--   guaranteed to hold for the life of the migration. That every one of these
+--   join-key columns is 100% NULL at the instant this migration runs (nothing
+--   has ever populated them) does not change the lock story: a plain `CREATE INDEX`
+--   still needs a `SHARE` lock for the duration of the heap scan that
+--   confirms every row fails the partial predicate, even though the
+--   resulting index has zero entries — it is the LOCK, not the resulting
+--   index size, that CONCURRENTLY exists to avoid. Following established
+--   precedent here rather than inventing a new one, per this PR's own
+--   instructions.
+--
+-- PAIRED WITH: backend/migrations_tenant/0048_llm_usage_provider_cost.sql —
+--   `llm_usage` is byte-identical across both trees and is NOT in
+--   `scripts/check_schema_parity.sh`'s `CONTROL_TABLES` roster, so the DDL
+--   statements below (below the header) must stay byte-for-byte identical to
+--   that file's. Only this header's prose is control-tree-specific.
+--
+-- Depends on: 0044_llm_usage.sql (creates llm_usage), 0073_llm_usage_cache_tokens.sql
+--   (most recent prior ALTER on this table, same lock-timeout-free-because-fast
+--   column-add shape), 0117_journal_tier_rollups.sql (the
+--   `granularity IN ('hour','day','week','month')` vocabulary this migration
+--   reuses for `source_journal_granularity`).
+-- Down:
+--   ALTER TABLE llm_usage DROP CONSTRAINT IF EXISTS llm_usage_source_journal_granularity_check;
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS provider;
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS cost_usd;
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS source_job_id;
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS source_query_id;
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS source_journal_period;
+--   ALTER TABLE llm_usage DROP COLUMN IF EXISTS source_journal_granularity;
+
+SET LOCAL lock_timeout = '3s';
+
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'anthropic';
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS cost_usd NUMERIC;
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS source_job_id UUID;
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS source_query_id UUID;
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS source_journal_period TIMESTAMPTZ;
+ALTER TABLE llm_usage ADD COLUMN IF NOT EXISTS source_journal_granularity TEXT
+    CHECK (source_journal_granularity IS NULL OR source_journal_granularity IN ('hour', 'day', 'week', 'month'));

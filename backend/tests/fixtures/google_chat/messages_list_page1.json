@@ -1,0 +1,48 @@
+{
+  "messages": [
+    {
+      "name": "spaces/AAAAAAAAAAA/messages/msg-0001",
+      "sender": {
+        "name": "users/1001",
+        "displayName": "Alice Ng",
+        "type": "HUMAN"
+      },
+      "createTime": "2026-08-01T09:00:00Z",
+      "text": "morning all, deploy window opens at 10am",
+      "formattedText": "morning all, deploy window opens at 10am"
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/messages/msg-0002",
+      "sender": {
+        "name": "users/1002",
+        "displayName": "Bob Chen",
+        "type": "HUMAN"
+      },
+      "createTime": "2026-08-01T09:05:00Z",
+      "text": "@Alice Ng ack, I'll watch the dashboards",
+      "formattedText": "<users/1001> ack, I'll watch the dashboards",
+      "annotations": [
+        {
+          "type": "USER_MENTION",
+          "startIndex": 0,
+          "length": 9,
+          "userMention": { "user": { "name": "users/1001", "type": "HUMAN" }, "type": "MENTION" }
+        }
+      ]
+    },
+    {
+      "name": "spaces/AAAAAAAAAAA/messages/msg-0003",
+      "sender": {
+        "name": "users/1001",
+        "displayName": "Alice Ng",
+        "type": "HUMAN"
+      },
+      "createTime": "2026-08-01T09:10:00Z",
+      "text": "thanks — will ping this thread when it's done",
+      "formattedText": "thanks — will ping this thread when it's done",
+      "thread": { "name": "spaces/AAAAAAAAAAA/threads/thread-0001" },
+      "threadReply": true
+    }
+  ],
+  "nextPageToken": "example_10"
+}

@@ -1,0 +1,78 @@
+[package]
+name = "coralswarm-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+aes-gcm = "0.10"
+hex = "0.4"
+rand = "0.8"
+thiserror = "1"
+zeroize = { version = "1", features = ["derive"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["codec"] }
+bytes = "1"
+aws-config = { version = "1", default-features = false, features = ["rustls"] }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["rustls"] }
+aws-credential-types = "1"
+aws-smithy-async = { version = "1", features = ["rt-tokio"] }
+ort = { version = "=2.0.0-rc.12", features = ["download-binaries", "copy-dylibs"] }
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+
+# ── Syntax-aware code chunking (docs/connectors/github.md §3.9, PR B) ──────
+# ALL optional, gated behind the `code-chunking` feature below — grammar
+# crates each bundle a C parser.c (some also scanner.c) compiled via a
+# `cc`-crate build script, and `tree-sitter` itself is a real dependency
+# edge that nothing else in this crate (the embedder, R2, crypto) needs.
+# See that feature's own doc comment
+# for why this must stay opt-in rather than a normal/default dependency.
+tree-sitter = { version = "0.25", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+tree-sitter-go = { version = "0.25", optional = true }
+tree-sitter-java = { version = "0.23", optional = true }
+tree-sitter-c-sharp = { version = "0.23", optional = true }
+
+[features]
+# GPU execution providers are opt-in. The default (CPU-only) build links no
+# CUDA/DirectML binaries, so the Linux Fly/Docker image avoids the large CUDA
+# download. Build with `--features gpu` to enable CUDA (all platforms) and
+# DirectML (Windows) execution providers in embed_ort.rs.
+gpu = ["ort/cuda", "ort/directml"]
+# Test-only API surface (graph-temporal-memory hardening, fix 2): gates
+# `R2Client::new_with_endpoint_override`, which lets a local S3-compatible
+# fake (MinIO, s3mock) serve R2 traffic in tests. Enabled ONLY as a
+# `dev-dependency` feature of consuming crates (see `backend/Cargo.toml`), so
+# it is never compiled into a production binary — see `r2.rs`'s doc comment
+# on that constructor for the full rationale.
+test-utils = []
+# Tree-sitter syntax-aware chunking for `ChunkStrategy::Code` (docs/
+# connectors/github.md §3.9). Deliberately NOT a default feature:
+# `backend/Cargo.toml` exposes its OWN `code-chunking` feature (non-default)
+# that forwards to this one, and the real Fly deployment build passes
+# `--features code-chunking` explicitly when building `coralswarm-backend`
+# (see that crate's own feature doc and docs/connectors/github.md §9's ledger
+# entry) — with it off, `github_code` atoms still chunk, via the
+# fixed-line-window fallback (§3.9), just without syntax-aware boundaries.
+code-chunking = [
+    "dep:tree-sitter",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-typescript",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-python",
+    "dep:tree-sitter-go",
+    "dep:tree-sitter-java",
+    "dep:tree-sitter-c-sharp",
+]
+
+[dev-dependencies]
+axum = { workspace = true }

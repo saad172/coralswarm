@@ -1,0 +1,48 @@
+# Connector ROUTE modules governed by contract invariant I11 — "a connector
+# captures; it does not answer" (docs/connectors/CONNECTOR_CONTRACT.md §2).
+#
+# WHAT I11 FORBIDS. None of these may reach the retrieval/answer engine,
+# because on a chat platform the claim about WHICH PERSON is asking comes from
+# the platform rather than from the person — the platform vouches, it does not
+# prove (capability C16). Serving a read from one of these surfaces would make
+# CoralSwarm's private-ocean boundary exactly as strong as the customer's own
+# workspace-admin model. I11 records the four conditions for lifting this.
+#
+# SCOPE IS TWO PARTS AND ONLY ONE OF THEM IS THIS FILE.
+#   1. Everything under `backend/src/connectors/` is globbed IN FULL by the
+#      guard. That half grows by itself, so a new connector cannot be added
+#      outside the guard's reach by accident.
+#   2. Connector-owned modules under `backend/src/routes/` are listed HERE,
+#      by hand, because that directory also holds ordinary product routes
+#      which legitimately DO answer. A name-pattern sweep cross-checks this
+#      list (see the guard), so a new `routes/<platform>*.rs` fails until a
+#      human classifies it.
+#
+# A listed file that no longer exists fails the guard, so this list cannot rot
+# into a blanket exemption without someone noticing.
+#
+# Format: one repo-relative path per line. Comments (`#`) and blanks ignored.
+
+backend/src/routes/slack_events.rs
+backend/src/routes/slack_interactivity.rs
+backend/src/routes/slack.rs
+backend/src/routes/teams_bot.rs
+backend/src/routes/teams_ingest.rs
+backend/src/routes/teams.rs
+backend/src/routes/google_chat.rs
+backend/src/routes/graph_webhook.rs
+backend/src/routes/google_push.rs
+backend/src/routes/google_calendar_push.rs
+# gsuite Train G2.4 / m365 Train PR 3.4 (CodeRabbit round 1, #1005): Gmail/
+# Outlook "everything mode" opt-in — genuine connector-owned surfaces that
+# matched neither this list nor the (now-widened) ROUTE_NAME_PATTERN, an
+# unclassified gap in this guard's own coverage.
+backend/src/routes/gmail_everything_mode.rs
+backend/src/routes/outlook_everything_mode.rs
+
+# Existing connector-owned scheduling and onboarding routes are governed by I11.
+backend/src/routes/outlook_schedule.rs
+backend/src/routes/teams_onboarding.rs
+
+# B4 production ingestion admission test module; enforce I11 here too.
+backend/src/routes/teams_source_admission_pg_tests.rs

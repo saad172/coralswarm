@@ -1,0 +1,33 @@
+{
+  "name": "@coralswarm/widgets",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MCP Apps / ChatGPT inline widgets for ask_ocean, search_atoms, get_reef, recent_activity.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "vite --config vite.dev.config.ts",
+    "drift": "bash scripts/check-drift.sh"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "@testing-library/preact": "3.2.4",
+    "@types/node": "22.15.0",
+    "jsdom": "30.0.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.0",
+    "vite-plugin-singlefile": "2.3.3",
+    "vitest": "5.0.0"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  }
+}

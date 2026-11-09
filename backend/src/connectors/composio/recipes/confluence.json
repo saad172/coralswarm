@@ -1,0 +1,190 @@
+{
+  "toolkit": "confluence",
+  "label": "Confluence",
+  "version": "20260915_00",
+  "scopes": {
+    "required": [
+      "read:content-details:confluence"
+    ],
+    "optional": [
+      "offline_access"
+    ]
+  },
+  "read_tools": [
+    "CONFLUENCE_CQL_SEARCH",
+    "CONFLUENCE_WHO_AM_I"
+  ],
+  "namespace": {
+    "kind": "site",
+    "source": {
+      "match": {
+        "anchor": {
+          "call": {
+            "tool": "CONFLUENCE_CQL_SEARCH",
+            "args": {
+              "cql": "type = space",
+              "limit": 1,
+              "excerpt": "none"
+            }
+          },
+          "value": "/_links/base"
+        },
+        "candidates": {
+          "call": {
+            "tool": "CONFLUENCE_WHO_AM_I",
+            "args": {}
+          },
+          "list": [
+            "/data/sites",
+            "/sites"
+          ]
+        },
+        "key": "/url",
+        "id": "/id",
+        "compare": "origin"
+      }
+    }
+  },
+  "streams": [
+    {
+      "kind": "content",
+      "change": "filter",
+      "call": {
+        "tool": "CONFLUENCE_CQL_SEARCH",
+        "args": {
+          "cql": "type in (page, blogpost) and lastmodified >= now(\"-{{since_minutes}}m\") order by lastmodified desc",
+          "expand": "content.body.storage,content.version,content.history,content.space",
+          "excerpt": "none",
+          "includeArchivedSpaces": true,
+          "limit": "{{page_size}}",
+          "start": "{{offset}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "style": "offset",
+        "total": "/totalSize"
+      },
+      "fields": {
+        "id": "/content/id",
+        "updated_at": [
+          "/content/version/when",
+          "/lastModified"
+        ],
+        "container": {
+          "kind": "space",
+          "id": [
+            "/content/space/key",
+            "/space/key"
+          ],
+          "name": [
+            "/content/space/name",
+            "/space/name"
+          ]
+        },
+        "title": [
+          "/content/title",
+          "/title"
+        ],
+        "body": {
+          "path": "/content/body/storage/value",
+          "format": "html"
+        },
+        "state": "/content/status",
+        "reference": "/url",
+        "author": {
+          "object": [
+            "/content/history/createdBy",
+            "/content/version/by"
+          ],
+          "id": "/accountId",
+          "name": [
+            "/displayName",
+            "/publicName"
+          ]
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "{title}"
+        ]
+      }
+    },
+    {
+      "kind": "comment",
+      "change": "filter",
+      "call": {
+        "tool": "CONFLUENCE_CQL_SEARCH",
+        "args": {
+          "cql": "type = comment and lastmodified >= now(\"-{{since_minutes}}m\") order by lastmodified desc",
+          "expand": "content.body.storage,content.version,content.history,content.container,content.space",
+          "excerpt": "none",
+          "includeArchivedSpaces": true,
+          "limit": "{{page_size}}",
+          "start": "{{offset}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "style": "offset",
+        "total": "/totalSize"
+      },
+      "fields": {
+        "id": "/content/id",
+        "updated_at": [
+          "/content/version/when",
+          "/lastModified"
+        ],
+        "parent": "/content/container/id",
+        "container": {
+          "kind": "space",
+          "id": [
+            "/content/space/key",
+            "/space/key"
+          ],
+          "name": [
+            "/content/space/name",
+            "/space/name"
+          ]
+        },
+        "body": {
+          "path": "/content/body/storage/value",
+          "format": "html"
+        },
+        "author": {
+          "object": [
+            "/content/history/createdBy",
+            "/content/version/by"
+          ],
+          "id": "/accountId",
+          "name": [
+            "/displayName",
+            "/publicName"
+          ]
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "Comment in {container}: {excerpt}",
+          "Comment: {excerpt}"
+        ]
+      }
+    }
+  ],
+  "limits": {
+    "coverage": "every page, blog post and comment (footer and inline) the connected account can read on the site, changed after you connect",
+    "history": "nothing from before you connect is imported",
+    "description_history": "each captured change keeps the previous version as evidence; Confluence's own version history is not read",
+    "archives": "content in archived spaces is included when it changes",
+    "not_captured": "attachments, whiteboards, databases, live docs' real-time edits between versions, labels, likes, page restrictions",
+    "deletions": "trashed or deleted content is never removed from the ocean"
+  },
+  "references": [
+    "https://docs.composio.dev/toolkits/confluence.md",
+    "https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-search/#api-wiki-rest-api-search-get",
+    "https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/#lastmodified",
+    "https://developer.atlassian.com/cloud/confluence/cql-functions/"
+  ]
+}

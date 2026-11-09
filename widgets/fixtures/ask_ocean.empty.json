@@ -1,0 +1,13 @@
+{
+  "toolInput": {
+    "question": "What did Dana say about the Q3 pricing change?",
+    "ocean_ids": ["818ccfa2-051b-417a-96af-06335e439fac"]
+  },
+  "toolOutput": {
+    "mode": "no_answer",
+    "answer": null,
+    "citations": [],
+    "citation_details": [],
+    "unreachable_oceans": []
+  }
+}

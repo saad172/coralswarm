@@ -1,0 +1,765 @@
+# PR gate (CI redesign, .scratch/ci-redesign decisions 1-3, 5, 13).
+#
+#   tree     -> has this exact source tree already passed? (skip-on-identical-tree)
+#   guard-scripts  scripts/ci_guards.sh: every database-free invariant guard
+#                  ci.yml and deploy.yml run, in one script
+#   marketing, widgets -> the cheap frontend checks ci.yml's `marketing` and
+#               `widgets` jobs ran (typecheck + build; widgets' drift check
+#               rebuilds and diffs against backend/assets/widgets)
+#   check    -> PR pushes only: `cargo check` of the backend lib and bins
+#               (`--features e2e`), the same targets `build` compiles. The
+#               fast compile gate.
+#   build    -> merge queue only: backend debug build ONCE (sccache,
+#               `--features e2e`) for the e2e stack
+#   build-web -> web standalone build, in parallel with `build`. `next build`
+#               type-checks the web project ("Linting and checking validity of
+#               types"), so it is also the web typecheck `guards` requires;
+#               there is no separate `npm run typecheck` job
+#   e2e-shard (matrix) -> merge queue only: download both artifacts, boot the
+#               in-runner stack, run one Playwright shard
+#   e2e-quarantine -> merge queue only: `@quarantine` scenarios; never blocks
+#
+# e2e runs once per merge-queue group, not on every PR push: a PR is gated by
+# the fast checks (tree, guard scripts, check, web build, marketing, widgets),
+# and nothing reaches main without the queue's e2e passing on the combined tree.
+#   n1-locate, n1-build-old, n1-compat (merge_group only) -> the production
+#               release's backend serving THIS tree's schema and seeded data
+#               (decision 11)
+#   guards, e2e -> the two aggregate jobs a ruleset requires. They are the only
+#               jobs whose names are load-bearing; rename nothing else into them.
+#
+# Every job runs on standard `ubuntu-latest` (decision 13: Enterprise minutes
+# cover standard runners only).
+name: PR
+
+on:
+  pull_request:
+  merge_group:
+
+# One run per PR; a new push cancels the run in progress. A merge-queue run is
+# never cancelled by another (each group is its own run id).
+#
+# The group is keyed on the PR NUMBER and the workflow, and cancel-in-progress
+# is a literal `true` (merge-queue groups are unique, so nothing else can ever
+# share one). The previous form keyed on head_ref with an expression for
+# cancel-in-progress left a superseded run building (run 40780435617).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'merge_group' && format('mq-{0}', github.run_id) || format('pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SHARDS: 4
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: "22"
+
+jobs:
+  tree:
+    name: tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tree: ${{ steps.tree.outputs.tree }}
+      passed: ${{ steps.marker.outputs.cache-hit == 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - id: tree
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+      # Written by the `e2e` job below only when guards AND every shard passed
+      # on this exact tree. Actions caches are branch-scoped: this catches a
+      # re-run or a re-push of an unchanged tree on the same PR (a rebased
+      # stack whose content did not move), and anything already proven on
+      # the base branch.
+      - id: marker
+        uses: actions/cache/restore@v5
+        with:
+          path: .pr-pass
+          # A merge-queue run owes one more check than a PR run (n1-compat),
+          # so it only trusts a pass recorded by another merge-queue run.
+          key: pr-pass-${{ github.event_name == 'merge_group' && 'mq-' || '' }}${{ steps.tree.outputs.tree }}
+          lookup-only: true
+      - if: steps.marker.outputs.cache-hit == 'true'
+        run: echo "::notice::tree ${{ steps.tree.outputs.tree }} already passed guards and e2e; skipping"
+
+  guard-scripts:
+    name: guard scripts
+    needs: tree
+    if: needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # check_migrations.sh diffs merged migrations against the base.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Invariant guards
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: bash scripts/ci_guards.sh
+
+  check:
+    name: check
+    needs: tree
+    if: github.event_name == 'pull_request' && needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      # A throttled Actions cache ("Egress is over the account limit") must
+      # degrade to an uncached compile, not fail the job.
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CORALSWARM_E2E_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install build packages
+        run: |
+          sudo python3 scripts/ci_apt_setup.py
+          sudo apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout APT::Update::Error-Mode
+          sudo timeout --kill-after=10s 180s apt-get update -qq
+          sudo timeout --kill-after=10s 180s apt-get install -y -qq --no-install-recommends libclang-dev pkg-config cmake
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+          shared-key: pr-e2e
+      - name: Backend check (lib + bins, e2e feature)
+        run: |
+          started=$SECONDS
+          cargo check -p coralswarm-backend --features e2e --lib --bins
+          echo "::notice::backend check $((SECONDS - started))s"
+          sccache --show-stats
+
+  build:
+    name: build
+    needs: tree
+    if: github.event_name == 'merge_group' && needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      # A throttled Actions cache ("Egress is over the account limit") must
+      # degrade to an uncached compile, not fail the job.
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+      RUSTC_WRAPPER: sccache
+      # sccache cannot cache incremental compilation; debuginfo off keeps the
+      # backend rlib and the uploaded binaries small and the build fast.
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      # backend/build.rs refuses the e2e feature without this marker (and in
+      # any optimized profile): it can never ride along into a deploy build.
+      CORALSWARM_E2E_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install build packages
+        run: |
+          sudo python3 scripts/ci_apt_setup.py
+          sudo apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout APT::Update::Error-Mode
+          sudo timeout --kill-after=10s 180s apt-get update -qq
+          sudo timeout --kill-after=10s 180s apt-get install -y -qq --no-install-recommends libclang-dev pkg-config cmake
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      # Registry + git sources only; compiled output is sccache's job.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+          shared-key: pr-e2e
+      - name: Backend debug build (e2e feature)
+        run: |
+          started=$SECONDS
+          cargo build -p coralswarm-backend --features e2e \
+            --bin coralswarm-backend --bin migrate_control --bin migrate_tenants
+          echo "::notice::backend debug build $((SECONDS - started))s"
+          mkdir -p dist/backend
+          cp target/debug/coralswarm-backend target/debug/migrate_control target/debug/migrate_tenants dist/backend/
+          sccache --show-stats
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-backend
+          path: dist/
+          retention-days: 3
+          if-no-files-found: error
+
+  build-web:
+    name: build web
+    needs: tree
+    if: needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # Registry drift is compiled here; the declaration guard stays database-
+      # and toolchain-free. No runtime database or migration is needed.
+      - name: Install registry build packages
+        run: |
+          sudo python3 scripts/ci_apt_setup.py
+          sudo apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout APT::Update::Error-Mode
+          sudo timeout --kill-after=10s 180s apt-get update -qq
+          sudo timeout --kill-after=10s 180s apt-get install -y -qq --no-install-recommends libclang-dev pkg-config cmake
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: page-read-manifest
+      - name: Web standalone build (includes the web typecheck)
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+          ONNXRUNTIME_NODE_INSTALL: skip
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: |
+          started=$SECONDS
+          (cd web && npm ci --no-audit --no-fund)
+          (cd web && npm run drift)
+          # Runtime observer tests need pinned e2e packages; invariant guards
+          # intentionally run without npm dependencies.
+          npm --prefix e2e ci --no-audit --no-fund
+          node --test e2e/perf/*.test.mjs
+          node --test e2e/stack/clerk-client.test.mjs e2e/stack/clerk-cleanup.test.mjs e2e/lib/clerk-ownership.test.mjs
+          node e2e/stack/build-web.mjs --skip-install
+          echo "::notice::web build $((SECONDS - started))s"
+          mkdir -p dist
+          tar -C web -czf dist/web-standalone.tar.gz .next/standalone
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-web
+          path: dist/
+          retention-days: 3
+          if-no-files-found: error
+
+  # Cheap frontend checks, as ci.yml's `marketing` and `widgets` jobs run them
+  # (their vitest suites stay out: decision 1, e2e replaces unit suites).
+  marketing:
+    name: marketing typecheck + build
+    needs: tree
+    if: needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: marketing-web
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: marketing-web/package-lock.json
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+
+  widgets:
+    name: widgets typecheck + build drift
+    needs: tree
+    if: needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: widgets
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: widgets/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check
+      # Builds the widgets and diffs them against backend/assets/widgets.
+      - run: npm run drift
+
+  e2e-shard:
+    name: e2e shard ${{ matrix.shard }}
+    needs: [tree, build, build-web]
+    if: github.event_name == 'merge_group' && needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      CI: "1"
+      E2E_SHARD_INDEX: ${{ matrix.shard }}
+      # Every run, shard and laptop shares the Clerk dev instance; teardown
+      # deletes only users whose email carries this id.
+      E2E_RUN_ID: gh${{ github.run_id }}x${{ github.run_attempt }}s${{ matrix.shard }}
+      # Playwright splits by test count in its scheduling order, which puts
+      # every worker-fixture spec (the heavy page-load and page-model ones)
+      # in the last shard. These per-shard shares of the count balance the
+      # measured durations instead (README "Under 30 seconds per scenario").
+      PWTEST_SHARD_WEIGHTS: "52:74:80:54"
+      E2E_BACKEND_BIN_DIR: ${{ github.workspace }}/dist/backend
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: build-*
+          path: dist
+          merge-multiple: true
+      - name: Unpack
+        run: |
+          chmod +x dist/backend/*
+          tar -C web -xzf dist/web-standalone.tar.gz
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install e2e harness
+        working-directory: e2e
+        run: |
+          npm ci --no-audit --no-fund
+          echo "PLAYWRIGHT_VERSION=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_ENV"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}-chromium
+      - name: Install Chromium
+        working-directory: e2e
+        run: |
+          sudo python3 ../scripts/ci_apt_setup.py
+          sudo apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout APT::Update::Error-Mode
+          # Always install the pinned Playwright version's complete system deps,
+          # even on a browser-cache hit. Root timeout can also terminate root APT.
+          sudo timeout --kill-after=10s 180s "$(command -v node)" node_modules/playwright/cli.js install-deps chromium
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" != "true" ]; then
+            timeout --kill-after=10s 180s npx --no-install playwright install chromium
+          fi
+      - name: Boot stack
+        working-directory: e2e
+        run: node stack/up.mjs
+      - name: Playwright shard ${{ matrix.shard }}/${{ env.SHARDS }}
+        working-directory: e2e
+        run: npx playwright test --grep-invert '@quarantine|@nightly' --retries=1 --shard=${{ matrix.shard }}/${{ env.SHARDS }}
+      - name: Stack logs
+        if: failure()
+        working-directory: e2e
+        run: for f in .stack/*.log; do echo "::group::$f"; tail -n 300 "$f"; echo "::endgroup::"; done
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-blob-${{ matrix.shard }}
+          path: e2e/blob-report
+          retention-days: 7
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-artifacts-${{ matrix.shard }}
+          path: |
+            e2e/test-results
+            e2e/.stack/*.log
+          retention-days: 7
+
+  e2e-quarantine:
+    name: e2e quarantine (non-blocking)
+    needs: [tree, build, build-web]
+    if: github.event_name == 'merge_group' && needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    env:
+      CI: "1"
+      E2E_QUARANTINE: "1"
+      E2E_SHARD_INDEX: "9"
+      E2E_RUN_ID: gh${{ github.run_id }}x${{ github.run_attempt }}sq
+      E2E_BACKEND_BIN_DIR: ${{ github.workspace }}/dist/backend
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Any quarantined scenarios?
+        id: any
+        run: |
+          if grep -rl '@quarantine' e2e/tests >/dev/null 2>&1; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "::notice::no @quarantine scenarios"; fi
+      - if: steps.any.outputs.run == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: build-*
+          path: dist
+          merge-multiple: true
+      - if: steps.any.outputs.run == 'true'
+        run: |
+          chmod +x dist/backend/*
+          tar -C web -xzf dist/web-standalone.tar.gz
+      - if: steps.any.outputs.run == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - if: steps.any.outputs.run == 'true'
+        working-directory: e2e
+        run: |
+          npm ci --no-audit --no-fund
+          echo "PLAYWRIGHT_VERSION=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_ENV"
+      - if: steps.any.outputs.run == 'true'
+        id: pw-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}-chromium
+      - if: steps.any.outputs.run == 'true'
+        working-directory: e2e
+        run: |
+          sudo python3 ../scripts/ci_apt_setup.py
+          sudo apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout APT::Update::Error-Mode
+          # Always install the pinned Playwright version's complete system deps,
+          # even on a browser-cache hit. Root timeout can also terminate root APT.
+          sudo timeout --kill-after=10s 180s "$(command -v node)" node_modules/playwright/cli.js install-deps chromium
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" != "true" ]; then
+            timeout --kill-after=10s 180s npx --no-install playwright install chromium
+          fi
+          node stack/up.mjs
+          npx playwright test --grep @quarantine --grep-invert @nightly --retries=1
+
+  # Every shard's own teardown deletes its Clerk test users, but a cancelled
+  # or timed-out shard never reaches teardown. This always runs after them
+  # and removes every user/org of this run attempt (all shards + quarantine).
+  e2e-cleanup:
+    name: e2e cleanup
+    needs: [tree, e2e-shard, e2e-quarantine, n1-compat]
+    if: always() && needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      E2E_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      E2E_CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+      E2E_CLEANUP_PREFIX: gh${{ github.run_id }}x${{ github.run_attempt }}s
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: e2e
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - working-directory: e2e
+        run: |
+          npm ci --no-audit --no-fund
+          node stack/clerk-cleanup.mjs
+
+  # Decision 11: rollback is "redeploy the previous image", so the binary in
+  # production must keep serving the schema AND the data the next release
+  # leaves behind. Merge queue only (the last gate before main); no
+  # `server-*` release yet = a notice and a pass. Three jobs:
+  #   n1-locate    finds the latest published `server-*` release and fetches
+  #                its backend (release asset, else the tag build's artifact)
+  #   n1-build-old only when neither exists: builds the tag the way the
+  #                release does (release profile, trixie container, no `e2e`)
+  #   n1-compat    boots the stack on THIS tree (e2e backend, migrations from
+  #                zero), seeds through the API, swaps in the release backend
+  #                on the same database and runs the `@n1` reads
+  n1-locate:
+    name: N-1 locate production release
+    needs: tree
+    if: github.event_name == 'merge_group' && needs.tree.outputs.passed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # The tag build's `backend-release-<sha>` artifact (deploy.yml).
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      found: ${{ steps.prior.outputs.found }}
+      tag: ${{ steps.prior.outputs.tag }}
+      sha: ${{ steps.prior.outputs.sha }}
+      source: ${{ steps.prior.outputs.source }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: e2e
+      - name: Locate the production release
+        id: prior
+        run: bash e2e/stack/n1-prior-release.sh "$RUNNER_TEMP/n1"
+      - if: steps.prior.outputs.source == 'asset' || steps.prior.outputs.source == 'artifact'
+        uses: actions/upload-artifact@v7
+        with:
+          name: n1-old-backend
+          path: ${{ runner.temp }}/n1/coralswarm-backend
+          retention-days: 1
+          if-no-files-found: error
+
+  n1-build-old:
+    name: N-1 build the production tag (release profile)
+    needs: n1-locate
+    if: needs.n1-locate.outputs.source == 'build'
+    # A rare fallback (releases carry backend-dist.tar.gz), so it stays on a
+    # standard runner (decision 13), unlike deploy.yml's 4-core release
+    # build. Same container (production's glibc) and profile. To fit 7 GB RAM
+    # and the runner's disk: two rustc at a time, and the same disk reclaim
+    # deploy.yml does (host /usr and /opt mounted into the container).
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1-trixie
+      volumes:
+        - /usr:/host/usr
+        - /opt:/host/opt
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 60
+    env:
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 8
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - name: Free runner disk space
+        run: |
+          df -h /host/usr
+          rm -rf /host/usr/share/dotnet /host/usr/local/lib/android /host/opt/ghc \
+                 /host/opt/hostedtoolcache /host/usr/local/share/boost \
+                 /host/usr/share/swift /host/usr/local/julia* /host/usr/lib/jvm \
+                 /host/usr/local/.ghcup /host/usr/local/share/powershell \
+                 /host/usr/local/share/chromium /host/usr/local/lib/node_modules || true
+          df -h /host/usr
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.n1-locate.outputs.sha }}
+          persist-credentials: false
+      - run: apt-get update -qq && apt-get install -y -qq --no-install-recommends pkg-config cmake clang libclang-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: backend-release-trixie
+          save-if: false
+      - name: Release build (no e2e feature), as deploy.yml builds it
+        run: |
+          cargo build --release -p coralswarm-backend --bin coralswarm-backend --features code-chunking
+          strip target/release/coralswarm-backend
+      - uses: actions/upload-artifact@v7
+        with:
+          name: n1-old-backend
+          path: target/release/coralswarm-backend
+          retention-days: 1
+          if-no-files-found: error
+
+  n1-compat:
+    name: N-1 compat (production backend on this schema and data)
+    needs: [tree, build, build-web, n1-locate, n1-build-old]
+    if: >-
+      always() && github.event_name == 'merge_group' && needs.tree.outputs.passed != 'true' &&
+      needs.n1-locate.result == 'success' && needs.n1-locate.outputs.found == 'true' &&
+      needs.build.result == 'success' && needs.build-web.result == 'success' &&
+      (needs.n1-build-old.result == 'success' || needs.n1-build-old.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "1"
+      E2E_SHARD_INDEX: "8"
+      # `...s` + `n1` sits inside e2e-cleanup's E2E_CLEANUP_PREFIX. One id
+      # across the seed and serve runs: serve reads seed's users.
+      E2E_RUN_ID: gh${{ github.run_id }}x${{ github.run_attempt }}sn1
+      # The two runs share Clerk users; cleanup runs once, at the end.
+      E2E_SKIP_CLERK_CLEANUP: "1"
+      E2E_BACKEND_BIN_DIR: ${{ github.workspace }}/dist/backend
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+      # REQUIRED once a server-* release exists: a release backend embeds one
+      # string against the real OpenRouter at boot and refuses to start
+      # without a working key; nothing else may reach a real provider
+      # (stack/n1-backend.mjs).
+      N1_OPENROUTER_API_KEY: ${{ secrets.E2E_N1_OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: build-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: n1-old-backend
+          path: n1
+      - run: |
+          chmod +x dist/backend/* n1/coralswarm-backend
+          tar -C web -xzf dist/web-standalone.tar.gz
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install e2e harness
+        working-directory: e2e
+        run: |
+          npm ci --no-audit --no-fund
+          echo "PLAYWRIGHT_VERSION=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_ENV"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}-chromium
+      - name: Install Chromium
+        working-directory: e2e
+        run: |
+          sudo python3 ../scripts/ci_apt_setup.py
+          sudo apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout APT::Update::Error-Mode
+          # Always install the pinned Playwright version's complete system deps,
+          # even on a browser-cache hit. Root timeout can also terminate root APT.
+          sudo timeout --kill-after=10s 180s "$(command -v node)" node_modules/playwright/cli.js install-deps chromium
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" != "true" ]; then
+            timeout --kill-after=10s 180s npx --no-install playwright install chromium
+          fi
+      # Shard 1 already ran the database assertions on this tree.
+      - name: Boot the stack on this tree (e2e backend, schema from zero)
+        working-directory: e2e
+        run: node stack/up.mjs --no-db-assert
+      - name: Seed through this tree's backend
+        working-directory: e2e
+        run: npx playwright test -c playwright.n1.config.ts seed --reporter=github,list
+      - name: Swap in the production backend
+        working-directory: e2e
+        env:
+          N1_TAG: ${{ needs.n1-locate.outputs.tag }}
+          N1_SHA: ${{ needs.n1-locate.outputs.sha }}
+          N1_SOURCE: ${{ needs.n1-locate.outputs.source }}
+        run: |
+          node stack/n1-backend.mjs --bin-dir "$GITHUB_WORKSPACE/n1" --image debian:trixie-slim
+          echo "::notice title=N-1 compat::$N1_TAG ($N1_SHA, $N1_SOURCE) is serving this tree's schema and data"
+      - name: "@n1 reads against the production backend"
+        working-directory: e2e
+        run: npx playwright test -c playwright.n1.config.ts serve --retries=1 --reporter=github,list
+      - name: Clerk cleanup
+        if: always()
+        working-directory: e2e
+        run: node stack/clerk-cleanup.mjs
+      - name: Stack logs
+        if: failure()
+        working-directory: e2e
+        run: |
+          docker logs --tail 300 cs-e2e-n1-local 2>&1 || true
+          for f in .stack/*.log; do echo "::group::$f"; tail -n 200 "$f"; echo "::endgroup::"; done
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-n1-artifacts
+          path: |
+            e2e/test-results
+            e2e/.stack/*.log
+          retention-days: 7
+
+  # ── Required checks ──────────────────────────────────────────────────────
+  guards:
+    name: guards
+    needs: [tree, guard-scripts, marketing, widgets, build-web]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verdict
+        run: |
+          if [ "${{ needs.tree.outputs.passed }}" = "true" ]; then echo "tree already passed"; exit 0; fi
+          failed=0
+          for pair in "guard-scripts=${{ needs.guard-scripts.result }}" "marketing=${{ needs.marketing.result }}" \
+                      "widgets=${{ needs.widgets.result }}" "build-web (web typecheck)=${{ needs.build-web.result }}"; do
+            echo "$pair"
+            [ "${pair##*=}" = "success" ] || failed=1
+          done
+          exit "$failed"
+
+  e2e:
+    name: e2e
+    needs: [tree, guard-scripts, check, build, build-web, e2e-shard, n1-locate, n1-compat]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - if: needs.tree.outputs.passed == 'true'
+        run: echo "tree ${{ needs.tree.outputs.tree }} already passed"
+      - if: needs.tree.outputs.passed != 'true' && needs.build.result != 'skipped'
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - if: needs.tree.outputs.passed != 'true' && needs.build.result != 'skipped'
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - if: needs.tree.outputs.passed != 'true' && needs.build.result != 'skipped'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-blob-*
+          path: e2e/all-blob-reports
+          merge-multiple: true
+      - name: Merge shard reports
+        if: needs.tree.outputs.passed != 'true' && needs.build.result != 'skipped'
+        working-directory: e2e
+        run: |
+          npm ci --no-audit --no-fund
+          if [ -d all-blob-reports ] && [ -n "$(ls -A all-blob-reports)" ]; then
+            npx playwright merge-reports --reporter html,github ./all-blob-reports
+          fi
+      - if: needs.tree.outputs.passed != 'true' && needs.build.result != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: e2e/playwright-report
+          retention-days: 14
+      - name: Verdict
+        run: |
+          if [ "${{ needs.tree.outputs.passed }}" = "true" ]; then exit 0; fi
+          # A PR push runs only the fast gate; e2e runs in the merge queue.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            [ "${{ needs.check.result }}" = "success" ] || { echo "check: ${{ needs.check.result }}"; exit 1; }
+            [ "${{ needs.build-web.result }}" = "success" ] || { echo "build-web: ${{ needs.build-web.result }}"; exit 1; }
+            echo "e2e runs in the merge queue"
+            exit 0
+          fi
+          [ "${{ needs.build.result }}" = "success" ] || { echo "build: ${{ needs.build.result }}"; exit 1; }
+          [ "${{ needs.build-web.result }}" = "success" ] || { echo "build-web: ${{ needs.build-web.result }}"; exit 1; }
+          [ "${{ needs.e2e-shard.result }}" = "success" ] || { echo "e2e shards: ${{ needs.e2e-shard.result }}"; exit 1; }
+          # N-1 runs only in the merge queue; on a PR push it is skipped by
+          # design. In the queue it is skipped only when there is no prior
+          # release (n1-locate found=false).
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            [ "${{ needs.n1-locate.result }}" = "success" ] || { echo "n1-locate: ${{ needs.n1-locate.result }}"; exit 1; }
+            if [ "${{ needs.n1-locate.outputs.found }}" = "true" ]; then
+              [ "${{ needs.n1-compat.result }}" = "success" ] || { echo "n1-compat: ${{ needs.n1-compat.result }}"; exit 1; }
+            fi
+          fi
+      - name: Record the passing tree
+        if: needs.tree.outputs.passed != 'true' && needs.guard-scripts.result == 'success'
+        run: touch .pr-pass
+      - if: needs.tree.outputs.passed != 'true' && needs.guard-scripts.result == 'success'
+        uses: actions/cache/save@v5
+        with:
+          path: .pr-pass
+          key: pr-pass-${{ github.event_name == 'merge_group' && 'mq-' || '' }}${{ needs.tree.outputs.tree }}

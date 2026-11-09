@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CoralSwarm Outlook add-in.
+
+  Two surfaces, both served by the CoralSwarm web app (app.coralswarm.example/outlook):
+    * Message read   -> "Save to CoralSwarm"          -> {{ADDIN_HOST}}/mail
+    * Appointment    -> "Save meeting to CoralSwarm"  -> {{ADDIN_HOST}}/meeting
+  Both are Next.js routes (web/app/outlook/*); the only static files this package
+  contributes to the build are this manifest and assets/ (see
+  web/scripts/build-outlook-addin.mjs).
+
+  Sign-in is Microsoft SSO: nested app auth (MSAL) with Office.auth.getAccessToken
+  as the fallback, both against the CoralSwarm app registration named in
+  WebApplicationInfo below. The pane then trades that token for a CoralSwarm
+  credential kept in memory. If SSO is off or unavailable the panes use the
+  previous Clerk sign-in. SSO and NAA are feature-detected at runtime, NOT
+  declared as required sets: a required set would make the add-in uninstallable
+  on clients without it, which would also remove the Clerk fallback.
+
+  Azure app registration (not managed here):
+    - Application ID URI: api://app.coralswarm.example/00000000-0000-0000-0000-000000000000
+    - Exposed scope: access_as_user
+    - SPA redirect URI for NAA: brk-multihub://app.coralswarm.example
+    - Authorized client applications for Office.auth SSO fallback (Microsoft's Office hosts)
+
+  Host base URL is templated as {{ADDIN_HOST}} (prod: https://app.coralswarm.example/outlook,
+  dev: https://localhost:3000/outlook). Clerk hosts are templated for the fallback sign-in.
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+
+  <Id>00000000-0000-4000-8000-5bfdfb1b6d07</Id>
+  <Version>1.1.0.0</Version>
+  <ProviderName>CoralSwarm</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="CoralSwarm"/>
+  <Description DefaultValue="Save the email threads and Teams meetings you choose to your CoralSwarm ocean."/>
+  <IconUrl DefaultValue="{{ADDIN_HOST}}/assets/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="{{ADDIN_HOST}}/assets/icon-128.png"/>
+  <SupportUrl DefaultValue="https://coralswarm.example/support"/>
+
+  <!--
+    Domains the panes may navigate to or open in a dialog: Microsoft sign-in (nested
+    app auth popup fallback) and, for the Clerk fallback, the Clerk Frontend API and
+    account hosts, which `build-manifest.js` fills from the build's publishable key /
+    environment. The API host is deliberately absent: the panes only fetch it, never
+    navigate to it.
+  -->
+  <AppDomains>
+    <AppDomain>https://coralswarm.example</AppDomain>
+    <AppDomain>https://app.coralswarm.example</AppDomain>
+    <AppDomain>https://login.microsoftonline.com</AppDomain>
+    <AppDomain>{{CLERK_FRONTEND_API}}</AppDomain>
+    <AppDomain>{{CLERK_ACCOUNTS_HOST}}</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5"/>
+    </Sets>
+  </Requirements>
+
+  <!-- Fallback (older clients): open the task pane on message read. -->
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="{{ADDIN_HOST}}/mail"/>
+        <RequestedHeight>250</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <Permissions>ReadItem</Permissions>
+
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+  </Rule>
+
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <!-- Modern ribbon buttons (Outlook 2016+/web). V1_0 for clients without SSO metadata... -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.5">
+        <bt:Set Name="Mailbox"/>
+      </bt:Sets>
+    </Requirements>
+
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="csGroup">
+                <Label resid="groupLabel"/>
+                <Control xsi:type="Button" id="csIngestButton">
+                  <Label resid="ingestLabel"/>
+                  <Supertip>
+                    <Title resid="ingestLabel"/>
+                    <Description resid="ingestTip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16"/>
+                    <bt:Image size="32" resid="icon32"/>
+                    <bt:Image size="80" resid="icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="taskpaneUrl"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+          <ExtensionPoint xsi:type="AppointmentOrganizerCommandSurface">
+            <OfficeTab id="TabDefault"><Group id="csAppointmentOrganizerCommandSurfaceGroup">
+              <Label resid="groupLabel"/>
+              <Control xsi:type="Button" id="csAppointmentOrganizerCommandSurfaceCapture">
+                <Label resid="meetingLabel"/>
+                <Supertip><Title resid="meetingLabel"/><Description resid="meetingTip"/></Supertip>
+                <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon80"/></Icon>
+                <Action xsi:type="ShowTaskpane"><SourceLocation resid="meetingPaneUrl"/></Action>
+              </Control>
+            </Group></OfficeTab>
+          </ExtensionPoint>
+          <ExtensionPoint xsi:type="AppointmentAttendeeCommandSurface">
+            <OfficeTab id="TabDefault"><Group id="csAppointmentAttendeeCommandSurfaceGroup">
+              <Label resid="groupLabel"/>
+              <Control xsi:type="Button" id="csAppointmentAttendeeCommandSurfaceCapture">
+                <Label resid="meetingLabel"/>
+                <Supertip><Title resid="meetingLabel"/><Description resid="meetingTip"/></Supertip>
+                <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon80"/></Icon>
+                <Action xsi:type="ShowTaskpane"><SourceLocation resid="meetingPaneUrl"/></Action>
+              </Control>
+            </Group></OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="{{ADDIN_HOST}}/assets/icon-16.png"/>
+        <bt:Image id="icon32" DefaultValue="{{ADDIN_HOST}}/assets/icon-32.png"/>
+        <bt:Image id="icon80" DefaultValue="{{ADDIN_HOST}}/assets/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="taskpaneUrl" DefaultValue="{{ADDIN_HOST}}/mail"/>
+        <bt:Url id="meetingPaneUrl" DefaultValue="{{ADDIN_HOST}}/meeting"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="groupLabel" DefaultValue="CoralSwarm"/>
+        <bt:String id="ingestLabel" DefaultValue="Save to CoralSwarm"/>
+        <bt:String id="meetingLabel" DefaultValue="Save meeting to CoralSwarm"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="ingestTip" DefaultValue="Save the email thread you're reading to your CoralSwarm ocean. Only this thread is sent."/>
+        <bt:String id="meetingTip" DefaultValue="Save this Teams meeting's transcript to your CoralSwarm ocean, check its status, or stop saving."/>
+      </bt:LongStrings>
+    </Resources>
+
+    <!-- ...and V1_1, which carries WebApplicationInfo (Microsoft SSO). Same surfaces and resources. -->
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.5">
+          <bt:Set Name="Mailbox"/>
+        </bt:Sets>
+      </Requirements>
+
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <DesktopFormFactor>
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="csGroup">
+                  <Label resid="groupLabel"/>
+                  <Control xsi:type="Button" id="csIngestButton">
+                    <Label resid="ingestLabel"/>
+                    <Supertip>
+                      <Title resid="ingestLabel"/>
+                      <Description resid="ingestTip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="icon16"/>
+                      <bt:Image size="32" resid="icon32"/>
+                      <bt:Image size="80" resid="icon80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="taskpaneUrl"/>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+            <ExtensionPoint xsi:type="AppointmentOrganizerCommandSurface">
+              <OfficeTab id="TabDefault"><Group id="csAppointmentOrganizerCommandSurfaceGroup">
+                <Label resid="groupLabel"/>
+                <Control xsi:type="Button" id="csAppointmentOrganizerCommandSurfaceCapture">
+                  <Label resid="meetingLabel"/>
+                  <Supertip><Title resid="meetingLabel"/><Description resid="meetingTip"/></Supertip>
+                  <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon80"/></Icon>
+                  <Action xsi:type="ShowTaskpane"><SourceLocation resid="meetingPaneUrl"/></Action>
+                </Control>
+              </Group></OfficeTab>
+            </ExtensionPoint>
+            <ExtensionPoint xsi:type="AppointmentAttendeeCommandSurface">
+              <OfficeTab id="TabDefault"><Group id="csAppointmentAttendeeCommandSurfaceGroup">
+                <Label resid="groupLabel"/>
+                <Control xsi:type="Button" id="csAppointmentAttendeeCommandSurfaceCapture">
+                  <Label resid="meetingLabel"/>
+                  <Supertip><Title resid="meetingLabel"/><Description resid="meetingTip"/></Supertip>
+                  <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon80"/></Icon>
+                  <Action xsi:type="ShowTaskpane"><SourceLocation resid="meetingPaneUrl"/></Action>
+                </Control>
+              </Group></OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+
+      <Resources>
+        <bt:Images>
+          <bt:Image id="icon16" DefaultValue="{{ADDIN_HOST}}/assets/icon-16.png"/>
+          <bt:Image id="icon32" DefaultValue="{{ADDIN_HOST}}/assets/icon-32.png"/>
+          <bt:Image id="icon80" DefaultValue="{{ADDIN_HOST}}/assets/icon-80.png"/>
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="taskpaneUrl" DefaultValue="{{ADDIN_HOST}}/mail"/>
+          <bt:Url id="meetingPaneUrl" DefaultValue="{{ADDIN_HOST}}/meeting"/>
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="groupLabel" DefaultValue="CoralSwarm"/>
+          <bt:String id="ingestLabel" DefaultValue="Save to CoralSwarm"/>
+          <bt:String id="meetingLabel" DefaultValue="Save meeting to CoralSwarm"/>
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="ingestTip" DefaultValue="Save the email thread you're reading to your CoralSwarm ocean. Only this thread is sent."/>
+          <bt:String id="meetingTip" DefaultValue="Save this Teams meeting's transcript to your CoralSwarm ocean, check its status, or stop saving."/>
+        </bt:LongStrings>
+      </Resources>
+
+      <WebApplicationInfo>
+        <Id>00000000-0000-0000-0000-000000000000</Id>
+        <Resource>api://app.coralswarm.example/00000000-0000-0000-0000-000000000000</Resource>
+        <Scopes>
+          <Scope>profile</Scope>
+          <Scope>openid</Scope>
+        </Scopes>
+      </WebApplicationInfo>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>

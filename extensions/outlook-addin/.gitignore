@@ -1,0 +1,4 @@
+node_modules/
+manifest.local.xml
+src/config.local.js
+*.log

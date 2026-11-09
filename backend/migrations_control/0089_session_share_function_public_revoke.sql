@@ -1,0 +1,101 @@
+-- Migration: 0089_session_share_function_public_revoke
+-- Description: Restores the SECURITY DEFINER grant standard that migration
+--              0087_session_share_bootstrap_functions silently dropped.
+--
+--              0087's own header claims "Same grant shape as 0084/0086". It
+--              was not. Counting the actual statements in each migration:
+--
+--                migration | REVOKE ... FROM PUBLIC | new functions
+--                ----------+------------------------+---------------
+--                0084      | 5                      | 5
+--                0086      | 8                      | 8
+--                0087      | 0                      | 2
+--
+--              Postgres grants `EXECUTE` to `PUBLIC` by DEFAULT on every
+--              newly created function, so a bare `GRANT EXECUTE ... TO
+--              coralswarm_app, CURRENT_USER` does not restrict anything — it
+--              only adds two explicit grants on top of an already-universal
+--              one. 0084's header calls this exact omission out by name (it
+--              was a CodeRabbit MAJOR finding there: "a live privilege-
+--              escalation surface the moment this migration runs", which is
+--              why 0084 and 0086 both REVOKE first and GRANT back second),
+--              and the tenant tree's 0003_bootstrap_scope_functions carries
+--              the same REVOKE pair. 0087 is the only one that regressed.
+--
+--              WHY IT MATTERS. Both 0087 functions are `SECURITY DEFINER`,
+--              so their bodies run as the migration owner with RLS NOT
+--              evaluated — that is their entire purpose (breaking the
+--              "cannot scope to an account you have not discovered yet"
+--              cycle for the anonymous share viewer). With EXECUTE still
+--              held by PUBLIC, ANY role that can merely CONNECT to this
+--              database — including a future reporting / analytics /
+--              migration-tooling role deliberately created WITHOUT `SELECT`
+--              on the content tables — can call them and read straight
+--              through the 0083 policies as an ownership oracle:
+--
+--                resolve_session_share_account_id(<share token>) -> account_id
+--                resolve_session_share_graph_id(<share id>)      -> graph_id
+--
+--              Both return a bare uuid and nothing else (no token, no
+--              session metadata, no coral content), so the exposure is
+--              ownership DISCLOSURE, not content exfiltration — but it is
+--              still an RLS bypass available to a role that was explicitly
+--              denied the underlying reads, and closing it is one statement
+--              per function.
+--
+--              APPEND-ONLY. `scripts/check_migrations.sh` enforces that a
+--              merged migration is never edited (sqlx fingerprints file
+--              content; an in-place edit breaks the `_sqlx_migrations`
+--              ledger on every already-deployed database, and CI diffs the
+--              tree against the PR base to catch an edit that regenerates
+--              the checksum manifest to match). So this lands as a NEW
+--              migration rather than a fix to 0087.
+--
+--              IDEMPOTENT / RE-RUNNABLE. `REVOKE ... FROM PUBLIC` on a
+--              privilege PUBLIC does not hold is a no-op, not an error, so
+--              this is safe on a database where 0087 has already been
+--              hand-patched. The two `GRANT`s are re-stated for the same
+--              reason 0084/0086 order theirs after the REVOKEs: they make
+--              the end state self-contained and independent of whether this
+--              migration runs as the same role that ran 0087 (`CURRENT_USER`
+--              in 0087's grant was resolved at ITS run time). Both are
+--              `GRANT`s that 0087 already made, so re-issuing them adds no
+--              privilege that did not already exist.
+--
+--              BLAST RADIUS — deliberately exactly two functions, no tables,
+--              no policies, no roles, no data. The only roles that lose
+--              anything are those relying on the PUBLIC default; the app
+--              role (`coralswarm_app`) and the migration owner both hold
+--              explicit grants and are unaffected. Verified by
+--              `backend/tests/provisioning_and_grants_rls_pg.rs`
+--              (`session_share_functions_are_not_executable_by_public`),
+--              which proves a CONNECT-only role is refused with SQLSTATE
+--              42501 while `coralswarm_app` still resolves both.
+--
+--              NO TENANT PAIRING. `resolve_session_share_account_id` /
+--              `resolve_session_share_graph_id` do not exist in
+--              `backend/migrations_tenant/` at all — they are registered in
+--              `scripts/check_schema_parity.sh`'s CONTROL_FUNCTIONS (which
+--              DROPs them from the control DB before the parity diff), and
+--              that diff runs `pg_dump --no-privileges`, so grant/revoke DDL
+--              is outside its comparison in the first place. A paired tenant
+--              migration would fail outright (the functions are not there to
+--              revoke on). The tenant tree's own bootstrap functions already
+--              carry their REVOKEs in 0003_bootstrap_scope_functions.
+--
+-- Depends on: 0087_session_share_bootstrap_functions (the two functions),
+--             0083_consumer_rls (creates `coralswarm_app`)
+--
+-- Down:
+--   GRANT EXECUTE ON FUNCTION resolve_session_share_account_id(text) TO PUBLIC;
+--   GRANT EXECUTE ON FUNCTION resolve_session_share_graph_id(uuid) TO PUBLIC;
+--   (restoring the default is the only meaningful revert; the explicit
+--    coralswarm_app/CURRENT_USER grants belong to 0087, not to this file.)
+
+-- ── Close the PUBLIC default (the actual fix) ───────────────────────────────
+REVOKE EXECUTE ON FUNCTION resolve_session_share_account_id(text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION resolve_session_share_graph_id(uuid) FROM PUBLIC;
+
+-- ── Re-state 0087's intended grants, so the end state is self-contained ─────
+GRANT EXECUTE ON FUNCTION resolve_session_share_account_id(text) TO coralswarm_app, CURRENT_USER;
+GRANT EXECUTE ON FUNCTION resolve_session_share_graph_id(uuid) TO coralswarm_app, CURRENT_USER;

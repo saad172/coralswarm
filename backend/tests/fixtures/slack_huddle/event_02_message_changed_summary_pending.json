@@ -1,0 +1,217 @@
+{
+  "api_app_id": "A0B74C28FA6",
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "is_bot": true,
+      "is_enterprise_install": false,
+      "team_id": "T6D4612D34B",
+      "user_id": "U:7ded0360"
+    }
+  ],
+  "context_enterprise_id": null,
+  "context_team_id": "T6D4612D34B",
+  "event": {
+    "channel": "CE1C7114B00",
+    "channel_type": "channel",
+    "event_ts": "1700000000.000600",
+    "hidden": true,
+    "message": {
+      "blocks": [
+        {
+          "elements": [
+            {
+              "elements": [
+                {
+                  "text": "Huddle started.",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ],
+      "channel": "CE1C7114B00",
+      "edited": {
+        "ts": "1700000000.000000",
+        "user": "U:f07b1288"
+      },
+      "metadata": {
+        "event_type": "slack_system.huddle.started"
+      },
+      "no_notifications": true,
+      "permalink": "https://example.slack.com/docs/T6D4612D34B/FB96A629E52",
+      "room": {
+        "app_id": "A00",
+        "attached_file_ids": [],
+        "background_id": "ARIZONA",
+        "call_family": "huddle",
+        "canvas_background": "ARIZONA",
+        "canvas_thread_ts": "1700000000.747249",
+        "channels": [
+          "CE1C7114B00"
+        ],
+        "created_by": "U:b726127b",
+        "date_end": 1700000000,
+        "date_start": 1700000000,
+        "display_id": "",
+        "external_unique_id": "00000000-0000-4000-8000-b73394330276",
+        "has_ended": true,
+        "huddle_link": "https://app.slack.com/huddle/T6D4612D34B/CE1C7114B00",
+        "id": "RCEF75F4586",
+        "is_dm_call": false,
+        "is_prewarmed": true,
+        "is_scheduled": false,
+        "knocks": {},
+        "last_invite_status_by_user": {},
+        "locale": "en-US",
+        "media_backend_type": "free_willy",
+        "media_capture_pipeline_id": "00000000-0000-4000-8000-b73394330276",
+        "media_concatenation_pipeline_id": "00000000-0000-4000-8000-47e6470f363c",
+        "media_server": "",
+        "name": "",
+        "participant_history": [
+          "U57C3A9EF09"
+        ],
+        "participants": [],
+        "participants_camera_off": [],
+        "participants_camera_on": [],
+        "participants_events": {
+          "U:example": {
+            "camera_off": false,
+            "camera_on": false,
+            "joined": true,
+            "screenshare_off": false,
+            "screenshare_on": false,
+            "user_team": {}
+          }
+        },
+        "participants_screenshare_off": [],
+        "participants_screenshare_on": [],
+        "pending_invitees": {},
+        "recording": {
+          "can_record_summary": "available",
+          "recording_user": "U:b726127b",
+          "summary": true,
+          "summary_status": "pending",
+          "transcript": true
+        },
+        "thread_root_ts": "1700000000.747249",
+        "was_accepted": false,
+        "was_missed": false,
+        "was_rejected": false
+      },
+      "subtype": "huddle_thread",
+      "team": "T6D4612D34B",
+      "text": "",
+      "ts": "1700000000.747249",
+      "type": "message",
+      "user": "U:f07b1288"
+    },
+    "previous_message": {
+      "blocks": [
+        {
+          "elements": [
+            {
+              "elements": [
+                {
+                  "text": "Huddle started.",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ],
+      "channel": "CE1C7114B00",
+      "edited": {
+        "ts": "1700000000.000000",
+        "user": "U:f07b1288"
+      },
+      "metadata": {
+        "event_type": "slack_system.huddle.started"
+      },
+      "no_notifications": true,
+      "permalink": "https://example.slack.com/docs/T6D4612D34B/FB96A629E52",
+      "room": {
+        "app_id": "A00",
+        "attached_file_ids": [],
+        "background_id": "ARIZONA",
+        "call_family": "huddle",
+        "canvas_background": "ARIZONA",
+        "canvas_thread_ts": "1700000000.747249",
+        "channels": [
+          "CE1C7114B00"
+        ],
+        "created_by": "U:b726127b",
+        "date_end": 1700000000,
+        "date_start": 1700000000,
+        "display_id": "",
+        "external_unique_id": "00000000-0000-4000-8000-b73394330276",
+        "has_ended": true,
+        "huddle_link": "https://app.slack.com/huddle/T6D4612D34B/CE1C7114B00",
+        "id": "RCEF75F4586",
+        "is_dm_call": false,
+        "is_prewarmed": true,
+        "is_scheduled": false,
+        "knocks": {},
+        "last_invite_status_by_user": {},
+        "locale": "en-US",
+        "media_backend_type": "free_willy",
+        "media_capture_pipeline_id": "00000000-0000-4000-8000-b73394330276",
+        "media_concatenation_pipeline_id": "00000000-0000-4000-8000-47e6470f363c",
+        "media_server": "",
+        "name": "",
+        "participant_history": [
+          "U57C3A9EF09"
+        ],
+        "participants": [],
+        "participants_camera_off": [],
+        "participants_camera_on": [],
+        "participants_events": {
+          "U:example": {
+            "camera_off": false,
+            "camera_on": false,
+            "joined": true,
+            "screenshare_off": false,
+            "screenshare_on": false,
+            "user_team": {}
+          }
+        },
+        "participants_screenshare_off": [],
+        "participants_screenshare_on": [],
+        "pending_invitees": {},
+        "recording": {
+          "can_record_summary": "available",
+          "recording_user": "U:b726127b",
+          "summary": true,
+          "summary_status": "pending",
+          "transcript": true
+        },
+        "thread_root_ts": "1700000000.747249",
+        "was_accepted": false,
+        "was_missed": false,
+        "was_rejected": false
+      },
+      "subtype": "huddle_thread",
+      "team": "T6D4612D34B",
+      "text": "",
+      "ts": "1700000000.747249",
+      "type": "message",
+      "user": "U:f07b1288"
+    },
+    "subtype": "message_changed",
+    "ts": "1700000000.000600",
+    "type": "message"
+  },
+  "event_id": "E2433B4319E",
+  "event_time": 1700000000,
+  "is_ext_shared_channel": false,
+  "team_id": "T6D4612D34B",
+  "token": "fixture-verification-token-not-used",
+  "type": "event_callback"
+}

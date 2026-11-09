@@ -1,0 +1,84 @@
+{
+  "toolkit": "dart",
+  "label": "Dart",
+  "version": "20260821_00",
+  "scopes": {
+    "required": [
+      "read"
+    ]
+  },
+  "read_tools": [
+    "DART_GET_CONFIG",
+    "DART_LIST_TASKS"
+  ],
+  "namespace": {
+    "kind": "user",
+    "source": {
+      "lookup": {
+        "call": {
+          "tool": "DART_GET_CONFIG",
+          "args": {}
+        },
+        "id": [
+          "/user/email"
+        ]
+      }
+    }
+  },
+  "streams": [
+    {
+      "kind": "task",
+      "change": "filter",
+      "call": {
+        "tool": "DART_LIST_TASKS",
+        "args": {
+          "updated_at_after": "{{since}}",
+          "no_defaults": true,
+          "o": [
+            "-updated_at"
+          ],
+          "limit": "{{page_size}}",
+          "offset": "{{offset}}"
+        }
+      },
+      "items": "/results",
+      "paging": {
+        "style": "offset",
+        "total": "/count"
+      },
+      "fields": {
+        "id": "/id",
+        "updated_at": [
+          "/updatedAt",
+          "/createdAt"
+        ],
+        "title": "/title",
+        "body": "/description",
+        "state": "/status",
+        "author": {
+          "object": "",
+          "id": [],
+          "name": "/createdBy"
+        }
+      },
+      "capture": {
+        "chunk": "document",
+        "title": [
+          "{title}",
+          "Task: {excerpt}"
+        ]
+      }
+    }
+  ],
+  "limits": {
+    "coverage": "every task the connected account can read, changed after you connect",
+    "history": "nothing from before you connect is imported",
+    "description_history": "each captured change keeps the previous version as evidence",
+    "docs": "Dart docs are not captured (the list returns no update time)",
+    "comments": "comments are not captured: Dart comments carry no time, can only be listed one task at a time, and Dart does not document that a comment moves its task's update time"
+  },
+  "references": [
+    "https://docs.composio.dev/toolkits/dart.md",
+    "https://app.dartai.com/api/v0/public/docs/"
+  ]
+}

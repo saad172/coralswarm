@@ -1,0 +1,268 @@
+# member-ocean probe route-coverage manifest — consumed by
+# scripts/check_member_ocean_probe_coverage.sh. Format: <path> <status>
+# status: probed | pending | exempt (exempt requires a '# exempt: <why>' comment
+# directly above it). Every route registered in backend/src/lib.rs's
+# v1_routes() must be listed. Regenerate with:
+#   scripts/check_member_ocean_probe_coverage.sh --seed
+#
+# probed  — a test in backend/tests/member_ocean_probe_pg.rs exercises this
+#           exact path against the member-ocean adversarial fixture (member
+#           A/B, org admin C, live and archived).
+# pending — genuinely ocean/graph-resolving (reads or writes through
+#           ReachabilityResolver on a caller-supplied or resolved graph_id),
+#           but not yet given its own dedicated assertion in
+#           member_ocean_probe_pg.rs. Each is already gated by the SAME
+#           ReachabilityResolver predicate this suite proves correct on the
+#           routes it DOES probe directly (member_ocean_promotion_pg.rs,
+#           group_b_probe_pg.rs, and this file all exercise that shared
+#           predicate) — "pending" records that this specific PATH has no
+#           row of its own yet, not that the mechanism is unverified.
+# exempt  — not ocean/graph-content-scoped at all.
+# exempt: account roster read, no graph_id/ocean concept.
+/account/members exempt
+# exempt: account roster member CRUD, no graph_id.
+/account/members/{user_id} exempt
+/activity probed
+/atoms/{atom_id} probed
+# exempt: billing checkout, control-plane only, no graph_id.
+/billing/checkout/pack exempt
+# exempt: billing checkout, control-plane only, no graph_id.
+/billing/checkout/subscription exempt
+# exempt: extra-usage settings, control-plane billing, no graph_id.
+/billing/extra-usage exempt
+# exempt: extra-usage top-up Checkout, control-plane billing, no graph_id.
+/billing/extra-usage/topup exempt
+# exempt: per-member seat tier, control-plane billing, no graph_id.
+/billing/members/{user_id}/seat-tier exempt
+# exempt: per-user calendar-connector integration setting, no graph_id.
+/calendar/reminders exempt
+# exempt: per-user calendar-connector connection status, no graph_id.
+/calendar/status exempt
+# exempt: per-user upcoming-events read from the connected calendar provider, no graph_id.
+/calendar/upcoming exempt
+# probed: backend/tests/review_read_scope_pg.rs (settings 2.12). Was exempt as "account-wide, not per-ocean" — that was the leak: every org ocean shares the account, so every member saw every other member's private pending decisions. Now scoped to ReachabilityResolver::readable_graph_ids.
+/candidates probed
+# exempt: org-admin audit log listing, scoped to the account/org boundary rather than to any ocean — see routes/connector_audit.rs's own plane branch.
+/connector-audit exempt
+# pending: ocean/graph-resolving — lists Chat spaces with their resolved ocean destinations (Slack-channels analogue). Covered structurally by the shared ReachabilityResolver/RLS predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/google/chat/spaces pending
+# pending: ocean/graph-resolving — WRITES the space→ocean routing — the Chat destination picker. Covered structurally by the shared ReachabilityResolver/RLS predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/google/chat/spaces/{space_id}/destination pending
+# pending: ocean/graph-resolving (gsuite Train G4 PR 5, G4.5) — POST resolves and WRITES the opting-in member's own private ocean as the mailbox archetype's destination (resolve_primary_graph, IngestCaller::Attributable); DELETE deactivates the same row. Same "resolves the owner's private ocean at opt-in" shape as /connectors/microsoft/everything-mode below. Covered structurally by the shared ReachabilityResolver/RLS predicate this suite proves elsewhere, plus dedicated owner-only-visibility pg tests in tenant_rls_pg.rs/consumer_rls_pg.rs/connectors::google_chat's own suite; no dedicated member_ocean_probe_pg.rs row yet.
+/connectors/google/chat/spaces/{space_id}/optin pending
+# pending: ocean/graph-resolving — resolves the owner's private ocean at opt-in (graph_id pinned there). Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/microsoft/everything-mode pending
+# pending: ocean/graph-resolving — lists channels with their resolved ocean destinations. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/slack/channels pending
+# pending: ocean/graph-resolving — single channel with its resolved destination. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/slack/channels/{channel_id} pending
+# pending: ocean/graph-resolving — WRITES the channel→ocean routing — the destination picker itself. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/slack/channels/{channel_id}/destination pending
+# pending: ocean/graph-resolving — reads per-graph atom counts for a channel. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/slack/channels/{channel_id}/impact pending
+# pending: ocean/graph-resolving — reads per-member capture/routed status per ocean. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/slack/onboarding pending
+# pending: ocean/graph-resolving — resolves the CALLER's own member ocean as the single backfill target (resolve_primary_graph, IngestCaller::Attributable) and refuses an org account with no clerk_org_id rather than falling back to the consumer plane. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/connectors/slack/backfill pending
+# pending: resolves an ingest destination graph (routes::connectors::ingest_selected); the SAME underlying destination-resolution logic mcp_add_context_denied_for_as_ocean probes, but this exact HTTP transport path has no dedicated probe of its own.
+/connectors/{provider}/ingest pending
+# exempt: connector pull-sync trigger (e.g. calendar), no graph_id.
+/connectors/{provider}/sync exempt
+# pending: resolves the mailbox owner's own private ocean via resolve_primary_graph
+# (routes::gmail_everything_mode::set_everything_mode, gsuite enterprise train PR
+# G2.4 — the SECOND implementation of the everything-mode carve-out, mirroring
+# `routes::outlook_everything_mode`'s own precedent) on enable; disable is an
+# UPDATE-only path with no ocean resolution at all. Same underlying
+# ReachabilityResolver-gated destination-resolution class /connectors/{provider}/
+# ingest's own "pending" entry above records; this exact HTTP transport path has
+# no dedicated probe of its own yet.
+/connectors/google/gmail/everything-mode pending
+# exempt: workspace-level Teams-channel discovery listing, no graph_id.
+/connectors/microsoft/teams exempt
+# exempt: ditto.
+/connectors/microsoft/teams/channels exempt
+# exempt: ditto.
+/connectors/microsoft/teams/chats exempt
+# pending: same destination-resolution reasoning as /connectors/{provider}/ingest above — no dedicated probe of this exact path.
+/connectors/microsoft/teams/ingest pending
+# exempt: Teams-app install acknowledgement, no graph_id.
+/connectors/microsoft/teams/install exempt
+# exempt: connector-side transcript sync trigger, no caller-supplied graph_id.
+/connectors/microsoft/teams/transcripts/sync exempt
+# exempt: list of watched Teams resources, no graph_id.
+/connectors/microsoft/teams/watched exempt
+# exempt: delete a watched-resource row by its own id, no graph_id.
+/connectors/microsoft/teams/watched/{id} exempt
+# exempt: Outlook auto-ingest workflow rules, no graph_id (destinations resolved internally).
+/connectors/microsoft/workflows exempt
+# exempt: ditto, single-workflow patch/delete by its own id.
+/connectors/microsoft/workflows/{id} exempt
+/conversations pending
+/conversations/{id} pending
+# exempt: org-escrow (ADR-0007 D6) key material, account-scoped, no graph_id.
+/escrow/recovered-key exempt
+# exempt: ditto.
+/escrow/recovery-log exempt
+# exempt: ditto.
+/escrow/recovery-pubkey exempt
+# exempt: ditto.
+/escrow/wrapped-key exempt
+# exempt: unauthenticated one-click email unsubscribe (RFC 8058, chat-per-user plan PR 6 follow-up). Not actually a v1_routes() entry -- it is mounted on the `open` router in lib::app, never behind require_auth -- listed anyway per this file's own discipline: the recipient has no CoralSwarm account, let alone a graph/ocean, so there is nothing for ReachabilityResolver to gate here.
+/v1/email/unsubscribe exempt
+# exempt: unauthenticated signup-prefill token resolver (CodeRabbit round 1, #1005). Same posture as /v1/email/unsubscribe directly above -- mounted on the `open` router, never behind require_auth, and the caller has no CoralSwarm account yet, let alone a graph/ocean.
+/v1/email/prefill exempt
+/graphs probed
+/graphs/{graph_id} probed
+/graphs/{graph_id}/atlas probed
+/graphs/{graph_id}/atoms probed
+# pending: ocean/graph-resolving — caller-supplied graph_id, atom content. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/graphs/{graph_id}/atoms/{atom_id} pending
+# pending: ocean/graph-resolving — caller-supplied graph_id, atom deletion. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/graphs/{graph_id}/corals/{atom_id} pending
+/graphs/{graph_id}/dedup-entities pending
+# pending: the judgement graph's merge-review queue (routes::nodes::list_merge_review) — same ReachabilityResolver-then-graph_account_id gate as /graphs/{graph_id}/merge-suggestions/dismiss below, which resolves the same ocean and is itself pending; this exact path has no dedicated probe row yet.
+/graphs/{graph_id}/merge-review pending
+# pending: the merge-review queue's Confirm (routes::nodes::confirm_merge_review) — the write twin of the row above, sharing its ReachabilityResolver-then-graph_account_id gate. It exists BECAUSE the node-anchored /nodes/{id}/merge scopes by the caller's own account and so 404s on every reachable ocean another account owns; that exact property is covered by a real two-account fixture in judgement_graph_worker_pg.rs (merge_review_confirm_works_on_a_reachable_ocean_another_account_owns), but this path has no dedicated member-ocean probe row yet.
+/graphs/{graph_id}/merge-review/confirm pending
+/graphs/{graph_id}/node-atoms probed
+/graphs/{graph_id}/merge-suggestions/dismiss pending
+/graphs/{graph_id}/promote-session pending
+/graphs/{graph_id}/promote-source pending
+/graphs/{graph_id}/relationships probed
+# pending: ocean/graph-resolving — caller-supplied graph_id, retraction. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/graphs/{graph_id}/revoke-publication pending
+/graphs/{graph_id}/sources probed
+/graphs/{graph_id}/stats probed
+# pending: ocean/graph-resolving — caller-supplied graph_id, subject deletion. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/graphs/{graph_id}/subjects/{node_id} pending
+# pending: ingest::submit is the EXACT SAME shared code path MCP add_context calls (which IS probed, mcp_add_context_denied_for_as_ocean) — only this transport entry point itself has no dedicated probe.
+/ingest/atom pending
+# exempt: Slack workspace-integration listing, account-scoped, no graph_id.
+/integrations/slack exempt
+# exempt: ditto, delete by workspace id.
+/integrations/slack/{workspace_id} exempt
+# exempt: OAuth callback plumbing, no graph_id.
+/integrations/slack/oauth/callback exempt
+# exempt: ditto.
+/integrations/slack/oauth/start exempt
+# pending: ocean/graph-resolving — journal rollups are ocean-scoped. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/journal pending
+# pending: ocean/graph-resolving — resolves the hour's items within the caller's oceans. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/journal/hour/{hour_start}/items pending
+# exempt: caller identity/resolved active account, no graph_id.
+/me exempt
+# exempt: per-user cross-device enrollment key material, no graph_id.
+/me/private-key exempt
+# exempt: per-user profile setting, no graph_id.
+/me/timezone exempt
+# pending: graph-resolving source inventory; meeting_list_pg.rs covers this exact HTTP path's authentication, cross-account refusal, shared-account reachability, RLS and pagination, but the full member-ocean adversarial fixture has no dedicated row yet.
+/meetings pending
+/meetings/shares probed
+/meetings/shares/{id}/revoke pending
+/meetings/shares/view/{token} probed
+/meetings/summary probed
+/meetings/summary/generate pending
+/merges/{merge_id}/undo pending
+/nodes probed
+/nodes/{id} pending
+/nodes/{id}/atoms probed
+/nodes/{id}/candidates pending
+/nodes/{id}/confirm pending
+/nodes/{id}/digest pending
+/nodes/{id}/merge pending
+/nodes/{id}/promote probed
+/nodes/{id}/reject pending
+/nodes/{id}/supersede probed
+/nodes/{id}/supersede/{other_id} probed
+/nodes/{id}/supersessions probed
+/nodes/merges/{merge_id}/undo pending
+# exempt: connected-provider listing, account-scoped, no graph_id.
+/oauth/connections exempt
+# exempt: ditto, delete by provider name.
+/oauth/connections/{provider} exempt
+# exempt: which Google surfaces this workspace may connect (flag state), no graph_id.
+/oauth/google/workspace exempt
+# exempt: signed OAuth state-token mint, no graph_id.
+/oauth/state exempt
+# exempt: org-admin auto-add toggle (CS-447, org-onboarding plan §3 item 9, D1/D11/D16). Same shape as /orgs/connector-health below: admin-gated via `require_org_admin` plus the `account_is_real_org` personal-org refusal, scoped to the account/org boundary, takes no graph_id and resolves no ocean — `org_auto_add_settings` (migration 0245) is control-plane bookkeeping about an ORG's admission policy, never read back as ocean content. The handler's only reads are `Store::account_is_real_org` and `services::org_auto_add`, both on `state.control_db()`.
+/orgs/auto-add exempt
+# exempt: D11's "ask once" (CS-449, org-onboarding plan §3 item 38). Same shape and same reason as /orgs/auto-add immediately above — admin-gated, scoped to the account/org boundary, takes no graph_id and resolves no ocean. The candidates it lists/admits are `org_join_requests` rows (control-plane bookkeeping about who may join an ORG), never ocean content; the handler's reads/writes are `services::org_join_requests`/`services::org_auto_add`, both on `state.control_db()`, plus (on an admit) the same Clerk membership provisioning `routes::org_join_requests::create`'s own auto-add path already takes.
+/orgs/auto-add/admit-queued exempt
+# exempt: the read-only half of the same D11 "ask once" pair immediately above — identical shape and reasoning.
+/orgs/auto-add/queued-preview exempt
+# exempt: org-admin connector-health read (CS-446, org-onboarding plan §3 item 16, D16). Same shape as /query-audit below: admin-gated, scoped to the account/org boundary, takes no graph_id and resolves no ocean at all — `connector_health` (migration 0243) is control-plane bookkeeping about an ORG and a CONNECTOR, never read back as ocean content. No tenant pool is in its path: the handler's only reads are `Store::account_is_real_org` and `services::connector_health`, both on the control pool.
+/orgs/connector-health exempt
+# exempt: org invite administration, no graph_id.
+/orgs/invites exempt
+# exempt: org invite administration, no graph_id.
+/orgs/invites/{user_id} exempt
+# exempt: org invite administration, no graph_id.
+/orgs/invites/{user_id}/resend exempt
+# exempt: org roster administration, no graph_id.
+/orgs/members exempt
+# exempt: per-account LLM/synthesis/egress preferences, no graph_id.
+/prefs exempt
+/queries probed
+/queries/stream probed
+# exempt: org-admin audit log listing. It NAMES the oceans a query reached, but the route itself is account/org-boundary-scoped and admin-gated, not member-ocean-resolved.
+/query-audit exempt
+/relationships/{edge_id}/confirm pending
+/relationships/{edge_id}/reject pending
+# pending: ocean/graph-resolving — reads retraction_audit_log, whose rows carry graph_id and whose SELECT policy filters by the caller`s reachable oceans. Covered structurally by the shared ReachabilityResolver/RLS predicate this suite proves elsewhere; no dedicated row yet.
+/retractions pending
+# pending: ocean/graph-resolving — retraction_audit_log rows for one session, same graph_id-scoped SELECT policy. Covered structurally by the shared ReachabilityResolver/RLS predicate this suite proves elsewhere; no dedicated row yet.
+/retractions/session/{session_id} pending
+# pending: ocean/graph-resolving — single retraction_audit_log row, same graph_id-scoped SELECT policy. Covered structurally by the shared ReachabilityResolver/RLS predicate this suite proves elsewhere; no dedicated row yet.
+/retractions/{retraction_id} pending
+# probed: backend/tests/review_read_scope_pg.rs (settings 2.12) — the decisions count is scoped to ReachabilityResolver::readable_graph_ids; edges and merge reviews were already per reachable graph_id.
+/review/count probed
+/sessions probed
+/sessions/{session_id} pending
+/sessions/shares pending
+/sessions/shares/{id}/revoke pending
+/sync/pull probed
+/sync/push probed
+# exempt: team roster listing/creation, account-level, not a per-ocean content read — the plan's "teams.graph_id" concern is probed directly by teams_graph_id_pointing_at_member_kind_still_denied instead.
+/teams exempt
+# exempt: team-roster/lifecycle listing, not team ocean CONTENT.
+/teams/archived exempt
+# exempt: team roster/metadata CRUD, not team ocean CONTENT.
+/teams/{team_id} exempt
+# pending: ocean/graph-resolving — events within the team's ocean. Covered structurally by the shared ReachabilityResolver predicate this suite proves elsewhere; no dedicated row yet.
+/teams/{team_id}/events pending
+# exempt: team roster management, see /teams above.
+/teams/{team_id}/members exempt
+# exempt: ditto.
+/teams/{team_id}/members/{user_id} exempt
+# exempt: ditto.
+/teams/invite exempt
+# exempt: ditto.
+/teams/members exempt
+# exempt: ditto.
+/teams/members/{user_id} exempt
+# exempt: team lifecycle (unarchive), not ocean CONTENT.
+/teams/{team_id}/restore exempt
+# exempt: client telemetry sink, writes no account content.
+/telemetry/client exempt
+/transcript-corrections pending
+/transcript-corrections/{correction_id}/restore pending
+/transcript-corrections/{correction_id}/revert pending
+/transcript/cleanup pending
+# exempt: account-level metering aggregate. It does open a content-plane scope, but reports account-wide usage totals and takes no graph_id — it is not member-ocean-resolved.
+/usage/summary exempt
+# exempt: takes no graph_id; intents are owner-scoped (account,user) by RLS and the destination ocean is the caller's own primary member ocean, resolved server-side. Cross-member isolation is asserted in backend/tests/outlook_schedule_pg.rs.
+/outlook-capture-schedule/by-event exempt
+# exempt: takes no graph_id; intents are owner-scoped (account,user) by RLS and the destination ocean is the caller's own primary member ocean, resolved server-side. Cross-member isolation is asserted in backend/tests/outlook_schedule_pg.rs.
+/outlook-capture-schedule/by-nonce/{nonce} exempt
+# exempt: takes no graph_id; intents are owner-scoped (account,user) by RLS and the destination ocean is the caller's own primary member ocean, resolved server-side. Cross-member isolation is asserted in backend/tests/outlook_schedule_pg.rs.
+/outlook-capture-schedule/intents exempt
+# exempt: takes no graph_id; intents are owner-scoped (account,user) by RLS and the destination ocean is the caller's own primary member ocean, resolved server-side. Cross-member isolation is asserted in backend/tests/outlook_schedule_pg.rs.
+/outlook-capture-schedule/intents/{intent_id} exempt
+
+# pending: dedicated meeting_evidence_pg covers consumer RLS and graph/source/version binding; tenant adversarial HTTP fixture remains in general probe follow-up.
+/meetings/evidence pending
+/meetings/evidence/retry pending
+/nodes/{id}/semantic-atoms pending
+
+# UUID deletion authorization also covered by source_ingest_pg.
+/sources/items/{id} pending

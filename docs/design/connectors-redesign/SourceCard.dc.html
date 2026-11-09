@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/styles.css"><script src="_ds/coralswarm-design-system-45176790-c8e0-4a3d-9214-aabb386b66c6/_ds_bundle.js"></script></helmet>
+<div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;background:{{ cardBg }};border:1px solid {{ cardBorder }};border-radius:var(--r-card);box-shadow:{{ cardShadow }};font-family:var(--sans);color:var(--ink);overflow:hidden">
+  <div style="display:flex;flex-direction:column;gap:10px;padding:14px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="flex:1;min-width:0;font-size:14px;font-weight:500;color:{{ nameColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.n }}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:var(--r-full);border:1px solid {{ pill.border }};background:{{ pill.bg }};color:{{ pill.fg }};font-family:var(--mono);font-size:10px;line-height:1.5;white-space:nowrap"><span style="color:{{ pill.tone }};font-weight:600">{{ pill.glyph }}</span><span>{{ pill.label }}</span></span>
+    </div>
+    <sc-if value="{{ isOff }}" hint-placeholder-val="{{ false }}">
+      <span style="font-size:12.5px;line-height:1.5;color:var(--ink-3);text-wrap:pretty">{{ s.what }}</span>
+    </sc-if>
+    <sc-if value="{{ isOn }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="flex:1;min-width:0;font-size:12.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.scope }}</span>
+        <sc-if value="{{ notExpanded }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="ghost" size="sm" hint-size="50px,28px">Edit</x-import></sc-if>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:10px">
+        <div style="flex:1;display:flex;align-items:flex-end;gap:3px;height:{{ sparkH }}">
+          <sc-for list="{{ bars }}" as="b" hint-placeholder-count="7"><span title="{{ b.title }}" style="flex:1;height:{{ b.h }};min-height:2px;border-radius:2px;background:{{ b.color }}"></span></sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none"><span style="font-family:var(--mono);font-size:13px;color:var(--ink)">{{ weekTotal }}</span><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">this week</span></div>
+      </div>
+    </sc-if>
+  </div>
+  <sc-if value="{{ expanded }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;border-top:1px solid var(--line-3);background:var(--bg-subtle)">
+      <div style="align-self:flex-start;display:flex;max-width:100%"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Seg" options="{{ modes }}" value="pick" style="width:max-content;max-width:100%" hint-size="auto,32px"></x-import></div>
+      <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.SearchInput" placeholder="{{ s.searchLabel }}" icon="{{ searchIcon }}" style="width:100%" hint-size="100%,32px"></x-import>
+      <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden">
+        <sc-for list="{{ items }}" as="it" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:{{ it.rule }}">
+            <span style="display:grid;place-items:center;width:15px;height:15px;flex:none;border-radius:4px;border:1px solid {{ it.boxBorder }};background:{{ it.boxBg }};color:#fff;font-size:10px;line-height:1">{{ it.mark }}</span>
+            <span style="flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.n }}</span>
+            <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ it.meta }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ addon }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line-3);padding-top:12px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)">gmail add-on</span>
+          <span style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">The add-on uses this token to follow threads from inside Gmail. Revoking it stops the add-on, not this connection.</span>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px">
+            <span style="font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-full);padding:4px 11px">cs_addon_••••3f9a</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3)">used 2h ago</span>
+          </div>
+          <div style="display:flex;gap:6px"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" hint-size="90px,28px">New token</x-import><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="ghost" size="sm" hint-size="70px,28px">Revoke</x-import></div>
+        </div>
+      </sc-if>
+      <div style="display:flex;align-items:center;gap:8px">
+        <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="ghost" size="sm" hint-size="100px,28px">Pause source</x-import>
+        <div style="flex:1"></div>
+        <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" hint-size="70px,28px">Cancel</x-import>
+        <x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="primary" size="sm" hint-size="60px,28px">Save</x-import>
+      </div>
+    </div>
+  </sc-if>
+  <div style="flex:1"></div>
+  <div style="display:flex;flex-direction:column;gap:6px;padding:9px 14px;border-top:1px solid var(--line-3);background:{{ footBg }}">
+    <sc-if value="{{ isOff }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:flex-end"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Button" variant="secondary" size="sm" hint-size="76px,28px">Connect</x-import></div></sc-if>
+    <sc-if value="{{ isOn }}" hint-placeholder-val="{{ true }}">
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">{{ s.last }}</span>
+      <sc-if value="{{ importing }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="CoralSwarmDesignSystem_451767.Meter" value="{{ s.progress }}" tone="var(--ok)" hint-size="100%,6px"></x-import></sc-if>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:340,&quot;height&quot;:200},&quot;s&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Source&quot;},&quot;expanded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;tall&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { r: 0 };
+  componentDidMount() { this._t = setInterval(() => { if (window.CoralSwarmDesignSystem_451767) { clearInterval(this._t); this.setState({ r: 1 }); } }, 80); }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const NS = window.CoralSwarmDesignSystem_451767;
+    const s = this.props.s ?? { n: "Outlook mail", status: "active", scope: "4 followed threads", last: "last captured 3 min ago", week: [3, 5, 2, 6, 4, 1, 2] };
+    const TONE = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--bad)", muted: "var(--ink-3)" };
+    const mk = (label, tone, glyph) => ({ label, glyph, tone: TONE[tone], border: `color-mix(in srgb, ${TONE[tone]} 40%, transparent)`, bg: tone === "muted" ? "transparent" : `color-mix(in srgb, ${TONE[tone]} 18%, transparent)`, fg: tone === "muted" ? "var(--ink-2)" : "var(--ink)" });
+    const ST = { active: mk("Active", "ok", "✓"), importing: mk("Importing history", "ok", "↓"), paused: mk("Paused", "muted", "‖"), attention: mk("Needs attention", "warn", "!"), stopped: mk("Stopped", "bad", "×"), off: mk("Off", "muted", "○") };
+    const isOff = s.status === "off";
+    const week = s.week || [0, 0, 0, 0, 0, 0, 0];
+    const max = Math.max(1, ...week);
+    const days = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+    const stopped = s.status === "attention" || s.status === "stopped";
+    const bars = week.map((v, i) => ({ h: `${Math.round((v / max) * 100)}%`, title: `${days[i]} · ${v}`, color: v === 0 ? "var(--line)" : i === week.length - 1 ? "var(--hue-teal)" : "color-mix(in srgb, var(--hue-teal) 55%, var(--bg))" }));
+    const expanded = !!this.props.expanded && !isOff;
+    const picked = new Set([0, 1, 3]);
+    return {
+      addon: !!s.addon,
+      s, pill: ST[s.status] || ST.active, isOff, isOn: !isOff, expanded, notExpanded: !expanded,
+      importing: s.status === "importing", bars, weekTotal: week.reduce((a, b) => a + b, 0), sparkH: this.props.tall ? "44px" : "28px",
+      cardBg: isOff ? "var(--bg-subtle)" : "var(--bg)", cardBorder: isOff ? "var(--line-2)" : stopped ? "color-mix(in srgb, var(--warn) 50%, var(--line))" : "var(--line)",
+      cardShadow: isOff ? "none" : "var(--shadow-card)", nameColor: isOff ? "var(--ink-2)" : "var(--ink)", footBg: isOff ? "transparent" : "var(--bg-subtle)",
+      modes: [{ key: "pick", label: "Only what I pick" }, { key: "all", label: "Everything I can see" }],
+      searchIcon: NS ? React.createElement(NS.Icon, { name: "search", size: 13 }) : null,
+      items: (s.items || []).map((n, k) => ({ n, meta: (s.itemMeta || [])[k] || "", rule: k ? "1px solid var(--line-3)" : "none", boxBorder: picked.has(k) ? "var(--ink)" : "var(--line)", boxBg: picked.has(k) ? "var(--ink)" : "var(--bg)", mark: picked.has(k) ? "✓" : "" })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{"doc_id": "gm01", "source_type": "transcript", "title": "Eng sync", "date": "2026-05-04", "participants": ["Priya Anand", "Jordan Lee"], "content": "Priya Anand: Morning, let's start the eng sync.\nJordan Lee: Sounds good, I'll take notes.\nPriya Anand: First up, the checkout redesign is on track for next sprint.\nJordan Lee: Nice, no blockers from my side.\nPriya Anand: We also merged the analytics dashboard changes yesterday.\nJordan Lee: I saw that, looks clean.\nPriya Anand: Let's talk about the deploy pipeline next.\nJordan Lee: The deploy pipeline is stable this week.\nPriya Anand: Good, any incidents overnight?\nJordan Lee: None reported, all green.\nPriya Anand: Let's cover the vendor renewal.\nJordan Lee: Vendor renewal paperwork is with legal.\nPriya Anand: Great, moving on to hiring.\nJordan Lee: Two candidates are in final rounds.\nPriya Anand: Let's also check the roadmap doc.\nJordan Lee: Roadmap doc is updated through Q4.\nPriya Anand: Any updates on the mobile app?\nJordan Lee: Mobile app beta starts next week.\nPriya Anand: Sounds good, let's talk staffing for next sprint.\nJordan Lee: Staffing looks fine, no changes needed.\nPriya Anand: One more thing before we wrap up.\nJordan Lee: Since Kenji is out next week, I'm moving the on-call pager handoff to Priya starting Monday the 11th.\nPriya Anand: Got it, I'll take the pager starting Monday.\nJordan Lee: Thanks, I'll update the schedule doc.\nPriya Anand: Anything else from the platform side?\nJordan Lee: Nothing else, all quiet.\nPriya Anand: Let's close out then.\nJordan Lee: Sounds good, talk tomorrow.\nPriya Anand: Thanks everyone.\nJordan Lee: Bye all."}
+{"doc_id": "gs01", "source_type": "slack", "date": "2026-05-05", "content": "Priya approved the Q3 design budget increase for the new hire."}
+{"doc_id": "gs02", "source_type": "slack", "date": "2026-05-06", "content": "Priya scheduled the quarterly roadmap review for next Tuesday."}
+{"doc_id": "gs03", "source_type": "slack", "date": "2026-05-07", "content": "Priya flagged a bug in the checkout flow affecting EU customers."}
+{"doc_id": "gs04", "source_type": "slack", "date": "2026-05-08", "content": "Priya is out of office Thursday and Friday next week."}
+{"doc_id": "gs05", "source_type": "slack", "date": "2026-05-09", "content": "Priya asked for the updated onboarding doc to be shared with new hires."}
+{"doc_id": "gs06", "source_type": "slack", "date": "2026-05-10", "content": "Priya reviewed the vendor contract for the new analytics tool."}
+{"doc_id": "gs07", "source_type": "slack", "date": "2026-05-11", "content": "Priya set up the customer interview schedule for next month."}
+{"doc_id": "gs08", "source_type": "slack", "date": "2026-05-12", "content": "Priya moved the retro to Wednesday afternoon."}
+{"doc_id": "gs09", "source_type": "slack", "date": "2026-05-13", "content": "Priya said the new dashboard mockups look great."}
+{"doc_id": "gs10", "source_type": "slack", "date": "2026-05-14", "content": "Priya confirmed the offsite venue for October."}
+{"doc_id": "al01", "source_type": "slack", "date": "2026-05-15", "content": "The DevOps engineer fixed the flaky CI pipeline by pinning the Node version in the build image."}
+{"doc_id": "cl01", "source_type": "slack", "date": "2026-05-01", "content": "ExamplePortal onboarding support questions go through the ExamplePortal onboarding Slack channel, and ExamplePortal onboarding support has run through Slack since launch."}
+{"doc_id": "cl02", "source_type": "slack", "date": "2026-06-20", "content": "ExamplePortal onboarding support now runs through the Zendesk help desk instead of Slack."}
+{"doc_id": "mw01", "source_type": "slack", "date": "2026-05-16", "content": "Marcus Webb manages the data platform team out of the Austin office."}
+{"doc_id": "dpt01", "source_type": "slack", "date": "2026-05-17", "content": "The data platform team owns ETL pipelines and the internal data warehouse used by analytics."}
+{"doc_id": "hop01", "source_type": "slack", "date": "2026-05-18", "content": "Overnight batch processing now finishes in well under an hour, down from most of a workday, after a rewrite last quarter."}
+{"doc_id": "jl01", "source_type": "slack", "date": "2026-05-19", "content": "Jordan Lee is the lead engineer on the checkout redesign project."}
+{"doc_id": "jl02", "source_type": "slack", "date": "2026-05-20", "content": "Jordan Lee proposed splitting the checkout redesign into two rollout phases."}
+{"doc_id": "ks01", "source_type": "slack", "date": "2026-05-21", "content": "Kenji Sato is out on parental leave until next month."}
+{"doc_id": "ks02", "source_type": "slack", "date": "2026-05-22", "content": "Kenji Sato normally owns the on-call pager rotation for the platform team."}
+{"doc_id": "ks03", "source_type": "slack", "date": "2026-05-23", "content": "Kenji Sato reviewed the incident postmortem for last Tuesday's outage."}
+{"doc_id": "ks04", "source_type": "slack", "date": "2026-05-24", "content": "Kenji Sato is expected back from leave during the first week of next month."}
+{"doc_id": "qb01", "source_type": "slack", "date": "2026-05-24", "content": "The Q3 design budget was increased by fifteen percent to fund a new hire."}
+{"doc_id": "qb02", "source_type": "slack", "date": "2026-05-25", "content": "The design budget increase was approved after the January planning review."}
+{"doc_id": "cir01", "source_type": "slack", "date": "2026-05-26", "content": "CI pipeline flakiness was traced to an unpinned Node version in the build image."}
+{"doc_id": "cir02", "source_type": "slack", "date": "2026-05-27", "content": "The team added a nightly canary job to catch flaky CI regressions early."}
+{"doc_id": "bh01", "source_type": "slack", "date": "2026-05-28", "content": "The Beacon Hill cafe renovation added new outdoor seating."}
+{"doc_id": "bh02", "source_type": "slack", "date": "2026-05-29", "content": "The cafe renovation budget came in under the original estimate."}
+{"doc_id": "bh03", "source_type": "slack", "date": "2026-05-30", "content": "The renovated cafe reopened on a Saturday morning in June."}
+{"doc_id": "bh04", "source_type": "slack", "date": "2026-05-31", "content": "Customer feedback on the new cafe layout has been positive."}
+{"doc_id": "d1a01", "source_type": "slack", "date": "2026-06-01", "content": "When a production incident happens, we escalate it immediately by paging the on-call engineer through the phone tree."}
+{"doc_id": "d1a02", "source_type": "slack", "date": "2026-06-02", "content": "The incident phone tree escalates a production issue to the secondary on-call after ten minutes."}
+{"doc_id": "d1a03", "source_type": "slack", "date": "2026-06-03", "content": "Escalating a production incident used to mean calling the phone tree operator directly."}
+{"doc_id": "d1a04", "source_type": "slack", "date": "2026-06-04", "content": "Production incidents get escalated to the on-call engineer via the old phone tree process."}
+{"doc_id": "d1a05", "source_type": "slack", "date": "2026-06-05", "content": "The phone tree was the only way to escalate a production incident before the pager rotation existed."}
+{"doc_id": "d1a06", "source_type": "slack", "date": "2026-06-06", "content": "We used to escalate incidents through the phone tree, dialing each on-call engineer in order."}
+{"doc_id": "d1a07", "source_type": "slack", "date": "2026-06-07", "content": "Escalation of a production incident meant working down the phone tree list one number at a time."}
+{"doc_id": "d1a08", "source_type": "slack", "date": "2026-06-08", "content": "The legacy phone tree escalation process for production incidents took up to twenty minutes."}
+{"doc_id": "d1a09", "source_type": "slack", "date": "2026-06-09", "content": "A production incident escalation started with a call to the on-call phone tree coordinator."}
+{"doc_id": "d1a10", "source_type": "slack", "date": "2026-06-10", "content": "The phone tree escalation path for incidents was documented in the old runbook."}
+{"doc_id": "d1a11", "source_type": "slack", "date": "2026-06-11", "content": "Escalating an incident meant someone manually working through the phone tree contact list."}
+{"doc_id": "d1a12", "source_type": "slack", "date": "2026-06-12", "content": "The phone tree process for incident escalation was retired after complaints about slow response."}
+{"doc_id": "d1b01", "source_type": "slack", "date": "2026-06-13", "content": "When a production incident happens, we escalate it immediately through the PagerDuty on-call integration instead of the phone tree."}

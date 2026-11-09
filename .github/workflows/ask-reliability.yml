@@ -1,0 +1,104 @@
+name: Ask reliability
+
+# Read-only poll of durable diagnostics, using the existing backup credentials
+# and private Fly tunnel. No new exporter, public endpoint, or service.
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ask-reliability
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify existing credentials
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DATABASE_URL_RAW: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          test -n "$FLY_API_TOKEN" && test -n "$DATABASE_URL_RAW" || {
+            echo "::error::FLY_API_TOKEN and BACKUP_DATABASE_URL must be configured"
+            exit 1
+          }
+      - name: Install PostgreSQL query client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+      - name: Open existing private database tunnel
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl proxy 15432:5432 -a coralswarm-db > proxy.log 2>&1 &
+          echo $! > proxy.pid
+          for _ in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/15432) 2>/dev/null; then
+              exec 3>&-
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Database tunnel did not start"
+          exit 1
+      - name: Prepare existing tenant secret resolver
+        run: |
+          cat > resolve_ask_tenant.sh <<'RESOLVER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          name="$1"
+          [[ "$name" =~ ^TENANT_DB_[A-Z0-9_]+$ ]] || exit 1
+          # Automatic machine selection prints a banner to stdout even with
+          # --quiet, corrupting the privately captured DSN. Select a running
+          # machine explicitly so stdout contains only the resolved DSN.
+          # A self-serve tenant has no Fly secret (issue #1514): when printenv
+          # finds nothing, `migrate_tenants --resolve-dsn` reads its
+          # KEK-encrypted tenant_db_credentials row (stderr discarded on the
+          # machine), exactly as backup-tenants.yml does.
+          machine="$(flyctl machines list -a coralswarm-backend --json 2>/dev/null | \
+            python3 -c 'import json,sys; ids=[m["id"] for m in json.load(sys.stdin) if m.get("state")=="started" and m.get("config",{}).get("metadata",{}).get("fly_process_group")=="app"]; print(ids[0] if ids else "")')"
+          [[ "$machine" =~ ^[a-f0-9]+$ ]] || exit 1
+          flyctl ssh console -a coralswarm-backend -q --machine "$machine" \
+            -C "/bin/sh -c 'printenv $name || /app/migrate_tenants --resolve-dsn $name 2>/dev/null'" 2>/dev/null | tr -d '\r'
+          RESOLVER
+          chmod +x resolve_ask_tenant.sh
+      - name: Check both consecutive complete windows across all databases
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DATABASE_URL_RAW: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          # Capture URL rewrite without printing the credential or writing it
+          # to an artifact/GITHUB_ENV. psql receives it only in its environment.
+          DATABASE_URL="$(python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit, urlunsplit
+          url = urlsplit(os.environ['DATABASE_URL_RAW'])
+          credentials = url.netloc.rsplit('@', 1)[0] + '@' if '@' in url.netloc else ''
+          print(urlunsplit((url.scheme, credentials + '127.0.0.1:15432', url.path, url.query, url.fragment)))
+          PY
+          )"
+          export DATABASE_URL
+          export ASK_DSN_RESOLVER="$PWD/resolve_ask_tenant.sh"
+          python3 scripts/check_ask_reliability.py --all-tenants > ask-reliability.jsonl
+      - name: Retain aggregate report for 30 days
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ask-reliability-${{ github.run_id }}
+          path: ask-reliability.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
+      - name: Close database tunnel
+        if: always()
+        run: |
+          if [ -f proxy.pid ]; then kill "$(cat proxy.pid)" || true; fi

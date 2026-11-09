@@ -1,0 +1,100 @@
+# ── Rust ────────────────────────────────────────────────────────────────────
+/target
+**/target/
+# Cargo.lock is intentionally committed — this repo contains applications, not libraries.
+
+# ── Node / Next.js ──────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+dist/
+.cache/
+*.tsbuildinfo
+.wrangler/
+
+# ── pnpm / Turborepo ─────────────────────────────────────────────────────────
+.turbo/
+
+# ── Environment / secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# Never commit .env — only .env.example is tracked.
+
+# ── OS / editor ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.iml
+
+# ── ML models (large binary files — download via scripts/download_model.sh) ──
+**/models/*.onnx
+**/models/*-tokenizer.json
+
+# ── Dev-only tooling (reads .env — do not commit) ───────────────────────────
+scripts/test_extract_prompt.sh
+
+# ── Local scratch / WIP artifacts (not for the repo) ────────────────────────
+# Local dev/test harness (backend launcher, tunnel/proxy logs, Teams app zips).
+.dev-test/
+# Root-level HTML mockups (e.g. phase2-breakdown, product-state, sources-view).
+/*.html
+/sample-transcript.txt
+# Operator-only prod DB dump (a backup, not source).
+scripts/sqlx_migrations.prod.backup.sql
+# One-off scratch docs (note: HANDOFF_*/CODE_REVIEW_* are otherwise tracked —
+# these two are local-only by choice; remove the line to commit like siblings).
+/CODE_REVIEW_BATCH.md
+/HANDOFF_WEB_V1.md
+
+# Retrieval eval harness (backend/eval): per-run JSON report and Sonnet-drafted
+# golden candidates are local artifacts. The committed source of truth is
+# fixtures/corpus.jsonl, golden/golden.jsonl and baseline.json.
+backend/eval/last_report.json
+backend/eval/last_jev_catalog_scan.json
+backend/eval/last_jev_catalog_scale.json
+backend/eval/last_jev_catalog_real.json
+backend/eval/last_jev_aspects.json
+backend/eval/last_jev_onboard.json
+backend/eval/last_jev_seats.json
+backend/eval/last_jev_leftover.json
+backend/eval/last_jev_embed.json
+backend/eval/last_jev_topic_first.json
+backend/eval/last_jev_ingest_q1_identity.json
+backend/eval/last_jev_ingest_q1_relationships.json
+backend/eval/last_jev_ingest_q1_claims.json
+backend/eval/last_jev_ingest_q1_rel_*.json
+backend/eval/hybrid_pick_ids.json
+backend/eval/real_catalog_254.json
+backend/eval/golden/golden.candidates.jsonl
+
+# Prompt eval harness (backend/eval/PROMPT_EVAL.md): per-run model reports and
+# Sonnet-drafted candidate cases are local artifacts. The committed source of
+# truth is golden/extraction_golden.json and golden/expertise_golden.json.
+backend/eval/reports/
+backend/eval/golden/extraction.candidates.json
+backend/eval/golden/expertise.candidates.json
+
+# The wayfinder/build-program scratch archive is untracked BY DESIGN (see
+# docs/plans/capture/README.md: "untracked, local-only archive"), and it can
+# hold full-resolution captures of the founder's live screen (unit 10's OCR
+# harness) — a `git add -A` must never be able to commit it.
+.scratch/
+# Task worktrees checked out inside the repo root (dsp-lift etc.) — never
+# stageable from the main checkout.
+/worktrees/
+# Ad-hoc root-level service logs from local runs (may embed request payloads).
+/*.log
+
+# GitHub App private keys (dev + prod) never enter the tree
+*.pem
+.env.github-prod
+
+# Generated Outlook assets served by the existing web app build.
+/web/public/outlook/
+
+# Python bytecode (scripts/ unit tests)
+__pycache__/
+*.pyc

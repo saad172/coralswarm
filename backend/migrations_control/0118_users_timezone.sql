@@ -1,0 +1,44 @@
+-- Migration: 0118_users_timezone
+-- Description: `users.timezone` — a nullable, per-user IANA zone name
+--   (America/Chicago, Europe/London, ...), the founder-mandated replacement
+--   for the codebase-wide `America/Chicago` default the Today-journal tier
+--   feature (ticket 15, migration `0117_journal_tier_rollups`) originally shipped
+--   with: "the timezone default is REJECTED — Alex wants per-user timezone,
+--   not a hardcoded/env default."
+--
+-- CONTROL-PLANE ONLY, no tenant-plane pair: `users` itself does not exist on
+-- the tenant plane (every tenant-plane table that carries a `user_id` column
+-- — `journal_rollups` among them — stores it as a bare, FK-less UUID; see
+-- migration `0024_journal_rollups`'s own header for the established
+-- "No FK: users is control-only, does not exist in a tenant DB" convention).
+-- A per-user preference therefore has exactly one place it can live:
+-- CONTROL's `users` row, looked up by `user_id` regardless of which plane's
+-- content is being summarized. `workers::journal_sweep::resolve_user_tz`'s
+-- doc comment records the resulting ORG-TENANT limitation this creates (no
+-- direct path from an org tenant DB back to this column without a new
+-- cross-plane connection this PR does not add) — flagged there, not solved
+-- here, same "flagged, not solved" precedent this file's own neighboring
+-- migrations (`0113_journal_rollups`'s OPS-4-T note, etc.) already set for
+-- exactly this class of plane-boundary gap.
+--
+-- Nullable, no default: `NULL` means "never captured" (a brand-new user, a
+-- user on a client build that predates the capture endpoint, a user who
+-- never boots the web client) — [`workers::journal_sweep::resolve_user_tz`]
+-- treats `NULL` as the first link in its fallback chain (`JOURNAL_TZ` env,
+-- then UTC), never as an error.
+--
+-- No CHECK constraint on IANA validity: Postgres has no built-in IANA
+-- tzdata table to validate against, and this codebase's chrono-tz dependency
+-- (Rust, not SQL) is not reachable from a DDL CHECK expression. Validation is
+-- therefore an APPLICATION-layer responsibility, enforced at the one write
+-- site (`routes::me::put_me_timezone`, `chrono_tz::Tz`'s `FromStr`) rather
+-- than at the schema layer — the same split this codebase already accepts
+-- for `journal_rollups.model`/`input_fingerprint`'s non-empty CHECKs (a
+-- shape constraint, not a semantic one) vs. things Rust alone can validate.
+--
+-- Depends on: 0001_init (users).
+--
+-- Down:
+--   ALTER TABLE users DROP COLUMN IF EXISTS timezone;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT;

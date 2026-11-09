@@ -1,0 +1,61 @@
+-- Migration: 0177_oauth_tokens_dek_migrated_at
+-- Description: Foundation train PR 1.2 — wrapped-DEK cutover for oauth_tokens
+--   (CS-031). `routes::oauth::derive_account_dek` (an XOR of the
+--   `ACCOUNT_MASTER_KEK` env var with the account UUID, repeated over 32
+--   bytes) is retired from every request-path caller in this PR. OAuth tokens
+--   are now encrypted under the SAME per-account wrapped DEK content
+--   encryption already uses — `accounts.dek_wrapped` / `account_keys.
+--   dek_wrapped`, wrapped under `MASTER_KEK_HEX`, resolved via
+--   `crate::crypto::resolve_dek`/`resolve_dek_cached` and cached in
+--   `DekCache` — see `crypto.rs`'s own module doc for the scheme. No new
+--   per-purpose DEK is introduced; oauth_tokens simply moves onto the DEK
+--   every account already has.
+--
+--   Re-encrypting the EXISTING `access_token` / `refresh_token` /
+--   `user_token_encrypted` ciphertext cannot be done in pure SQL: converting
+--   a row requires DECRYPTING it first under the OLD `ACCOUNT_MASTER_KEK`-
+--   derived key (only computable in Rust — hex-decode + a 32-byte XOR + a
+--   real AES-256-GCM implementation), then RE-ENCRYPTING under the wrapped
+--   DEK (itself only reachable by unwrapping `accounts.dek_wrapped` with
+--   `MASTER_KEK_HEX`, again real crypto, not SQL). Same precedent as
+--   `backfill_billing_enforcement` (`backend/src/bin/`) and the org-tenancy
+--   DEK-rotation admin handler (`routes::admin::rotate_dek`): a migration
+--   adds whatever schema the backfill needs, and a dedicated Rust binary does
+--   the actual data conversion as a separate, idempotent, re-runnable
+--   operational step — here, `backfill_oauth_tokens_wrapped_dek`
+--   (`backend/src/bin/backfill_oauth_tokens_wrapped_dek.rs`), built on the
+--   shared, `pub` `coralswarm_backend::oauth_dek_cutover::reencrypt_oauth_tokens`
+--   so both the CLI and a pg-gated test exercise the identical logic. See
+--   that binary's own doc comment for the full runbook (order of
+--   migrate → run-binary → deploy-cutover-code → re-run-binary →
+--   remove-ACCOUNT_MASTER_KEK).
+--
+--   `dek_migrated_at` is the progress marker the binary sets on each row it
+--   converts: `NULL` = still legacy-XOR-encrypted (the state of every
+--   existing row the instant this migration applies), non-NULL = converted
+--   to the wrapped-DEK scheme. It lets an operator confirm the backfill is
+--   COMPLETE with a plain `SELECT count(*) FROM oauth_tokens WHERE
+--   dek_migrated_at IS NULL` before removing `ACCOUNT_MASTER_KEK` from
+--   deployment secrets (see the binary's runbook), and lets the binary itself
+--   skip already-converted rows on a re-run instead of re-decrypting
+--   (idempotent, safe to run repeatedly). Nullable, no backfill in THIS
+--   migration — schema only; the binary is what actually converts rows.
+--
+--   Control-plane only, per the Train 1 plan ("no tenant migrations" — see
+--   `.scratch/m365-enterprise/plan.md`'s Train 1 section): every oauth_tokens
+--   read/write path this PR touches runs on the control/consumer plane
+--   exclusively (see `routes::oauth`/`routes::connectors`'s own doc
+--   comments), and no per-member Outlook token exists yet to backfill on a
+--   tenant plane. `oauth_tokens` IS one of the shared tables
+--   `scripts/check_schema_parity.sh` diffs between the control and tenant
+--   trees (`CONTROL_ONLY_RLS_TABLES`), though, so this schema-only column
+--   addition is paired into
+--   `migrations_tenant/0060_oauth_tokens_dek_migrated_at.sql` to keep that
+--   gate green — same reasoning migration `0175`'s header gives for its own
+--   tenant twin (`0059`): the pairing carries no behavior change, since
+--   nothing reads or writes `oauth_tokens` on a tenant pool today.
+--
+-- Down:
+--   ALTER TABLE oauth_tokens DROP COLUMN IF EXISTS dek_migrated_at;
+
+ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS dek_migrated_at TIMESTAMPTZ;

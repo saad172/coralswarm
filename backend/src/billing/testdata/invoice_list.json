@@ -1,0 +1,28 @@
+{
+  "object": "list",
+  "has_more": true,
+  "data": [
+    {
+      "id": "in_TEST0000000002",
+      "object": "invoice",
+      "number": "CORAL-0002",
+      "status": "paid",
+      "amount_paid": 4000,
+      "currency": "usd",
+      "created": 1758092000,
+      "hosted_invoice_url": "https://invoice.stripe.com/i/acct_TEST/in_TEST0000000002",
+      "invoice_pdf": "https://invoice.stripe.com/i/acct_TEST/in_TEST0000000002/pdf"
+    },
+    {
+      "id": "in_TEST0000000001",
+      "object": "invoice",
+      "number": "CORAL-0001",
+      "status": "paid",
+      "amount_paid": 4000,
+      "currency": "usd",
+      "created": 1755500000,
+      "hosted_invoice_url": "https://invoice.stripe.com/i/acct_TEST/in_TEST0000000001",
+      "invoice_pdf": "https://invoice.stripe.com/i/acct_TEST/in_TEST0000000001/pdf"
+    }
+  ]
+}

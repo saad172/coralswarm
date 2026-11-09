@@ -1,0 +1,70 @@
+{
+  "toolInput": {
+    "reef_id": "bec2fd9c-2980-4af9-87ed-ff44bc293e7c"
+  },
+  "toolOutput": {
+    "reef_id": "bec2fd9c-2980-4af9-87ed-ff44bc293e7c",
+    "ocean_id": "818ccfa2-051b-417a-96af-06335e439fac",
+    "type": "decision",
+    "title": "Rate limiting for the public API",
+    "scope": "account",
+    "atom_count": 34,
+    "created_at": "2026-01-20T00:00:00Z",
+    "updated_at": "2026-02-14T11:00:00Z",
+    "digest": {
+      "digested_title": "Rate limiting for the public API",
+      "summary": "Requests are limited per API key with a token bucket: 600 a minute, burst of 100, refilling at 10 a second. Responses over the limit return 429 with a Retry-After header. Rollout is opt-in by header until Feb 28, then default for every key.",
+      "excerpts": [
+        {
+          "atom_id": "db9161c3-55fa-44f3-b0b2-7ee17323ca28",
+          "excerpt": "Burst incident: one key at 40k/min for twelve minutes pegged the gateway. Per-IP throttling did nothing behind a NAT.",
+          "contribution": "established the need"
+        },
+        {
+          "atom_id": "ce05b4c2-cc80-4f1f-b467-64a9b4c1774f",
+          "excerpt": "Decided in the platform sync: token bucket per key, 600/min, burst 100. Priya owns the ADR.",
+          "contribution": "the decision itself"
+        },
+        {
+          "atom_id": "f20d96e4-f7ef-4c80-97ff-8a533033e077",
+          "excerpt": "Opt-in header gate landed in api-gateway with burst tests. 429 body shape still open.",
+          "contribution": "implementation status"
+        }
+      ]
+    },
+    "corals": [
+      {
+        "atom_id": "db9161c3-55fa-44f3-b0b2-7ee17323ca28",
+        "source_type": "slack",
+        "source_id": "slack:C0PLATFORM:1707488",
+        "timestamp": "2026-02-09T14:31:00Z",
+        "participants": ["Marcus Oduya"]
+      },
+      {
+        "atom_id": "ce05b4c2-cc80-4f1f-b467-64a9b4c1774f",
+        "source_type": "meeting",
+        "source_id": "meeting:platform-sync-2026-02-12",
+        "timestamp": "2026-02-12T17:00:00Z",
+        "participants": ["Priya Raman", "Marcus Oduya"]
+      },
+      {
+        "atom_id": "f20d96e4-f7ef-4c80-97ff-8a533033e077",
+        "source_type": "coding_session",
+        "source_id": "cc:sess-api-gateway-0214:checkpoint-3",
+        "timestamp": "2026-02-14T09:00:00Z",
+        "participants": null
+      }
+    ],
+    "relationships": [
+      {
+        "edge_id": "6f8b3e2a-1111-4c2a-9a3a-000000000001",
+        "subject": "Rate limiting for the public API",
+        "predicate": "related_to",
+        "object": "Partner usage dashboard",
+        "inferred": false,
+        "confirmed": true,
+        "confidence": 0.9
+      }
+    ]
+  }
+}

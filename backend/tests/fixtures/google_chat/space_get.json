@@ -1,0 +1,11 @@
+{
+  "name": "spaces/AAAAAAAAAAA",
+  "spaceType": "SPACE",
+  "displayName": "eng-platform",
+  "spaceThreadingState": "THREADED_MESSAGES",
+  "historyState": "HISTORY_ON",
+  "singleUserBotDm": false,
+  "membershipCount": { "joinedDirectHumanUserCount": 4, "joinedGroupCount": 1 },
+  "adminInstalled": true,
+  "importMode": false
+}

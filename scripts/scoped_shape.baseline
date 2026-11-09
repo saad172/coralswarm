@@ -1,0 +1,1350 @@
+# The `_scoped` shape ratchet baseline (scripts/check_scoped_shape_ratchet.sh).
+#
+# This is a RATCHET, not a budget. Every number here may go down and may not
+# go up; every path here may be removed and none may be added. The guard fails
+# on a baseline that is too high as well as too low, so the file cannot drift
+# out of date in either direction while still reporting green.
+#
+# Lowering it is mechanical: `bash scripts/check_scoped_shape_ratchet.sh
+# --update`, which refuses to raise or add. RAISING IT IS A HAND EDIT and
+# needs a reviewer to agree that the restructure just got more expensive on
+# purpose — that is the whole point of the file.
+#
+# Committed at ddd3b13e (2026-08-24) under #552, map #549.
+# Raised by one PgPool file (Jev on OpenRouter, 2026-10-08):
+# backend/src/decision/openrouter.rs. TEST-ONLY — the guard is blind to
+# `cfg(test)`. Production code holds no pool: it meters through the
+# caller's `UsageContext` (via `decision::with_usage`) into
+# `llm::usage::metered_complete`, the existing choke point. The only
+# `PgPool` is `jev_openrouter_metering_pg`'s scratch ORGT_TEST_BASE_URL
+# database, which proves a Jev call lands in `llm_usage`. Kept beside the
+# code it tests because `current_usage` is `pub(crate)`.
+# Raised by one PgPool file (source-agnostic pipeline PR 4, 2026-10-18):
+# backend/src/ingest/capture/pg_tests.rs. TEST-ONLY — `#[cfg(test)]`, the
+# dynamic half of the capture-funnel coverage guard. Its `PgPool`s are
+# scratch ORGT_TEST_BASE_URL databases (owner and restricted app role, both
+# planes). The production core, backend/src/ingest/capture.rs, holds no
+# pool: it writes only through the caller's scoped transaction.
+# Raised by one PgPool file (CS-446, org-onboarding plan §3 item 16, D16,
+# 2026-09-22): backend/src/services/connector_health.rs, the durable record
+# behind D16's "if the member whose token backs the directory leaves, the
+# whole org silently drops from rung 1 to rung 2 unless that raises a
+# `connector_health` warning."
+#
+# CHECKED, NOT ASSUMED — this guard is blind to `cfg(test)`, so a test-only
+# PgPool trips the frozen set exactly like a production one, and the two
+# deserve different answers. This one is PRODUCTION: `&PgPool` appears in
+# eight production signatures (`note_member_departure`,
+# `refresh_open_degradations`, `list_open`, and the five helpers behind
+# them), taken from `routes::connector_health`'s `state.control_db()` and
+# from `clerk_provision::remove_org_membership`'s own pool. The `pg_tests`
+# helper's `Option<PgPool>` is incidental; removing it would not clear this
+# entry.
+#
+# Same shape as `services/org_join_requests.rs` (CS-437) and
+# `services/org_domains.rs` (CS-443) — a bare `&PgPool` scoped per-query via
+# `tenancy::scope::begin_account_scoped`, never the ambient pool. Routing it
+# through NEW `Store` `_scoped` methods instead would raise `scoped_methods`,
+# the OTHER metric this same file ratchets, for control-plane-only queries
+# with no tenant-tree counterpart — trading one frozen metric for the other
+# rather than shrinking the restructure's bill, which is the same reasoning
+# the two sweep-worker entries below record for themselves.
+# Raised by one PgPool file (CS-438, org-onboarding plan §3 item 5, D13,
+# 2026-09-22): backend/src/workers/org_join_request_digest.rs, the batched
+# "N people asked to join" admin digest for CS-437's join-request queue.
+# Same shape as `member_connect_nudge.rs` immediately below (also a
+# control-plane-only `tenant_harness` sweep worker, itself the same shape as
+# `billing_derivation.rs`/`platform_rollup.rs`/`slack_unmatched_email.rs`) —
+# a bare `&PgPool` threaded through `tick`/`process_account`, scoped
+# per-query via `tenancy::scope::begin_tenant_system_scoped`, never the
+# ambient pool. Same "a new Store `_scoped` method would just move the cost
+# onto the OTHER frozen metric for a one-worker, control-plane-only query
+# with no tenant-tree counterpart" reasoning as that entry, so the existing
+# sweep-worker convention is followed here too.
+# Raised by one PgPool file (CS-436, org-onboarding plan §3 item 49, D21,
+# 2026-09-21): backend/src/workers/member_connect_nudge.rs, the "connect your
+# integration" nudge for a member who was approved but never connected any
+# platform with their own grant. Same shape as every other control-plane
+# `tenant_harness` sweep worker already frozen into this list (billing_
+# derivation.rs, platform_rollup.rs, slack_unmatched_email.rs,
+# teams_seat_reconcile.rs, …) — a bare `&PgPool` threaded through `tick`/
+# `process_account`, scoped per-query via `tenancy::scope::
+# begin_tenant_system_scoped`, never the ambient pool. Routing this through
+# a NEW `Store` trait `_scoped` method instead would raise `scoped_methods`
+# (the OTHER metric this file ratchets) for a one-worker, control-plane-only
+# candidate query with no tenant-tree counterpart — trading one frozen metric
+# for the other, not actually shrinking the restructure's bill, so the
+# existing sweep-worker convention is followed instead.
+# Raised 210 -> 213 scoped methods (2026-09-14, perf/library-source-groups):
+# three new `_scoped` Store methods backing the `list_sources` perf-fix pair
+# (`GET /v1/graphs/{graph_id}/source-groups` + `/source-groups/{channel_key}`,
+# routes::graphs::list_source_groups/get_source_group). Required by the
+# RLS-scoping discipline every read in routes/graphs.rs already follows
+# (graph_account_id -> begin_member_scoped -> `_scoped` Store methods) — not a
+# new pattern, and the whole point of the pair is to REPLACE list_sources's
+# O(atoms) Rust walk (expand + atom_titles_and_excerpts + atom_inline_content
+# PER ATOM — 15.2s in prod on a ~20k-atom ocean), not add to it:
+#   source_groups_scoped               — channel-level aggregate rollup (one
+#         grouped SQL statement over atoms/node_atoms) backing the list
+#         route; O(atoms) inside Postgres, O(groups) in application code.
+#   source_group_detail_meta_scoped    — one group's whole-group counts plus
+#         ALL its source_ids and ALL its reefs, backing the detail route.
+#   list_atoms_page_for_channel_scoped — one page (<=200) of a group's atoms
+#         for the detail route's `corals[]`, reusing list_sources's existing
+#         preview/title/excerpt enrichment at the route layer rather than
+#         duplicating it inside Store.
+# Raised 213 -> 214 scoped methods (session-filters facets endpoint):
+#   session_facets_scoped — the scoped twin of Store::session_facets, backing
+#   `GET /v1/sessions/facets` (server-side facet vocabulary + counts for the
+#   Library filter dropdowns, replacing client-side derivation from a loaded
+#   page). Follows the exact list_coding_sessions/list_coding_sessions_scoped
+#   shape already on this same trait — one more twin priced into the
+#   restructure, not a new pattern (same rationale as #894 above).
+# Raised 214 -> 218 scoped methods (2026-09-16, #970 atlas you-hub, fix-forward
+# AFTER the fact): #970 merged four `_scoped` Store twins without touching this
+# file, so the guard — a hard step in Deploy's pre-deploy invariant guard —
+# failed on main and blocked the 970/971 production deploy. Same shape as
+# every other atlas/graph read on this trait (graph_account_id ->
+# begin_member_scoped -> `_scoped` twin), not a new pattern:
+#   list_cooccurrence_neighbors_scoped — derived co-occurrence spokes for the
+#         you-hub atlas query (and Ask 4.1 hop seeds).
+#   graph_self_node_id_scoped          — resolve the ocean's bound self reef.
+#   list_decision_anchor_candidates_scoped — decision reefs used as atlas
+#         anchors.
+#   node_promotion_origins_scoped      — promotion-origin lookup for atlas
+#         provenance of those anchors.
+# Raised 209 -> 210 scoped methods and 165 -> 174 PgPool files (2026-09-14,
+# fix-forward AFTER the fact): five PRs merged on 2026-09-13 without touching
+# this file, and the guard — a hard step in Deploy's pre-deploy invariant
+# guard — has failed on main since, so nothing could ship. Baselined here so
+# the ratchet is true again; the reasons are per file, same shape as #711:
+#   #894  list_session_subagents_scoped — the scoped twin of
+#         Store::list_session_subagents (subagent roll-up under a root
+#         coding session). Read through begin_tenant_scoped like every other
+#         `_scoped` reader on the sessions surface; one more twin priced into
+#         the restructure, not a new pattern.
+#   #898  backend/src/bin/probe_relationship_guards.rs +
+#         backend/src/relationship_guard_probe.rs — scratch-DB-only probe of
+#         the G1/G2 relationship guards; refuses any database other than
+#         coralswarm_kg_guard. Operator binary + its core; no request path.
+#   #904  backend/src/bin/backfill_provenance_links.rs +
+#         backend/src/provenance_link_backfill.rs — G1 one-shot stock repair
+#         (node_atoms rows implied by relationship provenance), dry-run by
+#         default, run once per tenant DB. Same family as the frozen
+#         backfill_* binaries: owns its own pool, never serves a request.
+#   #907  backend/src/bin/ocean_health.rs + backend/src/ocean_health.rs +
+#         backend/src/workers/ocean_health.rs — G3 weekly graph-health
+#         metrics and paging alarms; a queue worker plus its operator
+#         binary. Same shape as the frozen workers/* entries.
+#   #908  backend/src/bin/gate_prompt_version.rs + backend/src/prompt_gate.rs
+#         — G5 fixture-ocean gate on extractor prompt changes, a CI/operator
+#         binary against a fixture database. No request path.
+# Raised 174 -> 176 PgPool files (2026-09-14, fix-forward AFTER the fact):
+# #913 merged on 2026-09-13 without touching this file, and the guard — a hard
+# step in Deploy's pre-deploy invariant guard — has failed on main since, so
+# nothing could ship. Baselined here so the ratchet is true again; the reason
+# is per file, same shape as #711:
+#   #913  backend/src/bin/fold_subtopics.rs + backend/src/fold_subtopics.rs
+#         — #913 fold_subtopics; bare PgPool in an ops binary, scoped
+#         conversion owed by #913's author. G4 stock fold: merges
+#         unique-parent sub-topic reefs into their entity-pass parent via
+#         `Store::merge_nodes`. Dry-run by default; `--execute` refuses
+#         coralswarm_prodclone and coralswarm_kg_spike and requires
+#         `--i-am-sure` for any other database name. Operator binary + its
+#         core, run once per tenant DB, not in the Fly image — same family as
+#         the frozen backfill_*/probe_* entries this file already carries.
+#         `scoped_methods` is unchanged at 210: #913 added no `_scoped` twin.
+# Raised 146 -> 147 PgPool files (2026-09-05): backend/src/bin/
+# migrate_personal_to_member_ocean.rs, the one-shot personal-ocean -> org
+# member-ocean content migrator that implements the content move
+# scripts/migrate_shared_db_org.sh has specified-but-refused since it was
+# written. It CANNOT route through the `Store` trait, and that is the point
+# rather than an omission: `Store` is bound to a single scope in a single
+# database, and this tool exists precisely to span TWO — reading the
+# consumer/control plane and writing an org's Neon tenant, decrypting under
+# one account DEK and re-encrypting under another. An opaque `Db<'a>` from
+# `store.begin(scope)` cannot express a two-database operation.
+# Identical in shape and justification to every other one-shot already
+# frozen here — bin/export_member_ocean.rs, bin/reextract.rs,
+# bin/migrate_control.rs, bin/migrate_tenants.rs and the backfill_* family:
+# an operator-run binary that owns its own pools and never serves a request.
+# It is also deliberately OUT of scripts/check_no_cross_plane_promotion.sh's
+# SCAN_DIRS (routes/services/mcp) for the same reason — backend/src/bin is
+# the sanctioned home for cross-plane work, per that guard and per
+# migrate_shared_db_org.sh's own header. Not a new pattern this raise
+# introduces, and not a conversion site the restructure gains: the file has
+# no request-path callers.
+# Raised 129 -> 135 PgPool files at #711 (2026-08-25): the six m365-train
+# files (#700/#701/#703), baselined fix-forward with per-file reasons in the
+# PR. First hand-raise since the freeze.
+# Raised 142 -> 143 PgPool files at B2 unit 02's D6 UI (docs/plans/capture/
+# 02-b2-retract-fixes.md, ticket 02 item 5, 2026-08-25):
+# backend/src/routes/retractions.rs, the read side of the retraction_audit_log
+# the D6 post-retract report renders. Identical in shape to
+# routes/connector_audit.rs and routes/query_audit.rs, both already frozen in
+# this baseline: a control-plane audit-log read that resolves
+# `state.control_db()` and opens `begin_tenant_scoped` so RLS (not the
+# handler) decides visibility. The bare `PgPool` is the pool handed to that
+# scoped begin, plus the file's own #[cfg(test)] harness. Not a new pattern
+# this PR introduces — the third route instance of one already frozen.
+# Fix-forward for the same reason #711 gave.
+# Raised 140 -> 142 PgPool files for gsuite Train G4 PR 3 (#725, 2026-08-25):
+# backend/src/connectors/google_chat.rs and backend/src/routes/google_chat.rs.
+# Baselined fix-forward AFTER the fact — #725 merged without them, which left
+# this whole-tree guard RED ON MAIN and therefore failing in every unrelated
+# branch's pre-push run. Both are the shape already frozen in for every other
+# connector+route pair here: a `&PgPool` threaded to a scoped begin, plus a
+# PgPoolOptions test harness. Not a new pattern this raise introduces.
+# Raised 135 -> 136 PgPool files at B2 unit 02 (docs/plans/capture/
+# 02-b2-retract-fixes.md, FM-5, 2026-08-25): backend/src/services/
+# retraction_audit.rs, the new append-only retraction_audit_log write path.
+# Mirrors services/connector_audit.rs's/services/query_audit.rs's existing
+# shape exactly (both already in this baseline) — same bare-`&PgPool`
+# call-site pattern the restructure will convert whenever it starts; not a
+# new pattern this PR introduces, the third instance of one already frozen
+# in. Fix-forward, not converted, for the same reason #711 gave: routing this
+# through a new `_scoped` Store-trait method would ALSO raise the
+# `scoped_methods` count above — trading one frozen metric for another, not
+# actually shrinking the restructure's bill.
+# Raised 138 -> 140 PgPool files (gsuite enterprise train PR G2.4, 2026-08-25;
+# the entry directly above under-states its own delta as "135 -> 136" —
+# origin/main's actual count at this PR's merge-base was already 138, not
+# 136 — pre-existing drift in that comment's own arithmetic, left as-is
+# rather than corrected in an unrelated PR's diff):
+# `routes::gmail_everything_mode`/`workers::gmail_everything_mode` — the
+# SECOND implementation of the everything-mode carve-out, structurally and
+# mechanically mirroring `routes::outlook_everything_mode`/`workers::
+# outlook_everything_mode` (already-baselined precedent from #700, the SAME
+# class of conversion site, not a new pattern this PR introduced).
+# Raised by one PgPool file for gsuite Train G4 PR 4 (2026-08-27):
+# backend/src/workers/google_chat_sweep.rs, the Chat spaces backfill/
+# catch-up/roster-reconcile sweep. Baselined fix-forward through this
+# guard's own sanctioned channel, BEFORE the branch is pushed (unlike #725,
+# whose omission left this whole-tree guard red on main). Structurally
+# identical to workers/gmail_everything_mode.rs and workers/
+# google_watch_renewal.rs immediately below it, both already frozen in here:
+# a tenant-harness sweep tick taking `&PgPool` for the control plane and
+# `t.pool` for content, each threaded straight to a
+# `begin_tenant_system_scoped`/`begin_account_scoped` call. Not a new
+# pattern this raise introduces — the third Google-connector worker of the
+# same shape.
+# Raised 144 -> 146 PgPool files for the `reextract` one-shot
+# (feat/reextract-oneshot, 2026-09-03): backend/src/reextract.rs and
+# backend/src/bin/reextract.rs, the per-tenant re-extraction safety valve for
+# the Haiku -> DeepSeek V4 Flash extraction-model switch. Same shape as
+# backend/src/judgement_backfill.rs / backend/src/bin/
+# backfill_reef_judgement_from_history.rs (both already frozen in here): a
+# plain `&PgPool` this one-shot walks UNSCOPED, by design — it sweeps every
+# account/graph in a date range, which `begin_account_scoped` structurally
+# cannot express (see reextract.rs's own module doc, and its `exempt` entry
+# in scripts/rls_coverage.manifest). Not a new pattern this PR introduces —
+# the third one-shot of this exact shape frozen into this baseline.
+# Raised 202 -> 206 _scoped methods and 147 -> 150 PgPool files at
+# docs/plans/identity-resolution-at-the-door.md (PR "Identity resolution at
+# the door", 2026-09-06). The four methods are the §10.2 resolver seam
+# (resolve_reef_ref, mint_reef, attach_reef_alias, author_reef_for_atom):
+# both extraction workers run inside a JobScope::Consumer transaction opened
+# by begin_account_scoped, so every store call they make today is already a
+# `_scoped` twin — the seam replaces `upsert_node`/`upsert_node_and_link_atom`
+# on that same path and inherits the same shape. Nothing new for the
+# restructure to convert: the Db<'a> handle absorbs these exactly as it
+# absorbs the two methods they re-implement. The three PgPool files are
+# operator one-shots of the backfill_* family (bin/backfill_self_reefs.rs and
+# its core self_reef_backfill.rs; bin/merge_reefs.rs, the §4.2 human repair):
+# elevated DSN, own pool, never on a request path, same justification as
+# every other bin frozen here.
+# Raised by one PgPool file for the Google Calendar org lift (2026-10-06):
+# backend/src/workers/google_calendar_sync.rs, the per-member org-plane
+# Calendar catch-up sweep. Baselined fix-forward through this guard's own
+# sanctioned channel, BEFORE merge. It is the Google twin of
+# `workers/microsoft_calendar_sync.rs` and the SAME "tenant-harness sweep tick
+# taking `&PgPool` (control) + the tenant `t.pool`" shape the sibling workers
+# `google_chat_sweep.rs`/`google_meet_sweep.rs`/`google_watch_renewal.rs`
+# already froze below — not a new pattern (`microsoft_calendar_sync.rs` is
+# itself frozen below as a `pgpool_file`; this is the same shape).
+# Raised by two PgPool files for gsuite Train G3 PR 2 (#813, 2026-09-07):
+# backend/src/connectors/google_meet.rs and backend/src/workers/
+# google_meet_sweep.rs, the Meet transcript-fan-out connector and its
+# pull-only tenant-loop sweep. Baselined fix-forward through this guard's
+# own sanctioned channel, BEFORE merge (unlike #725's omission).
+# `connectors/google_meet.rs` is the same shape already frozen for
+# `google_chat.rs`/`google_gmail.rs`/`google_disconnect.rs` directly above:
+# a bare `&PgPool` parameter threaded straight to `begin_account_scoped`,
+# plus a `#[cfg(test)]` `PgPoolOptions` test harness. `workers/
+# google_meet_sweep.rs` is the SAME "tenant-harness sweep tick taking
+# `&PgPool` threaded to `begin_tenant_system_scoped`" half of the pattern
+# `workers/google_chat_sweep.rs`/`gmail_everything_mode.rs`/
+# `google_watch_renewal.rs` already established below — but verified NOT
+# byte-identical to those three: this worker never touches `t.pool` at all
+# (Meet's own storage, `google_meet_sync_state`/`google_meet_ingested_
+# conferences`, is control-plane-only by design — no tenant/content-plane
+# write path exists for this connector, see google-workspace.md §11.5), so
+# it is a narrower instance of the already-frozen control-plane half of that
+# pattern, not the dual-pool shape those three siblings use. Not a new
+# pattern this raise introduces either way — the fourth Google-connector
+# worker to carry this control-plane `&PgPool` shape.
+#
+# Raised 206 -> 207 _scoped methods and 1 new PgPool file (async-promote PR,
+# 2026-09-08): Store::link_node_atoms_batch_scoped (store/mod.rs).
+#
+# WHY THIS COULDN'T AVOID BEING A NEW TWIN. `promote_node_scoped` used to
+# copy+link a promoted reef's corals per-atom, INSIDE the HTTP request that
+# called it — a production promotion of a 3,129-coral reef performed on the
+# order of 10,000+ sequential round trips this way and never completed
+# (every prior successful promotion in that tenant DB had carried 1-2
+# corals; this shape had simply never been exercised at real scale). The
+# fix: `promote_node_scoped` now publishes the node and enqueues a
+# `PromoteNode` job; a new worker (`workers::promote`) does the actual
+# copy+link+derive tail, batched, per CHUNK_SIZE-sized chunk, each chunk
+# inside ONE scoped transaction so the atom copy, the link, and the
+# derivation-enqueue commit or roll back together. `link_node_atoms_batch_scoped`
+# is the batched sibling of the ALREADY-existing, already-frozen
+# `link_node_atom_scoped` (this baseline's 206) — same reason that one is a
+# `_scoped` twin in the first place: it must run inside the CALLER's already-
+# open transaction (the chunk's), not open its own. Checked the guard's own
+# suggested fix ("take the scope from the handle instead of passing it as a
+# parameter") first: that presumes a `Db<'a>` handle from `store.begin(scope)`
+# to take it from, which does not exist yet (the restructure this guard is
+# rate-limiting has not started, per its own header) — there is no non-`_scoped`
+# primitive in this codebase today that runs a batched, set-based INSERT
+# inside a caller-supplied transaction. Written as a NEW method rather than a
+# rewrite of `link_node_atom_scoped` in place because that method has other,
+# genuinely-one-atom-at-a-time callers (manual single-coral attach,
+# `workers::extract`'s per-atom entity linking) this PR does not touch — see
+# both methods' own doc comments in store/mod.rs.
+#
+# `workers/promote.rs` is a NEW file threading `&PgPool`/`t.pool` to
+# `tenancy::scope::begin_account_scoped`/`begin_tenant_scoped` per chunk —
+# the same "tenant-harness queue worker taking a bare `PgPool`" shape already
+# frozen into this baseline for `workers/slack_name_backfill.rs`,
+# and every other queue worker below. Not a
+# new pattern this raise introduces.
+#
+# HAND EDIT, Gmail Add-on pairing (2026-09-08): backend/src/routes/addin.rs
+# is a NEW control-plane-only route file — `pair/start`/`pair/approve`/
+# `pair/poll`/token revoke for the Gmail Add-on's PAT credential
+# (migrations 0210_addin_tokens/0211_addin_pairing_codes, renumbered past
+# this same PR's own 0209_job_progress.sql on rebase). Same shape and
+# justification as routes/oauth.rs, already frozen above: a bare `&PgPool`
+# (via `state.control_db()`) reading/writing control-only tables
+# (`addin_tokens`, `addin_pairing_codes`) that have no tenant twin by
+# design (see those migrations' own headers) and are never opened through
+# `store.begin(scope)` — there is no per-request tenant scope for two of
+# these three routes to derive one from (`pair/start`/`pair/poll` run
+# unauthenticated, before any `Tenant`/`TenancyDecision` exists at all).
+# Routing this through `Store` would mean adding control-table methods to a
+# CONTENT-plane trait for a feature the trait's own scope note (`Tenant`'s
+# doc comment) says explicitly it does not cover. Not a new pattern this PR
+# introduces — the same control-only credential-table shape `oauth.rs`/
+# `connectors.rs` already carry, on a new file because this is a new,
+# narrower credential type (an add-on PAT, not a third-party OAuth token).
+# Does not itself change `scoped_methods` — merged past the async-promote
+# raise above, which does.
+#
+# HAND EDIT, title-always-present PR / CodeRabbit round 1 (2026-09-09):
+# raised 207 -> 208 for `Store::atom_titles_and_excerpts_scoped`.
+# `atom_titles_and_excerpts` (added earlier in this same PR) was the one
+# sibling of `atom_authors`/`atom_channels`/`atom_provenance` — all four
+# share the identical `atom_field_pair`/`atom_field_pair_scoped` helper
+# shape — that shipped without its `_scoped` twin, so
+# `routes::graphs::{list_atoms,list_sources}`/`routes::nodes::
+# get_node_candidates` called it AFTER their scoped read transaction
+# already committed, ambient on `self.pool`: under the real, non-BYPASSRLS
+# `coralswarm_app` role this either hard-errors or silently sees nothing,
+# and `unwrap_or_default()` was swallowing that into empty titles for the
+# whole page — the opposite of what this PR's own founder requirement
+# promises. This is exactly the ratchet's photo-finish case (a GENUINE new
+# twin, not a workaround), not a new pattern: it completes an existing
+# quartet of siblings rather than introducing a new one, and closing it any
+# other way (moving the read into the caller's existing `Db`/scope handle)
+# is the restructure this ratchet is deferring, not a same-day fix.
+# Raised 208 -> 209 scoped_methods and 2 PgPool files for #871's review
+# follow-up (2026-09-10), fix-forward AFTER the fact: #871 merged all three
+# without touching this file, which left this whole-tree guard RED ON MAIN and
+# therefore failing in every unrelated branch's pre-push run — the same
+# situation, and the same remedy, as the gsuite Train G4 raise recorded above.
+#
+#   * `Store::refresh_published_atoms_scoped` (the new 209th twin) is the
+#     publication REFRESH: same signature as `copy_atoms_to_graph_scoped`
+#     beside it, different semantics (re-point an existing published copy at a
+#     new revision rather than insert another). It has to be a twin today for
+#     the reason every `_scoped` method here is one — it runs inside a
+#     transaction the CALLER already opened and scoped, and there is no
+#     `Db<'a>` handle to take that scope from until the restructure lands.
+#     Its non-scoped sibling does not exist and deliberately never will.
+#   * `backend/src/jobs/publication.rs` and
+#     `backend/src/services/source_publication.rs` hold a bare `&PgPool` in
+#     exactly the frozen shape: the pool is threaded to
+#     `tenancy::scope::begin_account_scoped`/`begin_tenant_scoped` so RLS (not
+#     the caller) decides visibility — identical to services/corrections.rs and
+#     services/retraction_audit.rs, both already frozen here. Not a new pattern
+#     these two files introduce.
+# Raised 178 -> 180 PgPool files (chat-per-user plan PR 6, "email the
+# unmatched", 2026-09-20): two files, one worker and the discovery module it
+# calls.
+#   backend/src/workers/slack_unmatched_email.rs — the tenant-loop worker for
+#     JobKind::EmailUnmatchedSlackChannelMembers. Same shape as workers/
+#     slack_seat_reconcile.rs immediately below in the list: it takes
+#     `control_pool: &PgPool` and `pool: &PgPool` (the `WorkerTenant`'s own
+#     `t.pool`) straight off `workers::tenant_harness::run_multi_tenant`'s
+#     closure — the bare-pool parameter shape this ratchet tracks, not yet
+#     converted to an opaque `Db<'a>` from `store.begin(scope)`. The RLS
+#     boundary itself is NOT the gap here: every write this file makes
+#     already opens a REAL `begin_tenant_system_scoped(control_pool,
+#     account_id)` transaction before touching `slack_unmatched_email_notices`
+#     — corrected 2026-09-20 to `control_pool`, never `pool` (this tick's own
+#     plane-specific pool), since that table has no tenant-tree twin at all
+#     (see this file's own `converted` entry in scripts/
+#     tenant_rls_coverage.manifest) — only the parameter TYPE is unconverted,
+#     identical to `slack_seat_reconcile.rs`'s own frozen shape.
+#   backend/src/connectors/slack_unmatched_email.rs — the recipient-discovery
+#     roster walk `discover_unmatched_recipients` calls, threading the SAME
+#     `control_pool`/`identity_pool: &PgPool` pair through to
+#     `connectors::slack::resolve_slack_identity_with_email` — identical
+#     shape to every other `connectors/slack_*.rs` file already frozen in
+#     this list (e.g. `slack_channel_actions.rs`, `slack_onboarding.rs`
+#     directly above/below), not a new pattern.
+# Raised 180 -> 182 PgPool files (chat-per-user plan PR 2, "backfill engine",
+# 2026-09-20): two files, the engine and its worker.
+#   backend/src/connectors/history_backfill.rs — takes `control_pool: &PgPool`/
+#     `tenant_pool: &PgPool` directly, builds a synthetic `Tenant`/
+#     `UserContext` pair from them (`synthetic_ingest_identity`), and hands
+#     that straight to `routes::ingest::ingest_atom` — the identical
+#     "construct a Tenant and call ingest_atom from a worker" shape
+#     `connectors::google_meet::ingest_transcript_for_attendee` already uses,
+#     already frozen in this list under `google_meet.rs`. Not a new pattern;
+#     the RLS boundary itself is not the gap — `ingest_atom_impl` already
+#     opens the correct scoped transaction for whichever `Tenant` it is
+#     handed, same as every other `ingest_atom` caller.
+#   backend/src/workers/history_backfill.rs — the tenant-loop worker for
+#     `JobKind::HistoryBackfill`. Same shape as `workers/slack_ingest.rs`/
+#     `workers/slack_unmatched_email.rs` elsewhere in this list: it takes
+#     `control_pool: &PgPool` and the `WorkerTenant`'s own `t.pool: &PgPool`
+#     straight off `workers::tenant_harness::run_multi_tenant`'s closure —
+#     only the parameter TYPE is unconverted, not a new pattern.
+# Raised 182 -> 183 PgPool files (chat-per-user plan PR 6 follow-up,
+# "unsubscribe", 2026-09-20): one new file.
+#   backend/src/services/unmatched_recipient_email.rs — `suppress_by_token`
+#     takes `pool: &sqlx::PgPool` and opens its OWN `begin_tenant_system_
+#     scoped(pool, account_id)` transaction internally, after resolving the
+#     bare token to an account_id via the control-only SECURITY DEFINER
+#     `resolve_unmatched_email_notice_account_id` (migration 0228) — a real
+#     scoped write, only the parameter TYPE is unconverted. This file's OTHER
+#     function, `claim_notice_slot`, stays generic over
+#     `impl sqlx::PgExecutor<'_>` and does not itself contribute to this file
+#     joining the set — `suppress_by_token` alone is what adds the literal
+#     `PgPool` mention.
+#
+# NOT raised for the chat-per-user ingest train's PR 4 (Teams fan-out) or PR 5
+# (the Teams per-meeting authorising-row service): both are HELD per D21
+# (`docs/plans/org-onboarding-from-the-invite.md` — org-wide installs retired
+# as a capture path) and carry no file into this tree. See
+# `docs/plans/chat-per-user-ingest-and-in-chat-ask.md` §12's "Held" table.
+#
+# Raised 218 -> 219 scoped_methods and 183 -> 185 PgPool files (CS-435,
+# org-onboarding plan §3 items 7/15, 2026-09-21):
+#   scoped_methods: this branch's own diff does not touch `backend/src/
+#     store/mod.rs` at all (verified: `git diff --stat origin/main --
+#     backend/src/store/mod.rs` is empty) — the guard already measured 219
+#     against this branch's base commit before CS-435 added a single line.
+#     Pre-existing drift against a stale baseline, unrelated to this PR;
+#     raised here only so the gate can report green, not as a CS-435
+#     decision — a reviewer should confirm the real source separately.
+#   PgPool files, both genuinely CS-435's own:
+#     backend/src/billing/slot_pool.rs — `reserve_slot`/`release_reservation`
+#       each take `pool: &PgPool` and open their OWN `tenancy::scope::
+#       begin_account_scoped` transaction internally (D9's own requirement:
+#       the reservation decision must be self-contained, taken BEFORE any
+#       external call, so a future caller gets the lock discipline for free
+#       rather than having to remember it).
+#     backend/src/routes/org_slots.rs — `GET`/`POST /v1/orgs/slots` each
+#       open `tenancy::scope::begin_account_scoped` directly, the same shape
+#       `routes::billing_seats::change_seat_tier` already carries.
+# Raised 219 -> 220 (workspace counts repair, 2026-10-16):
+# workspace_counts_scoped batches permission-filtered navigation counts in one
+# graph-owner/acting-reader transaction. The REST route needs this smaller
+# projection; Ask/MCP retain full ocean_stats_scoped. This prices one additional
+# scoped Store method into the deferred restructure without weakening RLS.
+# Raised 284 -> 287 PgPool files (settings launch PR 3.3, 2026-10-25):
+#   backend/src/billing/cancel.rs: `cancel_account_subscription(&PgPool, ..)`,
+#     a reusable billing helper for delete-account; opens its own
+#     `begin_account_scoped` transactions, same shape as billing/slot_pool.rs.
+#   backend/src/routes/billing_manage.rs: portal/summary/seat-quote handlers
+#     using `state.control_db()` with `begin_account_scoped`, same shape as
+#     routes/checkout.rs and routes/billing_seats.rs.
+#   backend/src/billing/test_support.rs: cfg(test)-only pg fixtures (the
+#     guard is blind to cfg(test)); no production code holds a pool there.
+# Raised 287 -> 291 PgPool files (settings launch PR 2.4, 2026-10-25):
+#   backend/src/services/account_deletion.rs: the resumable account-deletion
+#     job. Every RLS-covered statement runs in `begin_account_scoped`; it
+#     takes `&PgPool` because it is a control-plane-only worker with no
+#     request `Tenant`, the same shape as billing/cancel.rs and
+#     workers/slot_reservations.rs.
+#   backend/src/services/account_deletion_live.rs: production wiring for the
+#     job's connector and tenant-plane dependencies (`&PgPool` control reads).
+#   backend/src/routes/account_deletion.rs: the HTTP edge, `state.control_db()`
+#     like routes/billing_manage.rs.
+#   backend/src/services/account_deletion_pg_tests.rs: cfg(test)-only pg
+#     fixtures (the guard is blind to cfg(test)).
+# Raised by four PgPool files (self-serve signup PR C′, org trial checkout,
+# 2026-10-27). PRODUCTION: `billing/org_trial/lifecycle.rs` and
+# `workers/org_trials.rs` take the control `&PgPool` the same way
+# `workers/billing_notices.rs` and `billing/seat_lifecycle.rs` do, opening
+# `begin_account_scoped` per step because each step must commit before a
+# Stripe call (no transaction may span one). TEST-ONLY:
+# `billing/org_trial/pg_tests.rs` and `routes/stripe_webhook_resubscribe_pg_tests.rs`
+# hold the owner and coralswarm_app pools of their scratch database.
+#
+# Raised by five PgPool files (in-app org deletion, control 0387, 2026-10-28):
+#   backend/src/services/org_deletion.rs: the resumable org-deletion job, the
+#     same shape as services/account_deletion.rs: a control-plane-only worker
+#     with no request `Tenant`, every RLS-covered statement in
+#     `begin_account_scoped`, one commit per step because no transaction may
+#     span a Stripe, Clerk or provisioner call; plus the worker's separate
+#     `coralswarm_provisioner` pool for the 0381/0387 routing and credential
+#     definers.
+#   backend/src/services/org_deletion_live.rs: production wiring; reads the
+#     ORG's own tenant pool (from the registry) for the export; no Store scope
+#     exists for a whole-tenant export.
+#   backend/src/bin/org_deletion_admin.rs: operator CLI (approve, cancel,
+#     export) on an owner-level DSN, like the other operator bins.
+#   backend/src/services/org_deletion_pg_tests.rs and
+#     backend/src/routes/org_deletion_pg_tests.rs: cfg(test)-only pg suites
+#     (the guard is blind to cfg(test)).
+#
+scoped_methods 213
+macro_file backend/src/mcp/tools/mod.rs
+macro_file backend/src/routes/atlas.rs
+macro_file backend/src/routes/conversations.rs
+macro_file backend/src/routes/meetings.rs
+macro_file backend/src/routes/nodes.rs
+macro_file backend/src/routes/relationships.rs
+macro_file backend/src/routes/sessions.rs
+macro_file backend/src/routes/supersession.rs
+macro_file backend/src/routes/teams.rs
+pgpool_file backend/src/billing/cancel.rs
+pgpool_file backend/src/billing/credit_conversion.rs
+pgpool_file backend/src/billing/enforcement.rs
+pgpool_file backend/src/billing/issuance.rs
+pgpool_file backend/src/billing/rates.rs
+pgpool_file backend/src/billing/renewal.rs
+pgpool_file backend/src/billing/seat_lifecycle.rs
+pgpool_file backend/src/billing/slot_pool.rs
+pgpool_file backend/src/billing/test_support.rs
+pgpool_file backend/src/bin/adopt_personal_org_account.rs
+pgpool_file backend/src/bin/org_deletion_admin.rs
+pgpool_file backend/src/bin/backfill_billing_enforcement.rs
+pgpool_file backend/src/bin/backfill_oauth_tokens_wrapped_dek.rs
+pgpool_file backend/src/bin/backfill_promoted_blobs.rs
+pgpool_file backend/src/bin/backfill_reef_judgement_from_history.rs
+pgpool_file backend/src/bin/backfill_self_reefs.rs
+pgpool_file backend/src/bin/backfill_slack_oauth_tokens.rs
+pgpool_file backend/src/bin/backfill_unattributed_job_accounts.rs
+pgpool_file backend/src/bin/create_personal_orgs.rs
+pgpool_file backend/src/bin/export_member_ocean.rs
+pgpool_file backend/src/bin/grant_plan.rs
+pgpool_file backend/src/bin/merge_reefs.rs
+pgpool_file backend/src/bin/migrate_control.rs
+pgpool_file backend/src/bin/migrate_personal_to_member_ocean.rs
+pgpool_file backend/src/bin/migrate_tenants.rs
+pgpool_file backend/src/bin/provision_stripe.rs
+pgpool_file backend/src/bin/retrieval_eval.rs
+pgpool_file backend/src/bin/seed_large_ocean.rs
+pgpool_file backend/src/clerk_provision.rs
+pgpool_file backend/src/connector_flags.rs
+pgpool_file backend/src/connectors/google.rs
+pgpool_file backend/src/connectors/google_calendar.rs
+pgpool_file backend/src/connectors/google_chat.rs
+pgpool_file backend/src/connectors/google_disconnect.rs
+pgpool_file backend/src/connectors/google_gmail.rs
+pgpool_file backend/src/connectors/google_meet.rs
+pgpool_file backend/src/connectors/history_backfill.rs
+# Settings launch PR 2.8 (2026-10-25): member offboarding. Takes the CONTROL
+# pool (oauth_tokens, connector_installs, slack_member_channels, the control
+# watch rows) and the account's DekPlane content pool, the same two-plane
+# shape as connectors/google_disconnect.rs and microsoft_disconnect.rs, whose
+# purges it calls. The test module holds scratch ORGT_TEST_BASE_URL pools.
+pgpool_file backend/src/connectors/member_offboarding.rs
+pgpool_file backend/src/connectors/microsoft.rs
+pgpool_file backend/src/connectors/microsoft_disconnect.rs
+pgpool_file backend/src/connectors/mod.rs
+pgpool_file backend/src/connectors/slack.rs
+pgpool_file backend/src/connectors/slack_channel_actions.rs
+pgpool_file backend/src/connectors/slack_channel_management.rs
+pgpool_file backend/src/connectors/slack_disconnect.rs
+pgpool_file backend/src/connectors/slack_onboarding.rs
+pgpool_file backend/src/connectors/slack_review.rs
+pgpool_file backend/src/connectors/slack_unmatched_email.rs
+pgpool_file backend/src/connectors/state.rs
+pgpool_file backend/src/crypto.rs
+pgpool_file backend/src/eval.rs
+pgpool_file backend/src/jobs/publication.rs
+pgpool_file backend/src/jobs/queue.rs
+pgpool_file backend/src/jobs_account_backfill.rs
+pgpool_file backend/src/judgement_backfill.rs
+pgpool_file backend/src/lib.rs
+pgpool_file backend/src/llm/usage.rs
+pgpool_file backend/src/managed/embedding/pg_tests.rs
+pgpool_file backend/src/mcp/audit.rs
+pgpool_file backend/src/mcp/auth.rs
+# Raised for claim-based-tenancy §Phase 3 PR 3.2's `tenant_selection.rs`
+# (already added on #806's own branch without this comment — kept here since
+# comments are inert to the guard's grep):
+# `resolve_stored_selection`/`store_selection`/`clear_selection`/
+# `live_membership_for_selection` all take `&sqlx::PgPool` directly (the
+# control pool `mcp::tools::tenancy::{list_tenants,select_tenant}` pass
+# straight through), the same shape every OTHER file in this `mcp/` group
+# above already carries (`audit.rs`, `auth.rs`, `tools/{read,write}.rs`) —
+# consistent with them rather than a new pattern, not routed through `Store`
+# for the same reason those aren't: this is control-plane selection-state
+# I/O, not consumer/tenant CONTENT reachable through the `Store` trait's
+# scoped surface.
+pgpool_file backend/src/mcp/tenant_selection.rs
+pgpool_file backend/src/mcp/tools/read.rs
+pgpool_file backend/src/mcp/tools/write.rs
+pgpool_file backend/src/middleware/access_log.rs
+pgpool_file backend/src/middleware/auth.rs
+pgpool_file backend/src/oauth/jti_store.rs
+pgpool_file backend/src/oauth_dek_cutover.rs
+# HAND EDIT, desktop retirement (2026-10-29): a RENAME, not a new pool.
+# personal_account.rs is the personal-account lookup moved verbatim out of
+# the deleted capture_policy.rs (its former entry), plus its pg_tests.
+pgpool_file backend/src/personal_account.rs
+pgpool_file backend/src/promoted_blob_backfill.rs
+pgpool_file backend/src/rate_limit.rs
+pgpool_file backend/src/routes/account_deletion.rs
+pgpool_file backend/src/routes/org_deletion_pg_tests.rs
+pgpool_file backend/src/routes/activity.rs
+pgpool_file backend/src/routes/addin.rs
+pgpool_file backend/src/routes/admin.rs
+pgpool_file backend/src/routes/billing_manage.rs
+pgpool_file backend/src/routes/billing_seats.rs
+pgpool_file backend/src/routes/calendar.rs
+pgpool_file backend/src/routes/checkout.rs
+pgpool_file backend/src/routes/clerk_webhook.rs
+pgpool_file backend/src/routes/connector_audit.rs
+pgpool_file backend/src/routes/connectors.rs
+pgpool_file backend/src/routes/gmail_everything_mode.rs
+pgpool_file backend/src/routes/google_calendar_push.rs
+pgpool_file backend/src/routes/google_chat.rs
+pgpool_file backend/src/routes/google_push.rs
+pgpool_file backend/src/routes/graph_webhook.rs
+# HAND EDIT, personal-org tenancy-parity PR (#829, 2026-09-08): `routes/
+# graphs.rs` mentions `PgPool` ONLY inside a brand-new `#[cfg(test)]`
+# pg_tests module (`personal_ocean_in_org_pg_tests` / `pg_tests`) added by
+# that PR — `PgPoolOptions` to connect a throwaway test pool, plus
+# `seed_personal_account`/`seed_personal_org_account`/`seed_real_org_account`/
+# `cleanup` helpers that seed and tear down fixture rows directly. Same
+# shape and same precedent as `routes/me.rs`/`routes/prefs.rs` above: the
+# PRODUCTION handler under test (`create_graph`) holds no PgPool of
+# their own — both already receive their content-plane access through the
+# `Tenant` extractor's `store: Option<Arc<dyn Store>>` (routed through
+# `Store::account_is_real_org`, the new method this PR adds), and the test
+# module's `fn tenant(pool: sqlx::PgPool) -> Tenant` only ever WRAPS a raw
+# pool into `Tenant.pool` to hand-build an extractor value outside the real
+# HTTP request path — the identical `Tenant { store, pool, decision }`
+# construction `routes::usage::pg_tests`'s own `personal_tenant` helper
+# already uses (that file IS already in this baseline, below, for this exact
+# same test-only shape — a fourth instance of a pattern already frozen in
+# three times over, not a new one). Not a production conversion site the
+# Scope/Db restructure would
+# ever touch: a test fixture's pool exists to INSERT rows for the test to
+# read back, not to serve a request, and would be rewritten (or deleted)
+# alongside its test the day that restructure actually starts. Adding a
+# test-only entry rather than aliasing the type in the test — the guard's
+# own header names a type alias as an evasion, and `routes/me.rs`'s own
+# entry above already rejected that path for the same reason.
+#
+# NOTED FOR THE GUARD'S OWN "WHAT A GREEN RUN DOES NOT PROVE" LIST: this
+# script's `list_pgpool_files` scans a file's raw text for the literal
+# substring `PgPool`, ignoring only full-line comments — it has NO notion of
+# `#[cfg(test)]` at all, so it cannot itself tell a test-only occurrence
+# apart from a production one. That distinction is made by a human, once,
+# in a hand-edit comment like this one (and `routes/me.rs`'s/`routes/
+# prefs.rs`'s before it) — not by the script. A file could carry this exact
+# comment while its production code grows a REAL PgPool later, and the
+# script would not notice the comment's premise had gone stale; only a
+# reviewer re-reading the diff would.
+pgpool_file backend/src/routes/graphs.rs
+pgpool_file backend/src/ingest.rs
+# HAND EDIT, ADR-0016 layer 2 (one ingest door, 2026-10-29). Two files.
+# backend/src/ingest/grant.rs: the OrgShared grant lookups call the
+# connectors' existing routing resolvers (`connectors::slack::
+# resolve_channel_destinations`, `google_chat::resolve_chat_fanout_
+# destinations`, `github_backfill::destination_reachable`), which take the
+# control and tenant `&PgPool`s; the grant re-check runs on the door's own
+# scoped transaction. No new pool reaches production: these are the pools
+# the four connectors already held. It converts with those resolvers.
+# backend/src/ingest/pg_tests.rs: TEST-ONLY, `#[cfg(test)]`, a scratch
+# ORGT_TEST_BASE_URL database for the door's OrgShared path (the
+# `ingest/capture/pg_tests.rs` precedent).
+pgpool_file backend/src/ingest/grant.rs
+pgpool_file backend/src/ingest/pg_tests.rs
+# HAND EDIT, active-ocean pointer PR (claim-tenancy stack #799, 2026-09-06):
+# `routes/me.rs` mentions `PgPool` ONLY in its `#[cfg(test)] mod pg_tests`
+# harness (`PgPoolOptions`/`PgConnection` to create + migrate a throwaway
+# control database, plus `stored_pointer`/`stored_updated_at`/`seed_user`/
+# `seed_account` helpers that read the fixture back directly) — exactly like
+# `routes/prefs.rs` above, and for the same reason. The three handlers
+# (`get_me`, `put_me_timezone`, `put_me_active_graph`) hold no PgPool: the
+# CONTROL-plane reads/writes they used to do directly against `state.db` now
+# route through `Store::user_active_graph`/`Store::set_user_active_graph`/
+# `Store::set_user_timezone` via `state.control_store()`, added as unscoped
+# siblings of the already-existing `Store::user_timezone` (`store/mod.rs`,
+# itself already frozen into this baseline) — same accessor, same
+# CONTROL-PLANE-ONLY/unscoped shape, so this raise does not touch
+# `scoped_methods` above. This is the guard's own suggested fix and
+# `routes/prefs.rs`'s precedent, not a baseline-and-move-on: there was no
+# existing frozen instance of this specific table's access pattern to cite as
+# "fix-forward, third of a kind" the way retractions.rs/retraction_audit.rs
+# could when they were raised in. Adding a test-only entry rather than
+# aliasing the type in the test — the guard's own header names a type alias
+# as an evasion.
+pgpool_file backend/src/routes/me.rs
+pgpool_file backend/src/routes/oauth.rs
+pgpool_file backend/src/routes/org_invites.rs
+# CS-437 (2026-09-21): the join-request queue's own control-plane routes —
+# same control_db()-only shape as routes/org_invites.rs/routes/org_slots.rs
+# immediately above/below, which this file calls into directly
+# (provision_org_membership/require_org_admin).
+pgpool_file backend/src/routes/org_join_requests.rs
+# Settings launch PR 2.2 (2026-10-25): org active-member management. Same
+# control_db()-only shape as routes/org_invites.rs above, whose
+# require_org_admin it reuses: the production handlers read `accounts`/
+# `account_members`/`users` (CONTROL tables, no tenant counterpart) through
+# `state.control_db()` via `&PgPool` helper params, and offboarding runs
+# through clerk_provision::remove_org_membership. The test module holds
+# scratch ORGT_TEST_BASE_URL control pools. No tenant content is touched.
+pgpool_file backend/src/routes/org_members.rs
+pgpool_file backend/src/routes/org_slots.rs
+pgpool_file backend/src/routes/outlook_everything_mode.rs
+pgpool_file backend/src/routes/prefs.rs
+pgpool_file backend/src/routes/queries.rs
+pgpool_file backend/src/routes/query_audit.rs
+pgpool_file backend/src/routes/retractions.rs
+pgpool_file backend/src/routes/slack.rs
+pgpool_file backend/src/routes/slack_events.rs
+pgpool_file backend/src/routes/slack_interactivity.rs
+pgpool_file backend/src/routes/stripe_webhook.rs
+pgpool_file backend/src/routes/teams.rs
+pgpool_file backend/src/routes/teams_bot.rs
+pgpool_file backend/src/routes/teams_ingest.rs
+pgpool_file backend/src/routes/usage.rs
+pgpool_file backend/src/routes/workflows.rs
+pgpool_file backend/src/seats.rs
+pgpool_file backend/src/self_context.rs
+pgpool_file backend/src/self_reef_backfill.rs
+pgpool_file backend/src/services/account_deletion.rs
+pgpool_file backend/src/services/account_deletion_live.rs
+pgpool_file backend/src/services/account_deletion_pg_tests.rs
+pgpool_file backend/src/services/org_deletion.rs
+pgpool_file backend/src/services/org_deletion_live.rs
+pgpool_file backend/src/services/org_deletion_pg_tests.rs
+pgpool_file backend/src/services/connector_audit.rs
+# CS-446 (2026-09-22): D16's connector-health record — a bare &PgPool taken
+# directly from routes::connector_health's state.control_db() and from
+# clerk_provision::remove_org_membership's own pool, scoped per-query via
+# tenancy::scope::begin_account_scoped. Exactly the shape
+# services/org_join_requests.rs below already carries, one story older.
+# NOT a cfg(test)-only false positive (this guard is blind to cfg(test), so
+# that had to be checked rather than assumed): the PgPool is in eight
+# PRODUCTION signatures — note_member_departure, refresh_open_degradations,
+# list_open and the five helpers behind them — and the pg_tests helper is
+# incidental. See the header note above for the full entry.
+pgpool_file backend/src/services/connector_health.rs
+pgpool_file backend/src/services/corrections.rs
+pgpool_file backend/src/services/deletion.rs
+# CS-437 (2026-09-21): enqueue/list/decide over org_join_requests — a bare
+# &PgPool taken directly from routes::org_join_requests' state.control_db(),
+# same shape services/unmatched_recipient_email.rs already carries below.
+pgpool_file backend/src/services/org_join_requests.rs
+pgpool_file backend/src/services/query_audit.rs
+pgpool_file backend/src/services/retraction.rs
+pgpool_file backend/src/services/retraction_audit.rs
+pgpool_file backend/src/services/source_publication.rs
+pgpool_file backend/src/services/transcripts.rs
+pgpool_file backend/src/services/unmatched_recipient_email.rs
+pgpool_file backend/src/slack_oauth_backfill.rs
+pgpool_file backend/src/store/mod.rs
+pgpool_file backend/src/tenancy/extractor.rs
+pgpool_file backend/src/tenancy/member_ocean.rs
+pgpool_file backend/src/tenancy/migrate.rs
+pgpool_file backend/src/tenancy/mod.rs
+pgpool_file backend/src/tenancy/reachability.rs
+# Raised by one PgPool file (COR-82, 2026-10-14): `tenancy/read_only_poison.rs`
+# heals a pooled server connection left in `default_transaction_read_only =
+# on`. It holds a transaction per probe so PgBouncer links a distinct server
+# to each, reads that backend's GUC, and runs `pg_terminate_backend` on it.
+# That is pool plumbing, not data access: no `Store` method or `Db<'a>` scope
+# can name "the server connection behind this acquire", so the restructure
+# has nothing to convert here. Its only caller is the worker harness, already
+# a PgPool file.
+pgpool_file backend/src/tenancy/read_only_poison.rs
+pgpool_file backend/src/tenancy/registry.rs
+pgpool_file backend/src/tenancy/routing.rs
+# reason: PRODUCTION (self-serve org signup PR A1a, 2026-10-20). secrets.rs's ControlTableSecretResolver holds the CONTROL pool to read `tenant_db_credentials` ciphertext (migration 0381) — the DSN-resolution seam the registry and migrate_tenants already sit on; there is no Store scope for "the control plane before any tenant is bound". credentials.rs wraps that table's two SECURITY DEFINER writes and one SELECT; dek.rs is the `account_keys` insert extracted from routes/admin.rs's rotate-dek handler and takes the org's fingerprint-verified tenant pool exactly as the handler did.
+pgpool_file backend/src/tenancy/secrets.rs
+pgpool_file backend/src/tenancy/credentials.rs
+pgpool_file backend/src/tenancy/dek.rs
+# reason: PRODUCTION (self-serve org signup PR A1b, 2026-10-20). tenancy/provisioning.rs is the tenant provisioning job: it holds the CONTROL pool (as `coralswarm_app`) for its own job table and the 0381 SECURITY DEFINER routing writes, and opens a one-connection pool to the brand-new tenant DSN for the fingerprint step — before any routing row is active there is no `Tenant`/Store scope to route through. workers/tenant_provisioning.rs only threads that pool into `Deps` at boot.
+pgpool_file backend/src/tenancy/provisioning.rs
+pgpool_file backend/src/workers/tenant_provisioning.rs
+pgpool_file backend/src/tenancy/runtime.rs
+pgpool_file backend/src/tenancy/scope.rs
+pgpool_file backend/src/workers/access_log_purge.rs
+pgpool_file backend/src/workers/atom_title_backfill.rs
+pgpool_file backend/src/workers/billing_derivation.rs
+# Raised by one PgPool file (COR-71, 2026-10-14): `workers/capture_admission_health.rs`,
+# the per-plane capture-to-Atom health sweep. PRODUCTION, and the same two-pool
+# shape as `workers/platform_rollup.rs`: `tick(t, control: &PgPool)` reads the
+# worker tenant's content plane through `t.pool`, opening
+# `begin_account_scoped` per account on the consumer plane and
+# `begin_tenant_system_scoped_without_account` on an org tenant, then writes the
+# plane's report to the control-only `capture_admission_health` table and
+# reads control-only `account_prefs` through `control`. On an org tenant those
+# are two physical databases, so no single `Store` (or a future `Db<'a>` from
+# one `store.begin(scope)`) can serve both. The content queries live in
+# `capture_admission_health.rs`, which takes `&mut PgConnection` and holds no
+# pool, so only this worker boundary is added. A new `_scoped` Store method
+# would raise the other frozen metric for a one-worker, operator-only read.
+pgpool_file backend/src/workers/capture_admission_health.rs
+# Raised by two PgPool files (pipeline stage health, 2026-10-19). PRODUCTION
+# `workers/pipeline_stage_health.rs`: the same two-pool sweep-worker shape as
+# `workers/capture_admission_health.rs` directly above. `tick(t, control:
+# &PgPool)` reads the content plane through `t.pool` (begin_account_scoped
+# per account on the consumer plane, begin_tenant_system_scoped_without_account
+# on an org tenant) and writes the control-only `pipeline_stage_health` report
+# and reads `account_prefs`/`managed_credit_reservations` through `control`;
+# on an org tenant those are two physical databases, so no single `Store` can
+# serve both. OPERATOR BIN `bin/pipeline_stage_health.rs`: connects one pool
+# to the DSN it is given and runs read-only measurements, the same shape as
+# `bin/ocean_health.rs`. The queries live in `pipeline_stage_health.rs`,
+# which takes `&mut PgConnection` and holds no pool.
+pgpool_file backend/src/workers/pipeline_stage_health.rs
+pgpool_file backend/src/workers/content_tsv_backfill.rs
+pgpool_file backend/src/workers/digest.rs
+pgpool_file backend/src/workers/embed.rs
+pgpool_file backend/src/workers/embed_retry.rs
+pgpool_file backend/src/workers/entity_resolution.rs
+pgpool_file backend/src/workers/extract.rs
+pgpool_file backend/src/workers/geo_backfill.rs
+pgpool_file backend/src/workers/gmail_everything_mode.rs
+pgpool_file backend/src/workers/google_calendar_sync.rs
+pgpool_file backend/src/workers/google_chat_sweep.rs
+pgpool_file backend/src/workers/google_meet_sweep.rs
+pgpool_file backend/src/workers/google_watch_renewal.rs
+pgpool_file backend/src/workers/graph_subscriptions.rs
+pgpool_file backend/src/workers/history_backfill.rs
+pgpool_file backend/src/workers/huddle.rs
+pgpool_file backend/src/workers/inference_closure.rs
+pgpool_file backend/src/workers/journal_sweep.rs
+pgpool_file backend/src/workers/mcp_task_sweep.rs
+pgpool_file backend/src/workers/member_connect_nudge.rs
+pgpool_file backend/src/workers/member_ocean_reconciler.rs
+pgpool_file backend/src/workers/microsoft_calendar_sync.rs
+pgpool_file backend/src/workers/mod.rs
+pgpool_file backend/src/workers/oauth_state_jti_sweep.rs
+pgpool_file backend/src/workers/org_join_request_digest.rs
+pgpool_file backend/src/workers/outlook_everything_mode.rs
+pgpool_file backend/src/workers/platform_rollup.rs
+pgpool_file backend/src/workers/promote.rs
+pgpool_file backend/src/workers/propagate_corrections.rs
+pgpool_file backend/src/workers/reembed.rs
+pgpool_file backend/src/workers/slack_ingest.rs
+pgpool_file backend/src/workers/slack_name_backfill.rs
+pgpool_file backend/src/workers/slack_seat_reconcile.rs
+pgpool_file backend/src/workers/slack_unmatched_email.rs
+pgpool_file backend/src/workers/summary.rs
+pgpool_file backend/src/workers/teams_seat_reconcile.rs
+pgpool_file backend/src/workers/tenant_harness.rs
+pgpool_file backend/src/workers/usage_pending_sweep.rs
+pgpool_file backend/src/workers/usage_reconciliation.rs
+pgpool_file backend/src/workers/waitlist_sync.rs
+# #1495: control-plane NOTIFY publisher; no content-plane access.
+pgpool_file backend/src/workers/wake_bridge.rs
+pgpool_file backend/src/bin/backfill_provenance_links.rs
+pgpool_file backend/src/bin/ocean_health.rs
+pgpool_file backend/src/bin/pipeline_stage_health.rs
+pgpool_file backend/src/ocean_health.rs
+pgpool_file backend/src/provenance_link_backfill.rs
+pgpool_file backend/src/workers/ocean_health.rs
+pgpool_file backend/src/bin/fold_subtopics.rs
+pgpool_file backend/src/fold_subtopics.rs
+# HAND EDIT, prefs role-check PR: `routes/prefs.rs` mentions `PgPool` ONLY in
+# its `#[cfg(test)] mod pg_tests` harness (PgPoolOptions/PgConnection to
+# create + migrate a throwaway control database), exactly like
+# routes/org_invites.rs above. The handler itself holds no PgPool: the org
+# check it gained routes through `Store::account_is_org` via
+# `state.control_store()`, which is the shape this ratchet is steering toward.
+# Adding a test-only entry rather than aliasing the type in the test — the
+# guard's own header names a type alias as an evasion.
+#
+# HAND EDIT, claim-based tenancy §Phase 3 PR 3.2 (PR #806, 2026-09-07):
+# `mcp/tenant_selection.rs` is a NEW file (the `mcp_tenant_selection` table's
+# reader/writer + the pure `resolve_selected_tenant` decision core it feeds).
+# Checked routing it through `Store` first — this is the guard's own
+# suggested fix, and `routes/me.rs` above is a real precedent for a
+# CONTROL-PLANE-ONLY, unscoped pointer table (`user_active_graph`) doing
+# exactly that (`Store::user_active_graph`/`set_user_active_graph` via
+# `state.control_store()`). `mcp_tenant_selection` is the SAME shape by
+# itself: a simple keyed control-plane row, no RLS, no tenant-plane twin.
+#
+# It does NOT convert cleanly, for one reason that isn't cosmetic:
+# `live_membership_for_selection` (the fresh live-membership re-check this
+# module's whole design hinges on) calls `middleware::auth::
+# live_org_membership` DIRECTLY — reused on purpose, not reimplemented, per
+# this module's own doc ("never a hand-rolled copy" of a security-critical
+# query a claim-sourced org id already gets on every request). That function
+# takes `&sqlx::PgPool`, not `&dyn Store`, and it is a heavily-relied-upon,
+# already-baselined (`middleware/auth.rs` above) piece of the auth spine —
+# widening its signature to route through `Store` is a bigger, riskier change
+# than this PR's job, for a caller unrelated to why it exists. The
+# alternative, adding a Store method that re-queries the same thing, is
+# exactly the duplicate-copy risk the reuse was chosen to avoid.
+#
+# Converting ONLY `load_stored_selection`/`store_selection`/`clear_selection`
+# (the three functions that COULD move, mirroring `user_active_graph`
+# exactly) was considered and rejected as not worth doing: `PgPool` would
+# still appear in this same file via `live_membership_for_selection`'s
+# parameter regardless, so a partial conversion adds a new `Store` method
+# pair for no reduction in what this guard is measuring — the file stays
+# flagged either way. Full entry, not a test-only one: unlike `routes/me.rs`/
+# `routes/prefs.rs`, this file's PRODUCTION code (not just its `pg_tests`
+# harness) holds the pool, the same shape already baselined for
+# `middleware/auth.rs`/`mcp/auth.rs` right above.
+
+# HAND EDIT, personal-orgs PR (2026-09-07): `bin/create_personal_orgs.rs` is a
+# NEW operator binary — the mechanism that mints the Clerk organization
+# standing for one person's own ocean (migration 0208_personal_orgs.sql) and
+# records it. `--update` is not the channel for this and was not used: that
+# flag can only ever lower the count and remove paths, by design. This is the
+# hand edit the guard's own message asks for.
+#
+# Checked routing it through `Store` first, which is the guard's suggested
+# fix. It does not apply here, for the same reason every other entry under
+# `backend/src/bin/` in this baseline gives — `backfill_billing_enforcement.rs`,
+# `grant_plan.rs`, `migrate_control.rs`, `migrate_tenants.rs`,
+# `export_member_ocean.rs`, `reextract.rs`,
+# `migrate_personal_to_member_ocean.rs` and the rest of the backfill_* family:
+# an operator-run one-shot owns its own pool, opens it from
+# `migrator_database_url()`, and never serves a request. There is no
+# `AppState`, no `state.control_store()`, and no request scope for
+# `store.begin(scope)` to be derived from. `backend/src/bin` is already the
+# sanctioned home for exactly this shape, per those entries and per
+# `check_no_cross_plane_promotion.sh`'s SCAN_DIRS (routes/services/mcp)
+# deliberately excluding it.
+#
+# The pool here is about as small as this shape gets: two statements against
+# ONE control-plane table with no RLS policy (0204's header says why) — a
+# `SELECT clerk_org_id FROM personal_orgs WHERE clerk_user_id = $1` and an
+# `INSERT ... ON CONFLICT DO NOTHING`. Adding a `Store` method pair for them
+# would raise `scoped_methods` above instead, trading one frozen metric for
+# another without shrinking the restructure's bill — the same reasoning the
+# `services/retraction_audit.rs` entry above records. Not a new pattern this
+# PR introduces, and not a conversion site the restructure gains: the file has
+# no request-path callers.
+#
+# Spelling the type some other way to slip past the scanner (a `PgConnection`,
+# a local alias) was considered and rejected outright: this guard's own header
+# names a type alias as an evasion, and a serial one-shot using a single
+# connection purely to avoid the word `PgPool` would be exactly that.
+
+# HAND EDIT, personal-orgs step 3 (2026-09-08):
+# `bin/adopt_personal_org_account.rs` is a NEW operator binary — it gives a
+# personal organization's identity to the account that already holds the
+# person's data and deletes the empty account Clerk's `organization.created`
+# webhook made. `--update` is not the channel for this and was not used: that
+# flag can only lower the count and remove paths. This is the hand edit the
+# guard's own message asks for, same as `create_personal_orgs.rs` above.
+#
+# Routing it through `Store` was considered and rejected on this one
+# specifically: the tool's whole job is a single transaction that DELETEs an
+# `accounts` row and UPDATEs another while `account_members_account_org_fk` is
+# DEFERRED. `SET CONSTRAINTS` is connection-scoped, so the work has to hold one
+# connection for the duration — which is exactly the raw-pool shape the
+# restructure is removing elsewhere, and exactly what correctness requires
+# here. Spelling the type `PgConnection` to slip past the scanner was also
+# rejected: the guard's header names a type alias as an evasion.
+
+# HAND EDIT, promote-content-loss fix (PR #838, 2026-09-09): two NEW PgPool
+# files, `backend/src/promoted_blob_backfill.rs` (the backfill core) and
+# `backend/src/bin/backfill_promoted_blobs.rs` (its thin binary wrapper).
+# `--update` is not the channel for this and was not used: that flag can
+# only ever lower the count and remove paths. This is the hand edit the
+# guard's own message asks for.
+#
+# Same family, and same reasoning, as every other `backfill_*`/`reextract`/
+# `judgement_backfill`/`self_reef_backfill` entry already frozen in this
+# baseline (see `backend/src/reextract.rs`/`backend/src/judgement_backfill.rs`
+# above): an operator-run one-shot that owns its own pool — opened from
+# whatever DSN the operator points it at (control plane or one tenant DB per
+# run, per the module's own "Run once per tenant database" doc) — and never
+# serves a request. There is no `AppState`, no `state.control_store()`, and
+# no request scope for `store.begin(scope)` to be derived from; `backend/src/
+# bin` is already the sanctioned home for exactly this shape. Routing it
+# through `Store` was checked and rejected for the same structural reason
+# `judgement_backfill.rs`/`reextract.rs` give: this tool walks every
+# promoted atom across every graph/account in a database by design (finding
+# the rows a per-account boundary would hide is the entire point), which a
+# scope bound to a single account cannot express. It also carries the same
+# preflight-not-trust discipline as those two — `promoted_blob_backfill::
+# assert_policy_bypass` — with its own negative control in
+# `backend/tests/promoted_blob_backfill_pg.rs` (see that suite and
+# `scripts/rls_coverage.manifest`'s matching entry for the detail). Not a new
+# pattern this PR introduces — the fourth one-shot of this exact shape now
+# frozen into this baseline.
+# HAND EDIT, Microsoft add-in SSO (2026-10-02): routes/addin_microsoft.rs is the
+# Microsoft flavour of routes/addin.rs (just above)
+# — control-only authentication and link management. `require_auth` resolves
+# the `csms_` session credential (addin_microsoft_sessions, migration 0264)
+# BEFORE a tenant pool or content scope exists, and the unauthenticated
+# `POST /v1/addin/microsoft/session` runs with no `Tenant` at all; every
+# statement targets control tables with no tenant twin (addin_microsoft_links,
+# addin_microsoft_sessions, addin_pairing_codes, accounts, account_members,
+# users) or the audited SECURITY DEFINER resolver
+# `resolve_microsoft_connected_users` (it never names `oauth_tokens` itself —
+# that table is RLS-covered and read only inside that function). The `&PgPool`
+# parameters are `state.control_db()` handed to the helpers; none of this
+# belongs on the content Store.
+pgpool_file backend/src/routes/addin_microsoft.rs
+# GitHub connector (#1012 sync plumbing, #1018 code tier, #1022 summary tier).
+# Every tenant-plane statement in these files opens through
+# tenancy::scope::begin_tenant_system_scoped / begin_account_scoped (the
+# tenant_rls_coverage.manifest entries carry the per-file reasoning); the
+# PgPool parameters are the same "pool + account_id in, scoped tx inside"
+# shape connectors/slack_disconnect.rs and google_disconnect.rs already sit
+# in this list with. github_conformance.rs is #[cfg(test)]-only — the ratchet
+# is blind to cfg(test) and counts it regardless. Registered in PR C.
+pgpool_file backend/src/connectors/github.rs
+pgpool_file backend/src/connectors/github_backfill.rs
+pgpool_file backend/src/connectors/github_conformance.rs
+pgpool_file backend/src/connectors/github_disconnect.rs
+pgpool_file backend/src/connectors/github_event_ingest.rs
+pgpool_file backend/src/connectors/github_repos.rs
+pgpool_file backend/src/routes/github.rs
+pgpool_file backend/src/workers/github_backfill.rs
+pgpool_file backend/src/workers/github_reconcile_sweep.rs
+# CS-443 (2026-09-22, org-onboarding plan §3 items 37 + 6, PR #1031): org
+# domain verification and D16's assertion ladder. Three files that landed on
+# main WITHOUT being added here, leaving this ratchet red — registered now,
+# by the PR that builds on them, rather than left for the next reader to
+# trip over. All three take a bare `&PgPool` from `state.control_db()` and
+# open `tenancy::scope::begin_account_scoped` per statement, the same shape
+# `services/org_join_requests.rs` above already carries.
+pgpool_file backend/src/routes/org_domains.rs
+pgpool_file backend/src/services/org_domains.rs
+pgpool_file backend/src/services/assertion_ladder.rs
+# CS-447 (2026-09-22, org-onboarding plan §3 item 9, D1/D11/D12/D16):
+# auto-add's settings/ledger service and its admin toggle route. Same shape
+# and same reason as the three above — `&PgPool` from `state.control_db()`,
+# `begin_account_scoped` opened per statement. `routes/org_auto_add.rs`
+# holds one only for the unscoped `seat_tiers` catalogue lookup (global
+# reference data, no `account_id`); every account-scoped read and write it
+# performs goes through `services::org_auto_add`.
+pgpool_file backend/src/services/org_auto_add.rs
+pgpool_file backend/src/routes/org_auto_add.rs
+# CS-449 (2026-09-23, org-onboarding plan §3 item 38, D11's "ask once"):
+# the drain's own safety-net sweep. Same shape and same reason as
+# `workers/org_join_request_digest.rs` above — a `tenant_harness` sweep
+# worker whose `tick` takes a bare `&PgPool` (control-plane only, no
+# tenant-tree counterpart) alongside `&Arc<AppState>`, mirroring that
+# worker's own extra `state` parameter (both provision a real Clerk
+# membership several calls deep — `routes::org_join_requests::
+# try_auto_add`/`send_digest_email` respectively).
+pgpool_file backend/src/workers/auto_add_drain_sweep.rs
+# Meet per-meeting opt-in (`services::google_meet_capture`): functions take the
+# plane's content `&PgPool` (control for personal, the org tenant pool for org)
+# and open `begin_tenant_scoped` themselves, exactly like
+# `services/teams_meeting_capture.rs` (whose precedent this mirrors). The pool is
+# plane-polymorphic by design, so there is no single `Store` to route through.
+pgpool_file backend/src/services/google_meet_capture.rs
+# `routes::google_meet` holds the caller's content pool + control pool in its
+# per-request `Ctx` (credentials are control-only; captures live on the content
+# plane), the same two-pool shape `routes::google_chat` has.
+pgpool_file backend/src/routes/google_meet.rs
+pgpool_file backend/src/decision/openrouter.rs
+pgpool_file backend/src/ingest/capture/pg_tests.rs
+
+# Reviewed fix-forward registration (2026-10-08): the following 22 PgPool
+# files already existed at main 72cc9391 before the Ask reliability work.
+# Record their existing conversion debt without changing the matcher, scoped
+# method count, macro-file set, or any existing baseline entry. Each reason
+# identifies the reviewed pool shape; registration alone does not prove RLS.
+# reason: Production PgPool is used for pool-sizing semaphore capacity, without SQL. This remains a pool-holding conversion site; it is not a tenant-content query.
+pgpool_file backend/src/calendar_pass_gate.rs
+# reason: Production control-plane OAuth reads use scoped token helpers; the remaining pool supports cold-start notice metadata. Register the existing helper shape as conversion debt.
+pgpool_file backend/src/connectors/chat_cold_start.rs
+# reason: Production control-plane pool supports scoped OAuth helpers and cold-start notice metadata. Register the existing notice/helper pool signatures as conversion debt.
+pgpool_file backend/src/connectors/cold_start.rs
+# reason: Production pool carries control-plane OAuth credential health. Token operations retain exact-owner/account-scoped helpers; bare pool signatures remain conversion debt.
+pgpool_file backend/src/connectors/credential_health.rs
+# reason: Production code has both explicit control/token pools and content operations, including system-scoped atom work. Register the existing mixed-plane scoped/helper signatures as conversion debt, not a control-only exemption.
+pgpool_file backend/src/connectors/microsoft_calendar.rs
+# reason: Production control-plane channel metadata, account/member membership, and scoped OAuth helpers use explicit pools. Register the existing helper signatures as conversion debt.
+pgpool_file backend/src/connectors/slack_member_capture.rs
+# reason: Production control-plane watcher/subscription election metadata and scoped token helpers use explicit pools. Register the existing doorbell helper signatures as conversion debt.
+pgpool_file backend/src/connectors/teams_doorbell.rs
+# reason: Production explicit control/content pools are passed to scoped capture/token helpers. Register the existing delegated two-plane shape as conversion debt; this is not a claim that every query is control-only.
+pgpool_file backend/src/connectors/teams_transcripts.rs
+# reason: Production authorization reads control-only accounts through state.control_db(); OAuth handling uses explicit control/token helpers. Register the existing route helper and fixture pools as conversion debt.
+pgpool_file backend/src/routes/google_workspace_connect.rs
+# reason: Production explicit control/content pools are passed to the scoped scheduling service. Register the existing delegated route shape as conversion debt, without exempting content operations from member scope.
+pgpool_file backend/src/routes/outlook_schedule.rs
+# reason: Production content operations open begin_tenant_scoped for the acting member, while accounts/OAuth use the control pool. Register the existing mixed-plane route signatures as conversion debt.
+pgpool_file backend/src/routes/teams_onboarding.rs
+# reason: Production pool stores the control-plane organization install-grace clock row. Register the existing control metadata service signature as conversion debt.
+pgpool_file backend/src/services/org_install_grace.rs
+# reason: Production scheduling content operations use member-scoped transactions alongside explicit control/token access. Register the existing scoped service pool signatures as conversion debt.
+pgpool_file backend/src/services/outlook_schedule.rs
+# reason: Production source replay includes system-scoped atom operations and explicit control/helper access. Register the existing mixed-plane service signatures as conversion debt, not a control-only exemption.
+pgpool_file backend/src/services/source_reingest.rs
+# reason: Production meeting content operations use member-scoped transactions alongside control/token helpers. Register the existing scoped service pool signatures as conversion debt.
+pgpool_file backend/src/services/teams_meeting_capture.rs
+# reason: TEST-ONLY: the parent teams_meeting_capture module includes this file under cfg(test). PgPool belongs to isolated PostgreSQL fixtures, without a production pool-holding site.
+pgpool_file backend/src/services/teams_meeting_capture_tests.rs
+# reason: Production worker delegates to control-plane cold-start notice helpers using an explicit pool. Register the existing delegated worker signature as conversion debt.
+pgpool_file backend/src/workers/chat_cold_start.rs
+# reason: Production explicit pool supports control-plane user/account lookups and scoped OAuth/join helpers. Register the existing worker/helper signatures as conversion debt.
+pgpool_file backend/src/workers/google_chat_invite.rs
+# reason: Production explicit control/content pools are passed to scoped scheduling helpers. Register the existing delegated worker shape as conversion debt, without exempting tenant content.
+pgpool_file backend/src/workers/outlook_schedule.rs
+# reason: Production control-plane tenant-registry routing delegates capture/backfill to scoped helpers. Register the existing explicit routing/helper pools as conversion debt.
+pgpool_file backend/src/workers/slack_member_capture.rs
+# reason: Production capture/content work retains member-scoped helpers, alongside explicit control/token access. Register the existing mixed-plane worker signatures as conversion debt.
+pgpool_file backend/src/workers/teams_meeting_sync.rs
+# reason: Production explicit control/content pools are passed to scoped matching/capture helpers. Register the existing delegated worker shape as conversion debt, not a blanket isolation certification.
+pgpool_file backend/src/workers/teams_unmatched_email.rs
+
+# Raised by two PgPool files (connectors integration, 2026-10-09). Reviewer
+# agreement recorded (Opus integration review, 2026-10-09: neither entry hides an
+# isolation violation). Both are PRODUCTION and follow existing connector
+# convention rather than adding ambient access; no code or guard behaviour changes.
+# Every RLS-protected table is read or written under
+# `tenancy::scope::begin_tenant_system_scoped` (or `begin_tenant_scoped`) or through
+# the sanctioned SECURITY DEFINER bootstrap resolver below. A bare pool does touch
+# non-RLS control tables and the resolver, each noted in its reason. Routing these
+# through NEW `Store` `_scoped` methods would raise `scoped_methods` (the other
+# frozen metric) for plane-polymorphic helpers that have no single `Store` to route
+# through (same justification as `services/google_meet_capture.rs` above).
+# reason: Meet Workspace Events subscription handling. RLS tables (google_watch_channels, oauth_tokens) are read and written inside begin_tenant_system_scoped(pool, account_id). The one bare-pool call is the IDs-only SECURITY DEFINER resolve_google_meet_subscription (EXECUTE revoked from PUBLIC), whose only caller re-reads the row under begin_tenant_system_scoped and re-checks current membership before loading credentials (routes::google_push).
+pgpool_file backend/src/connectors/google_meet_events.rs
+# reason: Slack huddle consent is plane-polymorphic (its content pool is the control pool for personal accounts and the org tenant pool for org accounts). RLS tables (oauth_tokens, graphs, teams, team_members, connector_identities, slack_huddle_consents) are opened under begin_tenant_system_scoped; the non-RLS control tables account_members and users are read on the control pool with an explicit account_id predicate. Paired control 0287 / tenant 0124 consent tables carry account_isolation RLS.
+pgpool_file backend/src/connectors/slack_huddle_consent.rs
+
+# Hand-added for semantic source evidence (2026-10-11), following the existing
+# summary tenant-harness worker. This is a pool-signature exception, not an
+# unscoped-content exception: control_pool is used ONLY for account_prefs egress
+# policy. The plane-specific pool supports the queue, the sanctioned IDs-only
+# resolve_graph_account_id bootstrap, scoped DEK/usage helpers, and begin_scope.
+# Every source/version/atom/node query runs in begin_account_scoped on consumer
+# or begin_tenant_system_scoped_without_account on tenant. No opaque control
+# store interface exists for the shared cloud_egress_forbidden API. The real
+# app-role meeting_atoms_pg suite checks wrong-owner rejection and scoped writes.
+pgpool_file backend/src/workers/source_atoms.rs
+
+# Hand-added for durable source blob cleanup (2026-10-11): explicit PgPool is
+# used only for the server-owned queue and IDs-only resolve_graph_account_id
+# bootstrap. Source content is never queried. A required account envelope and
+# exact tenant/graph key validation authorize cleanup after source row removal.
+pgpool_file backend/src/workers/source_blob_cleanup.rs
+
+# Hand-added for the connected-memory packages merged 2026-10-11..13 with
+# per-PR CI off (#1220 corpus inventory, #1230 managed history, #1236 P8
+# purge lifecycle, #1239 composio capture). Each entry was checked against
+# the file, not assumed:
+# reason: PRODUCTION. `scoped(pool, plane, account)` and `drain_account(pool, plane, ..)` take the plane's pool and open `begin_account_scoped` (consumer) or `begin_tenant_system_scoped` (org) per account before touching `unattached_capture_uploads`; nothing runs on the bare pool. Plane-polymorphic, so there is no single `Store` to route through (same justification as `workers/source_blob_cleanup.rs` below).
+pgpool_file backend/src/capture_upload_cleanup.rs
+# reason: PRODUCTION. Three functions take `control: &sqlx::PgPool` (the control pool from `state.control_db()`) and open `begin_account_scoped(control, account)` to read control-only `account_members`/`accounts`/`org_revocations` for requester admission. Content-plane reads open `tenant.begin_member_scoped`. No content table is touched through the bare pool.
+pgpool_file backend/src/corpus_enrichment.rs
+# reason: TEST-ONLY. `#[path]`-included `#[cfg(test)] mod pg_tests` of corpus_enrichment.rs; its `Fixture` holds admin/owner/app `PgPool`s for a disposable ORGT_TEST_BASE_URL database so the suite can seed as owner and then prove app-role isolation. Never compiled into serving code; the guard is blind to `cfg(test)`.
+pgpool_file backend/src/corpus_enrichment_pg_tests.rs
+# reason: PRODUCTION. One `pool: &sqlx::PgPool` parameter, `block_legacy_paid_job`, hands the worker's own plane pool to `jobs::queue::could_not_do` to mark a structurally unsupported job terminal. The queue helper owns that write; no content table is read here, and the history reads in this file open `tenant.begin_member_scoped`.
+pgpool_file backend/src/managed_history.rs
+# reason: PRODUCTION (COR-21, 2026-10-14). `ManagedCall.control: &PgPool` is the control pool the managed send gate needs for three control-only reads before each provider attempt: `PriceSheet::load` (`model_rates`), `billing::enforcement::is_blocked` (account-scoped inside), and the requester half of `corpus_enrichment::window_access_allowed_tx`. Every ledger, unit and receipt write in `managed/gate.rs` runs in a plane transaction opened by `begin_account_scoped` (consumer) or `begin_tenant_system_scoped_without_account` (org); nothing touches a content table through the bare pool.
+pgpool_file backend/src/managed/mod.rs
+# reason: PRODUCTION. `tick(t, control: &PgPool, state)` opens `begin_account_scoped(control, account)` for the control-only membership and plane checks (`account_members`, `tenant_databases`, `accounts`) to settle control-only pending `composio_connections` found by `resolve_composio_pending_connections()`, to mark a departed member's control-only connection disconnected when its capture is parked, and to claim and record that connection's Composio revocation (`revoke_connection`, shared with the Disconnect route; retries found by `resolve_composio_departed_unrevoked()`); due-scope discovery runs on the worker tenant's own pool via `resolve_composio_capture_due()`. Per-scope capture resolves a `TenancyDecision` and its content pool before any content write.
+pgpool_file backend/src/workers/composio_capture.rs
+# reason: PRODUCTION. StandingOwner owns content-then-CONTROL acquisition through begin_account_scoped and begin_tenant_system_scoped, the existing-run lock, fresh principal selection and commit. Consumer lookups reuse its held transaction. Org CONTROL reads are account-scoped and validate exact org binding/revocation; content queries run under tenant system scope and separately require current member reachability. No query executes through a bare pool and no transaction or authority token escapes.
+pgpool_file backend/src/managed/standing/principal.rs
+
+# reason: PRODUCTION (COR-23). One private owner replaces two existing content-mutation transaction paths. ContentScope opens Consumer account or Org system scope before SQL, compares graph/account and exact atom snapshot, and commits pointer/header/sync/vector invalidation/enqueue together. No bare-pool content query, Store trait growth, network-held transaction, or caller-owned permit is introduced.
+pgpool_file backend/src/services/content_replacement.rs
+# reason: TEST-ONLY (COR-23). Child native fixture holds disposable admin/owner/app pools to apply real migrations and prove both restricted app-role planes, blob/CAS races and COMMIT-ACK uncertainty. This module never compiles into the serving binary.
+pgpool_file backend/src/services/content_replacement/pg_tests.rs
+pgpool_file backend/src/billing/managed_reservation.rs
+pgpool_file backend/src/managed/gate/funded.rs
+pgpool_file backend/src/managed/gate/pg_tests.rs
+
+# reason: PRODUCTION. Standing sweep acquires actual consumer account / Org tenant-system content through execution::begin_content and separate CONTROL account transactions before row locks. The explicit multi-plane owner cannot be represented by one opaque Store transaction; every content SQL uses the held scoped executor and adoption commits per version.
+pgpool_file backend/src/managed/standing/admission.rs
+# reason: PRODUCTION. StandingExecutor owns the queue operation, bounded content-then-CONTROL acquisition, actual fresh principal/source/claim checks and immutable original/publication boundary. No bare content pool query or cached authorization token is exposed; provider I/O holds no database resources.
+pgpool_file backend/src/managed/standing/execution.rs
+# reason: COR-23 canonical funded embedding owner. The source-specific deep operation needs actual content/control pools for job claim, current byte snapshots and canonical gate integration; all content SQL begins in existing account or tenant-system scope. No new Store method or money owner. Independent scope review remains required.
+pgpool_file backend/src/managed/embedding/operation.rs
+
+# reason: OPERATOR ONE-SHOT, BRIDGE (source-agnostic pipeline plan PR 1; deleted with PR 11). backfill_node_atoms_bridge and its core node_atoms_bridge.rs walk every graph in one database under the ELEVATED owner role (assert_policy_bypass preflight), same backfill_* family shape as bin/backfill_provenance_links.rs above. The core's live-worker half (version_chunks_tx/link_reefs_tx) takes only the caller's already-scoped transaction and writes through Store::link_node_atoms_batch_scoped; only the backfill half holds a PgPool.
+pgpool_file backend/src/bin/backfill_node_atoms_bridge.rs
+pgpool_file backend/src/node_atoms_bridge.rs
+
+# reason: OPERATOR ONE-SHOT (source-agnostic pipeline plan PR 2). reextract_source_atoms_v2 and its core source_reextract.rs repin v1-extracted versions to source-atoms-v2 in every graph of one database under the ELEVATED owner role (assert_policy_bypass preflight), the same backfill_* family shape as node_atoms_bridge above. No model call; the standing sweep does the extraction under its own scopes.
+pgpool_file backend/src/bin/reextract_source_atoms_v2.rs
+pgpool_file backend/src/source_reextract.rs
+
+# reason: OPERATOR ONE-SHOT (2026-10-20 incident). carry_forward_unchanged_versions and its core source_carry_forward.rs mark pending re-captures of unchanged content done in every graph of one database under the ELEVATED owner role (assert_policy_bypass preflight), same shape as reextract_source_atoms_v2 above. No model call, no content read.
+pgpool_file backend/src/bin/carry_forward_unchanged_versions.rs
+pgpool_file backend/src/source_carry_forward.rs
+# reason: OPERATOR ONE-SHOT (2026-10-19 incident). dedupe_reefs + its core reef_dedupe.rs merge per-version duplicate reefs through the Store human-merge path. Each walks one whole database under the ELEVATED owner role (assert_policy_bypass_on preflight), the same backfill_* family shape as source_reextract above. No model call.
+# reason: OPERATOR ONE-SHOT. retry_failed_extractions_v2 + its core failed_extraction_retry.rs hand FAILED source versions back to standing under source-atoms-v2 (v1 repin, or a failed v2 standing unit requeued), walking one whole database under the ELEVATED owner role (assert_policy_bypass_on preflight), the same backfill_* family shape as source_reextract above. No model call.
+pgpool_file backend/src/bin/retry_failed_extractions_v2.rs
+pgpool_file backend/src/failed_extraction_retry.rs
+pgpool_file backend/src/bin/dedupe_reefs.rs
+pgpool_file backend/src/reef_dedupe.rs
+# reason: OPERATOR ONE-SHOT (COR-66 follow-up). retract_fixture_kinship selects kinship edges whose every evidence atom is code text, READ ONLY, in one database under the ELEVATED tenant owner role (RLS-bypass preflight, exit 3 otherwise), and with --execute rejects them through Store::set_relationship_edge_status, the human review write. The same backfill_* family shape as dedupe_reefs above. No model call.
+pgpool_file backend/src/bin/retract_fixture_kinship.rs
+
+# reason: OPERATOR ONE-SHOT (adopt-or-replace chunk ingest, step C). backfill_chunk_links and its core chunk_reconcile/backfill.rs walk every graph in one database under the ELEVATED owner role (assert_policy_bypass_on preflight), same backfill_* family shape as backfill_node_atoms_bridge above. The live half (chunk_reconcile.rs) takes only the caller's already-scoped transaction; only the backfill half holds a PgPool.
+pgpool_file backend/src/bin/backfill_chunk_links.rs
+pgpool_file backend/src/chunk_reconcile/backfill.rs
+
+# reason: PRODUCTION (source-agnostic pipeline plan PR 3, managed_enrichment scaffold). Like managed/embedding/operation.rs above: `control: &PgPool` is the control pool the managed gate needs for principal selection (membership and graph-reach reads opened through `tenancy::scope::begin_account_scoped`) and the gate's control-only price/enforcement reads. Every content, receipt and enrichment-input write runs in a plane transaction from `managed::embedding::begin(plane)` (account- or tenant-system-scoped). No new Store method and no ambient content SQL. The pg_tests file is TEST-ONLY scratch databases, like managed/gate/pg_tests.rs.
+pgpool_file backend/src/managed/enrichment.rs
+pgpool_file backend/src/managed/gate/pg_tests/enrichment.rs
+# reason: PR 9 fact supersession (2026-10-19). backfill_fact_supersession + the backfill in its core fact_supersession.rs walk one whole database as the ELEVATED owner role (assert_policy_bypass_on preflight), the same backfill_* one-shot shape as source_reextract above; fact_supersession/judge.rs is a tenant-harness sweep that receives the plane's PgPool from WorkerTenant and opens begin_account_scoped / begin_tenant_system_scoped transactions on it, like embed_retry. No Store method covers either.
+pgpool_file backend/src/bin/backfill_fact_supersession.rs
+pgpool_file backend/src/fact_supersession.rs
+pgpool_file backend/src/fact_supersession/judge.rs
+# reason: graph connectivity (2026-10-20). backfill_co_occurrence + the backfill in its core co_occurrence.rs walk one whole database as the ELEVATED owner role (assert_policy_bypass_on preflight), the same backfill_* one-shot shape as fact supersession above; the job path calls refresh_tx on a transaction inference_closure already scoped. No Store method covers a whole-graph set-based rewrite.
+pgpool_file backend/src/bin/backfill_co_occurrence.rs
+pgpool_file backend/src/co_occurrence.rs
+
+# reason: link_ambiguity (2026-10-20). resolve_ambiguous_mentions + the backfill in its core mention_sweep.rs walk one whole database as the ELEVATED owner role (assert_policy_bypass_on preflight), the same backfill_* one-shot shape as co-occurrence above; sweep_graph takes the caller's transaction opener, so tests drive it through begin_account_scoped / begin_tenant_system_scoped_without_account. The ladder and mint go through Store; no Store method covers rewriting semantic_atoms.entities.
+pgpool_file backend/src/bin/resolve_ambiguous_mentions.rs
+pgpool_file backend/src/bin/repair_sweep_duplicates.rs
+pgpool_file backend/src/mention_sweep.rs
+
+# reason: TEST-ONLY (source-agnostic pipeline plan PR 5). `#[path]`-included cfg(test) entity-resolution fixtures under managed/gate/pg_tests.rs; holds the scratch databases' app/owner pools and builds a disposable Neon-shaped owner-runtime pool. Never compiled into serving code.
+pgpool_file backend/src/managed/gate/pg_tests/entity_resolution.rs
+
+# reason: PRODUCTION (Jev at Ask time on a managed budget, 2026-10-18). `decision::AskBudget` carries the Ask's content-plane and control-plane `PgPool`s (owned clones of the request's own tenant/control pools) into Jev's spawned metering task, so the managed gate can reserve and settle an `interactive_ask` receipt after the Ask phase has already failed open. decision/mod.rs runs no SQL: every statement runs in the managed gate's JobScope transactions (account scope for Consumer, tenant-system scope for Org) and its control account-scoped transaction. No Store method covers the funded gate.
+pgpool_file backend/src/decision/mod.rs
+
+# reason: TEST-ONLY. `#[path]`-included cfg(test) interactive_ask fixtures under managed/gate/pg_tests.rs; holds the scratch databases' app/owner pools and a Neon-shaped owner-runtime pool. Never compiled into serving code.
+pgpool_file backend/src/managed/gate/pg_tests/interactive_ask.rs
+
+# reason: TEST-ONLY (source-agnostic pipeline plan PRs 6-8). `#[path]`-included cfg(test) journal/title/digest managed enrichment fixtures under managed/gate/pg_tests.rs; holds the scratch databases' app/owner pools and a Neon-shaped owner-runtime pool. Never compiled into serving code.
+pgpool_file backend/src/managed/gate/pg_tests/enrichment_consumers.rs
+
+# reason: TEST-ONLY (source-agnostic pipeline plan PR 10, COR-35). `#[path]`-included cfg(test) meeting-summary managed enrichment fixtures under managed/gate/pg_tests.rs; holds the scratch databases' app/owner pools and a Neon-shaped owner-runtime pool. Never compiled into serving code.
+pgpool_file backend/src/managed/gate/pg_tests/meeting_summary.rs
+
+# reason: TEST-ONLY (attributed reef-digest read). `#[path]`-included cfg(test) child of enrichment_consumers.rs; passes the scratch databases' app/owner pools and the Neon-shaped owner-runtime pool to the worker and to reader-scoped transactions. Never compiled into serving code. The production read, backend/src/reef_digest_read.rs, holds no pool: it reads only through the caller's scoped transaction.
+pgpool_file backend/src/managed/gate/pg_tests/digest_read.rs
+# reason: TEST-ONLY (managed gate admission latency). `#[path]`-included cfg(test) fixture under managed/gate/pg_tests.rs; builds app-role pools through a loopback latency relay to count round trips and time admission against the scratch databases. Never compiled into serving code.
+pgpool_file backend/src/managed/gate/pg_tests/admission_latency.rs
+# reason: TEST-ONLY (managed settlement recovery invariants). `#[path]`-included cfg(test) fixture under managed/gate/pg_tests.rs; holds the scratch databases' app/owner pools, a Neon-shaped owner-runtime pool and loopback relay pools to count round trips, and clones them into the phase-window test hook. Never compiled into serving code.
+pgpool_file backend/src/managed/gate/pg_tests/settlement_recovery.rs
+# reason: TEST-ONLY (managed call timeouts). `#[path]`-included cfg(test) fixture under managed/gate/pg_tests.rs; drives the real funded gate and gated OpenRouter transport against a local stand-in that streams slowly or hangs, on the scratch databases' app pools and a Neon-shaped owner-runtime pool, and inspects receipts through the fixture owner pool. Never compiled into serving code.
+pgpool_file backend/src/managed/gate/pg_tests/call_timeouts.rs
+# reason: TEST-ONLY. `connectors::composio::tests` is `#[cfg(test)]`; the connector-anchor pg test holds a `PgPool` for a disposable ORGT_TEST_BASE_URL database to seed an account and assert the captured `source_versions` metadata. Never compiled into serving code.
+pgpool_file backend/src/connectors/composio/tests.rs
+# reason: PRODUCTION (scoped Ask statement leg, 2026-10-20). workers/statement_embed.rs is a tenant-harness sweep plus the EmbedStatements queue handler; like embed_retry it receives the plane's PgPool from WorkerTenant and opens begin_account_scoped (Consumer) / begin_tenant_system_scoped_without_account (Org) transactions on it, and hands the pools to managed::embedding. managed/embedding/operation/statements.rs is the statement half of operation.rs above (same reason: the funded gate needs actual content/control pools; all SQL runs in held scoped transactions). No Store method covers the funded gate. The pg_tests file is TEST-ONLY scratch databases, like managed/gate/pg_tests.rs.
+pgpool_file backend/src/workers/statement_embed.rs
+pgpool_file backend/src/managed/embedding/operation/statements.rs
+pgpool_file backend/src/managed/gate/pg_tests/statement_embedding.rs
+
+# reason: PRODUCTION (Library evidence refresher, PR #1451; introduced 697b29a7). WorkerTenant supplies the plane pool. Org content runs in tenant-system scope and Consumer content in account scope before discovery/recompute; the batch computation takes the caller's transaction. Consumer account-roster discovery deliberately reads control identity accounts on the bare pool. Register this existing conversion site explicitly; no Store method covers the cross-account worker roster.
+pgpool_file backend/src/workers/library_evidence.rs
+
+# Proposed reviewed Library read-model pool-shape registrations.
+# Six sites are new on PR4; main registers the pre-existing worker above.
+# reason: OPERATOR SQL PROOF. Explicit inventory/reader/control connection pools are required to compare the selected database under its actual physical reader role. Complete inventory rejects row-security-active graphs; actor admission uses the shared scoped control fence and comparisons use Tenant::begin_member_repeatable_read. This registers the operator connection shape as conversion debt, not an exception to caller admission or RLS.
+# reason: TEST-SUPPORT ONLY PgPool signatures. shadow_comparison_for_test and runtime_test_support::start are both feature=test-support entrypoints delegating to the real proof runtime. They introduce no bare-pool content query or production Store method; the file-set scanner deliberately does not interpret cfg gates.
+# reason: PRODUCTION Library proof orchestration. Retains a control pool for account-scoped proof-ledger operations and fresh shared control admission. Content pairing reauthorizes the Tenant then opens its read-only member-scoped repeatable-read transaction; the control handle is not used as an ambient content executor. Register the retained pool shape as explicit conversion debt.
+# reason: OPERATOR ADMISSION. The supplied control pool is used by the shared fresh actor-admission fence and an account-scoped current-role read. Snapshot validation receives an already-scoped transaction. No new Store method or ambient content query is introduced; the pool-bearing operator boundary remains conversion debt.
+# reason: PRODUCTION CONTROL LEDGER. ProofWriter privately retains the control pool; every ledger operation opens control_tx, which applies begin_account_scoped for the operator account with bounded statement/lock timeouts. Content comparison receives no exposed writer pool. This registers a concrete conversion site, not blanket permission for unscoped SQL.
+# reason: PRODUCTION SHARED ADMISSION FENCE. The new pool-only form first reauthorizes each graph through Tenant, then opens begin_account_scoped on the explicit control pool for current account membership/org binding/revocation. The pool parameter serves bounded background proof admission without retaining AppState; no content table is queried through that bare control pool.
+pgpool_file backend/src/source_evidence.rs
+# reason: TEST-ONLY (settings launch plan PR 3.2). `billing::funding_policy::pg_tests` is `#[cfg(test)]`; its fixtures hold a `PgPool` for a disposable RELINFER_TEST_DATABASE_URL database to seed accounts, grants, allowance periods and extra-usage rows through account-scoped, entry-fenced transactions, then assert the ledgers. The production code it covers (`funding_policy/db.rs`) takes the caller's `PgConnection` and holds no pool.
+pgpool_file backend/src/billing/funding_policy/pg_tests.rs
+
+# reason: PRODUCTION (settings launch plan PR 3.4). `billing/extra_usage/webhook.rs` is the payment-mode half of the Stripe Checkout webhook (top-up and credit-pack crediting): like the rest of `routes/stripe_webhook.rs` it receives the control `PgPool` from the signature-authenticated handler (there is no Clerk-scoped Store for a webhook), and every statement runs inside one `begin_account_scoped` + `lock_period_rotation` transaction opened on it. No Store method covers it. The two pg_tests files are TEST-ONLY: `#[cfg(test)]` fixtures holding a `PgPool` for a disposable RELINFER_TEST_DATABASE_URL database, seeding through account-scoped, entry-fenced transactions.
+pgpool_file backend/src/billing/extra_usage/webhook.rs
+pgpool_file backend/src/billing/extra_usage/pg_tests.rs
+pgpool_file backend/src/routes/extra_usage/pg_tests.rs
+# reason: PRODUCTION (settings launch plan PR 3.6). `billing::me::build` takes the control pool and opens an account-scoped transaction; the route hands it `state.control_db()`. Same shape as `billing::enforcement::check_funding`, which this baseline already carries.
+pgpool_file backend/src/billing/me.rs
+
+# reason: PRODUCTION (settings launch plan PR 3.6). `billing::notices` takes the control pool and opens one account-scoped transaction per step (claim, lease, mark); there is no connection to hold across the Resend call by design. Same shape as `billing::enforcement`.
+pgpool_file backend/src/billing/notices/mod.rs
+
+# reason: TEST-ONLY (settings launch plan PR 3.6). `billing::notices::pg_tests` is `#[cfg(test)]`; its fixtures hold a `PgPool` for a disposable RELINFER_TEST_DATABASE_URL database.
+pgpool_file backend/src/billing/notices/pg_tests.rs
+
+# reason: PRODUCTION (settings launch plan PR 3.6). `WorkerTenant` supplies the control pool on the Consumer pass (`workers::slot_reservations` is the same shape); the worker passes it to `billing::notices`, which scopes every transaction.
+pgpool_file backend/src/workers/billing_notices.rs
+
+# reason: PRODUCTION (settings launch plan PR 3.5). `billing::extra_usage::reload` takes the control `PgPool` from `workers::auto_reload` (a `Consumer`-pass sweep worker; `WorkerTenant` supplies the pool, same shape as `workers::billing_notices`) and opens one account-scoped, entry-fenced transaction per step; the money moves in `settle.rs` inside the caller's transaction. The Stripe call is deliberately made with no transaction open. The only bare-pool reads are the two SECURITY DEFINER id scans (migration 0374). No Store method covers it.
+pgpool_file backend/src/billing/extra_usage/reload/mod.rs
+pgpool_file backend/src/billing/extra_usage/reload/settle.rs
+
+# reason: TEST-ONLY (settings launch plan PR 3.5). `billing::extra_usage::reload::pg_tests` is `#[cfg(test)]`; its fixtures hold a `PgPool` for a disposable RELINFER_TEST_DATABASE_URL database and a local Stripe mock; it seeds through account-scoped, entry-fenced transactions.
+pgpool_file backend/src/billing/extra_usage/reload/pg_tests.rs
+pgpool_file backend/src/billing/org_trial/lifecycle.rs
+pgpool_file backend/src/billing/org_trial/pg_tests.rs
+pgpool_file backend/src/routes/stripe_webhook_resubscribe_pg_tests.rs
+pgpool_file backend/src/workers/org_trials.rs
+
+# reason: PRODUCTION (self-serve signup PR A2, 2026-10-27). `routes/orgs_create.rs` takes `state.control_db()` like routes/org_trial_checkout.rs: it holds a per-creator advisory-lock transaction across the Clerk and Stripe calls (so a double-submit waits and replays), writes the non-RLS intent table, and reads org_trials/stripe_subscriptions only inside begin_account_scoped. `tenancy/org_selfserve_cleanup.rs` is the workers-only sweep, handed the control pool by `workers::org_selfserve_cleanup` (a Consumer-pass sweep worker, same shape as workers::org_trials); each step commits before the next Clerk or Stripe call, so no transaction spans one. No Store method covers either.
+pgpool_file backend/src/routes/orgs_create.rs
+pgpool_file backend/src/tenancy/org_selfserve_cleanup.rs
+
+# reason: TEST-ONLY (self-serve signup PR A2). `routes::orgs_create::pg_tests` is `#[cfg(test)]`; it holds the owner and coralswarm_app pools of a disposable RELINFER_TEST_DATABASE_URL database, with local Clerk and Stripe doubles.
+pgpool_file backend/src/routes/orgs_create/pg_tests.rs
+
+# reason: TEST-ONLY (#1540 self-serve A2 follow-ups). `routes::orgs_create::pg_tests::followups` is `#[cfg(test)]`, a child module of the A2 suite with the same owner and coralswarm_app pools of a disposable RELINFER_TEST_DATABASE_URL database and the same local Clerk and Stripe doubles.
+pgpool_file backend/src/routes/orgs_create/pg_tests/followups.rs
+# Raised by one PgPool file (test template databases, 2026-10-28). TEST-ONLY:
+# backend/src/test_db.rs is compiled only with the test-support feature. It
+# opens a one-connection pool on a scratch template database to run the
+# migrator once, then closes it; it never touches a tenant or a request path.
+pgpool_file backend/src/test_db.rs
+# HAND EDIT, desktop retirement (ADR 0015, 2026-10-29): two PgPool files,
+# backend/src/desktop_purge.rs (the core) and backend/src/bin/
+# purge_desktop_data.rs (its thin wrapper). Same shape as judgement_backfill.rs
+# and promoted_blob_backfill.rs above: an operator-run one-shot that opens its
+# own pool per database and never serves a request. It deletes work-session
+# data across every account in a database by design, which a scope bound to
+# one account cannot express; desktop_purge::assert_policy_bypass refuses a
+# role under RLS (negative control in backend/tests/desktop_purge_pg.rs).
+pgpool_file backend/src/desktop_purge.rs
+pgpool_file backend/src/bin/purge_desktop_data.rs
+# TEST-ONLY — `#[cfg(test)]` Postgres suite for the connector catalog (connectors redesign B1). The owner pool seeds rows; the handlers under test run on a coralswarm_app pool under RLS.
+pgpool_file backend/src/connectors/catalog/pg_tests.rs
+# Connector scope and pause (connectors redesign B3). `pause.rs` and `scope.rs` take the CONTROL pool and open `begin_account_scoped` themselves for every `connector_sources` statement (account_id plus the member's own owner_user_id in each); the only other table they touch there is `slack_member_channels`, the routing index, which has no RLS (0256).
+pgpool_file backend/src/connectors/catalog/pause.rs
+pgpool_file backend/src/connectors/catalog/scope.rs
+# Connector scope and pause (connectors redesign B3). The Slack adapter's `control()` hands the control pool to `scope::slack_set_selected` and `scope::slack_admission`; it runs no SQL itself.
+pgpool_file backend/src/connectors/catalog/adapters/slack.rs
+# Connector pause gate (connectors redesign B3). `defer_paused_capture` pushes a paused toolkit's capture out of the due list on the tenant pool the poll already holds, inside `begin_tenant_scoped(account, member)`, with the member's id in the predicate.
+pgpool_file backend/src/routes/composio.rs
+# TEST-ONLY — `#[cfg(test)]` Postgres suite for the pause gate and the Slack pick filter (connectors redesign B3). The owner pool seeds rows and counts atoms; the code under test opens its own scoped transactions.
+pgpool_file backend/src/connectors/catalog/pause_pg_tests.rs
+
+# B3 Everything discovery worker: control-plane account enumeration followed by begin_account_scoped reads of member-owned connector_sources. No tenant content reads; provider refresh uses the existing member AdapterCx. This records the worker conversion site explicitly.
+pgpool_file backend/src/connectors/catalog/everything.rs
+# Slack import history (connectors redesign B4). `captured_channels` and `job_counts` take the control pool for two reads that carry an explicit account_id (and user_id) predicate: slack_member_channels, which has no RLS policy, and the account's `jobs` rows. The tenant pool for the enqueue comes from the request's Tenant, as in routes::slack::request_backfill.
+pgpool_file backend/src/connectors/catalog/history/slack.rs
+# TEST-ONLY — `#[cfg(test)]` Postgres suite for import history (connectors redesign B4). The owner pool seeds rows; the handler under test runs on a coralswarm_app pool under RLS.
+pgpool_file backend/src/connectors/catalog/history/pg_tests.rs
+
+# TEST-ONLY B4 Teams admission lock barriers: disposable owner-role fixtures; production capture is tested through its scoped transaction.
+pgpool_file backend/src/routes/teams_source_admission_pg_tests.rs
+
+# TEST-ONLY catalog recovery regression: disposable Postgres owner pool seeds owner-isolation fixtures; production recovery uses begin_account_scoped and the existing tenant activation primitive.
+pgpool_file backend/src/routes/connector_catalog.rs
+
+# Page-load L2: queue bookkeeping shared by both planes; explicit member enqueue,
+# system-only claims/publish; read-only member compute on the harness worker pool.
+pgpool_file backend/src/read_models/dirty.rs
+pgpool_file backend/src/read_models/store.rs
+pgpool_file backend/src/workers/read_model_refresh.rs

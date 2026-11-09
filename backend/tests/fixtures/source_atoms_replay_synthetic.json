@@ -1,0 +1,263 @@
+{
+  "provenance": "Synthetic COR-99 contract replay, extended for item-level validation (entity drops, typographic quote/ellipsis normalization, all-rejected windows fail). Not captured production output; no claim about production yield or inferred mismatch causes.",
+  "cases": [
+    {
+      "name": "mixed_schema_and_evidence_rejections",
+      "source": "Alice\twill  deliver.\r\n🪸 Bob waits.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Bob waits.",
+            "entities": []
+          },
+          {
+            "kind": "guess",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Bob waits.",
+            "entities": []
+          },
+          {},
+          null,
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "absent",
+            "entities": []
+          },
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Bob waits.",
+            "entities": [
+              {
+                "mention": "Mallory",
+                "type": "person"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_quotes": [
+        "Bob waits."
+      ]
+    },
+    {
+      "name": "ascii_whitespace_canonical_source",
+      "source": "🪸\r\nAlice\twill  deliver.\r\n",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Alice will deliver.\n",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [
+        "Alice\twill  deliver.\r\n"
+      ]
+    },
+    {
+      "name": "normalized_ambiguity",
+      "source": "Alice will deliver.\r\nAlice\twill deliver.\n",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Alice  will deliver.",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [],
+      "expected_error": "no valid atoms"
+    },
+    {
+      "name": "overlapping_ambiguity",
+      "source": "aaa",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "aa",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [],
+      "expected_error": "no valid atoms"
+    },
+    {
+      "name": "exact_precedes_formatting",
+      "source": "Alice will deliver.\nAlice\twill deliver.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Alice will deliver.",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [
+        "Alice will deliver."
+      ]
+    },
+    {
+      "name": "no_escape_reinterpretation",
+      "source": "literal \\n and \\\"quoted\\\"",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "literal \n and \"quoted\"",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [],
+      "expected_error": "no valid atoms"
+    },
+    {
+      "name": "no_casefold_or_punctuation",
+      "source": "Alice will deliver.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "alice will deliver.",
+            "entities": []
+          },
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Alice will deliver!",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [],
+      "expected_error": "no valid atoms"
+    },
+    {
+      "name": "no_non_ascii_whitespace_equivalence",
+      "source": "Alice will deliver.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Alice will deliver.",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [],
+      "expected_error": "no valid atoms"
+    },
+    {
+      "name": "normalized_overlapping_ambiguity",
+      "source": "a a a",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "a\ta",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [],
+      "expected_error": "no valid atoms"
+    },
+    {
+      "name": "unsupported_entity_drops_only_the_entity",
+      "source": "Alice will deliver Roadmap.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Alice will deliver Roadmap.",
+            "entities": [
+              {
+                "mention": "Alice",
+                "type": "person"
+              },
+              {
+                "mention": "Mallory",
+                "type": "person"
+              },
+              {
+                "mention": "Roadmap",
+                "type": "place"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_quotes": [
+        "Alice will deliver Roadmap."
+      ]
+    },
+    {
+      "name": "typographic_quotes_fold_to_source",
+      "source": "Bo said \"ship it now\" and Ana's team agreed.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "Bo said “ship it now” and Ana’s team agreed.",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [
+        "Bo said \"ship it now\" and Ana's team agreed."
+      ]
+    },
+    {
+      "name": "edge_ellipsis_is_stripped",
+      "source": "The team agreed to ship the roadmap on Friday.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "...agreed to ship the roadmap on Friday…",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [
+        "agreed to ship the roadmap on Friday"
+      ]
+    },
+    {
+      "name": "elided_middle_is_never_bridged",
+      "source": "The team agreed to ship the roadmap on Friday.",
+      "response": {
+        "atoms": [
+          {
+            "kind": "fact",
+            "text": "Retain this supported statement.",
+            "evidence_quote": "The team ... on Friday.",
+            "entities": []
+          }
+        ]
+      },
+      "expected_quotes": [],
+      "expected_error": "no valid atoms"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+-- Migration: 0164_accounts_billing_enforcement_enabled
+-- Description: enforcement-rollout PR — moves the billing-enforcement switch
+--   off `account_prefs.prefs` (a plain JSONB blob any authenticated account
+--   holder can wholesale-overwrite via `PUT /v1/prefs` — see that handler's
+--   own doc comment: it replaces the whole object, it does not merge) onto a
+--   real column on `accounts` that ONLY server-side billing code ever
+--   writes. `account_prefs` was never meant to hold anything security-
+--   relevant; `billing::enforcement::enforcement_enabled` reading a key out
+--   of a user-writable blob meant an account holder could self-disable their
+--   own enforcement, or lose it by accident the next time any unrelated
+--   settings PUT raced the initial GET (see `web/app/(app)/settings/
+--   page.tsx`'s client-side merge, which silently drops keys the client
+--   never fetched).
+--
+--   `accounts` carries no RLS policy (unlike `grants`/`credit_balances`/
+--   `member_allowance_periods`, all migration `0150`+) — same category as
+--   `dek_wrapped`/`clerk_org_id`, both added to this table by prior
+--   migrations via plain `ALTER TABLE`.
+--
+--   DEFAULT false: adding the column must never itself turn on enforcement
+--   for any existing account — that is a separate, deliberate step run only
+--   after every account holds a real grant (see the enforcement-rollout PR's
+--   backfill script). New personal/org accounts set this explicitly at
+--   provisioning time (`clerk_provision.rs`), in the same sequence as their
+--   auto-granted `free` plan — never via this column's default alone.
+--
+--   No backfill of `account_prefs.prefs`'s old `billing_enforcement_enabled`
+--   key: that key was never actually set for any production account (a grep
+--   across this tree found no writer of it outside test fixtures), so there
+--   is nothing to migrate; the dead key can simply be ignored going forward.
+--
+-- Depends on: 0029_account_prefs.sql (the JSONB column this replaces as the
+--   read path for this flag).
+-- Down:
+--   ALTER TABLE accounts DROP COLUMN IF EXISTS billing_enforcement_enabled;
+
+ALTER TABLE accounts
+    ADD COLUMN IF NOT EXISTS billing_enforcement_enabled BOOLEAN NOT NULL DEFAULT false;
